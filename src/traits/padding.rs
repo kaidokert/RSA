@@ -1,14 +1,22 @@
 //! Supported padding schemes.
 
 use crate::errors::Result;
-use crate::key::RsaPublicKey;
-use num_traits::{Num, One, Unsigned, Zero};
+use crate::key::{RsaPrivateKey, RsaPublicKey};
+
+use super::UnsignedModularInt;
+
+/// Padding scheme used for encryption.
+pub trait PaddingScheme {}
 
 /// Digital signature scheme.
 pub trait SignatureScheme<T>
 where
-    T: Num + Unsigned + Zero + One + Clone + core::cmp::Eq,
+    T: UnsignedModularInt + Clone,
 {
+    /// Sign the given digest.
+
+    // sign function
+
     /// Verify a signed message.
     ///
     /// `hashed` must be the result of hashing the input using the hashing function

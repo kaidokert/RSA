@@ -1,12 +1,14 @@
 //! Traits related to the key components
 
-use num_traits::{Num, One, Signed, Unsigned, Zero};
+use num_traits::{Num, One, PrimInt, Signed, Unsigned, Zero};
 use zeroize::{DefaultIsZeroes, Zeroize};
+
+use crate::traits::modular::UnsignedModularInt;
 
 /// Components of an RSA public key.
 pub trait PublicKeyParts<T>
 where
-    T: Num + Zero + One + Unsigned,
+    T: UnsignedModularInt,
 {
     /// Returns the modulus of the key.
     fn n(&self) -> &T;
@@ -22,7 +24,7 @@ where
 /// Components of an RSA private key.
 pub trait PrivateKeyParts<T>: PublicKeyParts<T>
 where
-    T: Num + Zero + One + Unsigned + Clone + Signed + DefaultIsZeroes,
+    T: UnsignedModularInt + DefaultIsZeroes,
 {
     /// Returns the private exponent of the key.
     fn d(&self) -> &T;
@@ -47,10 +49,11 @@ where
 }
 
 /// Contains the precomputed Chinese remainder theorem values.
+// TODO : THIS CAN BE NEGATIVE / SIGNED
 #[derive(Debug, Clone)]
 pub struct CrtValue<T>
 where
-    T: Signed + Clone + Zeroize,
+    T: UnsignedModularInt + DefaultIsZeroes + Clone,
 {
     /// D mod (prime - 1)
     pub(crate) exp: T,
@@ -62,7 +65,7 @@ where
 
 impl<T> Zeroize for CrtValue<T>
 where
-    T: Signed + Clone + Zeroize,
+    T: UnsignedModularInt + DefaultIsZeroes + Clone,
 {
     fn zeroize(&mut self) {
         self.exp.zeroize();
@@ -73,7 +76,7 @@ where
 
 impl<T> Drop for CrtValue<T>
 where
-    T: Signed + Clone + Zeroize,
+    T: UnsignedModularInt + DefaultIsZeroes + Clone,
 {
     fn drop(&mut self) {
         self.zeroize();
@@ -86,7 +89,7 @@ mod tests {
 
     #[test]
     fn test_count_bits() {
-        let _crt = CrtValue::<i64> {
+        let _crt = CrtValue::<u64> {
             exp: 0,
             coeff: 0,
             r: 0,
