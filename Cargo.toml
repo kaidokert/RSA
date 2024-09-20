@@ -1,5 +1,5 @@
 [package]
-name = "rsa-generic"
+name = "rsa_generic"
 version = "0.1.0"
 authors = ["RustCrypto Developers", "dignifiedquire <dignifiedquire@gmail.com>"]
 edition = "2021"
