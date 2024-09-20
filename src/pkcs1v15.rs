@@ -135,7 +135,7 @@ where
 
 /// Verifies an RSA PKCS#1 v1.5 signature.
 #[inline]
-fn verify<T>(
+pub fn verify<T>(
     pub_key: &RsaPublicKey<T>,
     prefix: &[u8],
     hashed: &[u8],
@@ -145,10 +145,17 @@ fn verify<T>(
 where
     T: UnsignedModularInt + DefaultIsZeroes,
 {
+    let enn = pub_key.n();
+    let pksize = pub_key.size();
+
     if sig >= pub_key.n() || sig_len != pub_key.size() {
         return Err(Error::Verification);
     }
 
+    let encr = rsa_encrypt(pub_key, *sig);
+    let mut storage = [0u8; 1024]; // todo
+    let em = uint_to_be_pad(encr, pub_key.size(), &mut storage)?;
+    let res = pkcs1v15_sign_unpad(prefix, hashed, em, pub_key.size());
     todo!()
 }
 

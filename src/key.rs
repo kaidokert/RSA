@@ -106,9 +106,6 @@ impl<T: UnsignedModularInt + DefaultIsZeroes> PublicKeyParts<T> for RsaPublicKey
     fn e(&self) -> &T {
         &self.e
     }
-    fn size(&self) -> usize {
-        todo!("Not yet implemented size")
-    }
 }
 
 impl<T: UnsignedModularInt + Clone> RsaPublicKey<T> {

@@ -60,4 +60,7 @@ pub enum Error {
 
     /// Invalid arguments.
     InvalidArguments,
+
+    /// Output buffer too small
+    OutputBufferTooSmall,
 }

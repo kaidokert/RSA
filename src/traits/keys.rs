@@ -18,7 +18,9 @@ where
 
     /// Returns the modulus size in bytes. Raw signatures and ciphertexts for
     /// or by this public key will have the same size.
-    fn size(&self) -> usize;
+    fn size(&self) -> usize {
+        (self.n().bits() + 7) / 8
+    }
 }
 
 /// Components of an RSA private key.
