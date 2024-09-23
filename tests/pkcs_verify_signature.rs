@@ -1,21 +1,35 @@
+use core::ops::Deref;
+
+#[cfg(feature = "fixed-bigint")]
+use fixed_bigint::FixedUInt;
 use rsa_generic::pkcs1v15::verify;
 use rsa_generic::pkcs1v15::VerifyingKey;
 use rsa_generic::RsaPublicKey;
 
+#[cfg(feature = "fixed-bigint")]
 #[test]
-fn test_verify_signature() {
-    let data = b"hello world";
-    let e = 3u8;
-    let n = 55u8;
+fn test_verify_signature_fixedbigint() {
+    let e: FixedUInt<u32, 8> = 3u8.into();
+    let mut modulus: [u8; 32] = [
+        0xBD, 0xE3, 0x6F, 0x89, 0xE0, 0x61, 0x3B, 0xAB, 0x1E, 0x02, 0x41, 0xFD, 0xD3, 0x40, 0xDE,
+        0x82, 0xD7, 0x2F, 0x4E, 0x4F, 0x6F, 0x07, 0x00, 0x4B, 0x24, 0x8C, 0x20, 0x42, 0x81, 0x27,
+        0x54, 0xFD,
+    ];
+    let mut signature: [u8; 32] = [
+        0xB9, 0xB7, 0x39, 0xC4, 0x73, 0x81, 0x09, 0xCF, 0x5B, 0x90, 0x6C, 0x24, 0x8F, 0x35, 0x05,
+        0xAF, 0xC3, 0xC7, 0x61, 0x05, 0x22, 0xB2, 0x33, 0xE4, 0xA1, 0x3A, 0x6A, 0x9C, 0xBC, 0x29,
+        0xCD, 0xE1,
+    ];
+    modulus.reverse();
+    signature.reverse();
+
+    let n = FixedUInt::<u32, 8>::from_le_bytes(&modulus);
     let key = RsaPublicKey::new(n, e).unwrap();
-    //let verifying_key = VerifyingKey::<u8,_>::new(key);
 
-    // Verify
-    let signature = [0u8; 128];
-    let refme: &[u8] = signature.as_ref();
-    //let sig = refme.try_into().unwrap();
-
-    //verifying_key.verify(data, &sig).expect("failed to verify");
-    let prefix = [0u8; 2];
-    verify(&key, &prefix, &signature, &33u8, 1);
+    let hashed = [
+        0xfa, 0x2c, 0x34, 0x40, 0xbe, 0x40, 0x25, 0xfd, 0xc2, 0x36, 0x9a, 0x17, 0xce, 0x3f, 0xc,
+        0x1, 0x10, 0xbe, 0xef, 0xda,
+    ];
+    let sig = FixedUInt::<u32, 8>::from_le_bytes(&signature);
+    verify(&key, &[0x0A_u8; 1], &hashed, &sig, 32);
 }

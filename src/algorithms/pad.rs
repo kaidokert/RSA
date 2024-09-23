@@ -38,8 +38,16 @@ where
 
 /// Converts input to the new vector of the given length, using BE and with 0s left padded.
 #[inline]
-pub(crate) fn uint_to_zeroizing_be_pad<T>(input: T, padded_len: usize) -> Result<()> {
+pub(crate) fn uint_to_zeroizing_be_pad<T>(input: T, padded_len: usize, storage: &mut [u8]) -> Result<&[u8]>
+where
+    T: UnsignedModularInt + num_traits::ToBytes,
+{
     todo!()
+    /*
+    let m = Zeroizing::new(input);
+    let m = Zeroizing::new(m.to_bytes_be());
+    left_pad(&m, padded_len, storage)
+ */
 }
 
 #[cfg(test)]

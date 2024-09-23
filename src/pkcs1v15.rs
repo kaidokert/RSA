@@ -155,8 +155,7 @@ where
     let encr = rsa_encrypt(pub_key, *sig);
     let mut storage = [0u8; 1024]; // todo
     let em = uint_to_be_pad(encr, pub_key.size(), &mut storage)?;
-    let res = pkcs1v15_sign_unpad(prefix, hashed, em, pub_key.size());
-    todo!()
+    pkcs1v15_sign_unpad(prefix, hashed, em, pub_key.size())
 }
 
 mod oid {}
