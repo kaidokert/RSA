@@ -1,54 +1,50 @@
-use super::{oid, pkcs1v15_generate_prefix, verify, Signature};
-use crate::traits::UnsignedModularInt;
+use super::{verify_digest, Signature};
 use crate::RsaPublicKey;
 use const_oid::AssociatedOid;
 use core::marker::PhantomData;
-use digest::Digest;
-
+use digest::{Digest, FixedOutputReset};
 use signature::{hazmat::PrehashVerifier, DigestVerifier, Verifier};
 
-/// Verifying key for `RSASSA-PKCS1-v1_5` signatures as described in [RFC8017 § 8.2].
+use crate::traits::UnsignedModularInt;
+
+/// Verifying key for checking the validity of RSASSA-PSS signatures as
+/// described in [RFC8017 § 8.1].
 ///
-/// [RFC8017 § 8.2]: https://datatracker.ietf.org/doc/html/rfc8017#section-8.2
+/// [RFC8017 § 8.1]: https://datatracker.ietf.org/doc/html/rfc8017#section-8.1
 #[derive(Debug)]
 pub struct VerifyingKey<D, T>
 where
+    D: Digest,
     T: UnsignedModularInt,
 {
     pub(super) inner: RsaPublicKey<T>,
-    pub(super) prefix: PhantomData<D>, // This just needs to be up to 32 bytes ( 19 max )
+    pub(super) salt_len: usize,
     pub(super) phantom: PhantomData<D>,
 }
 
 impl<D, T> VerifyingKey<D, T>
 where
+    D: Digest,
     T: UnsignedModularInt,
 {
-    /// Create a new verifying key with a prefix for the digest `D`.
+    /// Create a new RSASSA-PSS verifying key.
+    /// Digest output size is used as a salt length.
     pub fn new(key: RsaPublicKey<T>) -> Self {
+        Self::new_with_salt_len(key, <D as Digest>::output_size())
+    }
+
+    /// Create a new RSASSA-PSS verifying key.
+    pub fn new_with_salt_len(key: RsaPublicKey<T>, salt_len: usize) -> Self {
         Self {
             inner: key,
-            prefix: Default::default(),
+            salt_len,
             phantom: Default::default(),
         }
     }
-}
 
-impl<D, T> VerifyingKey<D, T>
-where
-    T: UnsignedModularInt,
-{
-    /// Create a new verifying key from an RSA public key with an empty prefix.
-    ///
-    /// ## Note: unprefixed signatures are uncommon
-    ///
-    /// In most cases you'll want to use [`VerifyingKey::new`] instead.
-    pub fn new_unprefixed(key: RsaPublicKey<T>) -> Self {
-        Self {
-            inner: key,
-            prefix: Default::default(),
-            phantom: Default::default(),
-        }
+    /// Return specified salt length for this key
+    pub fn salt_len(&self) -> usize {
+        self.salt_len
     }
 }
 
@@ -58,16 +54,16 @@ where
 
 impl<D, T> DigestVerifier<D, Signature<T>> for VerifyingKey<D, T>
 where
-    D: Digest,
+    D: Digest + FixedOutputReset,
     T: UnsignedModularInt,
 {
     fn verify_digest(&self, digest: D, signature: &Signature<T>) -> signature::Result<()> {
-        verify(
+        verify_digest::<D, T>(
             &self.inner,
-            &[0; 1],
             &digest.finalize(),
             &signature.inner,
             signature.len,
+            self.salt_len,
         )
         .map_err(|e| e.into())
     }
@@ -75,16 +71,16 @@ where
 
 impl<D, T> PrehashVerifier<Signature<T>> for VerifyingKey<D, T>
 where
-    D: Digest,
+    D: Digest + FixedOutputReset,
     T: UnsignedModularInt,
 {
     fn verify_prehash(&self, prehash: &[u8], signature: &Signature<T>) -> signature::Result<()> {
-        verify(
+        verify_digest::<D, T>(
             &self.inner,
-            &[0; 1],
             prehash,
             &signature.inner,
             signature.len,
+            self.salt_len,
         )
         .map_err(|e| e.into())
     }
@@ -92,16 +88,16 @@ where
 
 impl<D, T> Verifier<Signature<T>> for VerifyingKey<D, T>
 where
-    D: Digest,
-    T: UnsignedModularInt + core::fmt::Debug,
+    D: Digest + FixedOutputReset,
+    T: UnsignedModularInt,
 {
-    fn verify(&self, msg: &[u8], signature: &Signature<T>) -> Result<(), signature::Error> {
-        verify(
+    fn verify(&self, msg: &[u8], signature: &Signature<T>) -> signature::Result<()> {
+        verify_digest::<D, T>(
             &self.inner,
-            &[0x00_u8; 1],
             &D::digest(msg),
             &signature.inner,
             signature.len,
+            self.salt_len,
         )
         .map_err(|e| e.into())
     }
@@ -113,6 +109,7 @@ where
 
 impl<D, T> AsRef<RsaPublicKey<T>> for VerifyingKey<D, T>
 where
+    D: Digest,
     T: UnsignedModularInt,
 {
     fn as_ref(&self) -> &RsaPublicKey<T> {
@@ -123,12 +120,13 @@ where
 // Implemented manually so we don't have to bind D with Clone
 impl<D, T> Clone for VerifyingKey<D, T>
 where
+    D: Digest,
     T: UnsignedModularInt,
 {
     fn clone(&self) -> Self {
         Self {
             inner: self.inner.clone(),
-            prefix: self.prefix.clone(),
+            salt_len: self.salt_len,
             phantom: Default::default(),
         }
     }
@@ -136,15 +134,17 @@ where
 
 impl<D, T> From<RsaPublicKey<T>> for VerifyingKey<D, T>
 where
+    D: Digest,
     T: UnsignedModularInt,
 {
     fn from(key: RsaPublicKey<T>) -> Self {
-        Self::new_unprefixed(key)
+        Self::new(key)
     }
 }
 
 impl<D, T> From<VerifyingKey<D, T>> for RsaPublicKey<T>
 where
+    D: Digest,
     T: UnsignedModularInt,
 {
     fn from(key: VerifyingKey<D, T>) -> Self {
@@ -154,21 +154,10 @@ where
 
 impl<D, T> PartialEq for VerifyingKey<D, T>
 where
+    D: Digest,
     T: UnsignedModularInt,
 {
     fn eq(&self, other: &Self) -> bool {
-        self.inner == other.inner && self.prefix == other.prefix
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    #[ignore]
-    #[cfg(feature = "serde")]
-    fn test_serde() {
-        use super::*;
-        use rand_chacha::{rand_core::SeedableRng, ChaCha8Rng};
-        todo!()
+        self.inner == other.inner && self.salt_len == other.salt_len
     }
 }

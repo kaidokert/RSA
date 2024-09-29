@@ -1,9 +1,17 @@
 use core::hash::{Hash, Hasher};
-use num_traits::{FromPrimitive, One, ToPrimitive, Zero};
+use num_integer::Integer;
+use num_traits::{FromPrimitive, One, ToPrimitive};
+use rand_core::CryptoRngCore;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::traits::UnsignedModularInt;
 
+use crate::algorithms::rsa::{
+    compute_modulus, compute_private_exponent_carmicheal, compute_private_exponent_euler_totient,
+    recover_primes,
+};
+
+use crate::dummy_rng::DummyRng;
 use crate::errors::{Error, Result};
 use crate::traits::{PaddingScheme, PrivateKeyParts, PublicKeyParts, SignatureScheme};
 use crate::CrtValue;
@@ -92,7 +100,7 @@ impl<T: Zeroize + UnsignedModularInt> Zeroize for PrecomputedValues<T> {
     }
 }
 
-impl<T: Zeroize + UnsignedModularInt> Drop for PrecomputedValues<T> {
+impl<T: UnsignedModularInt> Drop for PrecomputedValues<T> {
     fn drop(&mut self) {
         self.zeroize();
     }
@@ -109,6 +117,16 @@ impl<T: UnsignedModularInt> PublicKeyParts<T> for RsaPublicKey<T> {
 }
 
 impl<T: UnsignedModularInt + Clone> RsaPublicKey<T> {
+    /// Encrypt the given message.
+    pub fn encrypt<R: CryptoRngCore, P: PaddingScheme<T>>(
+        &self,
+        rng: &mut R,
+        padding: P,
+        msg: &[u8],
+    ) -> Result<()> {
+        padding.encrypt(rng, self, msg)
+    }
+
     /// Verify a signed message.
     ///
     /// `hashed` must be the result of hashing the input using the hashing function
@@ -361,4 +379,92 @@ where
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::algorithms::rsa::{rsa_decrypt_and_check, rsa_encrypt};
+
+    use hex_literal::hex;
+    use num_traits::{FromPrimitive, ToPrimitive};
+    use rand_chacha::{rand_core::SeedableRng, ChaCha8Rng};
+
+    #[test]
+    #[ignore]
+    fn test_from_into() {
+        todo!()
+    }
+
+    fn test_key_basics<T>(private_key: &RsaPrivateKey<T>)
+    where
+        T: UnsignedModularInt,
+    {
+        private_key.validate().expect("invalid private key");
+
+        assert!(
+            private_key.d() < private_key.n(),
+            "private exponent too large"
+        );
+
+        todo!()
+    }
+
+    macro_rules! key_generation {
+        ($name:ident, $multi:expr, $size:expr) => {
+            #[test]
+            #[ignore]
+            fn $name() {
+                todo!()
+            }
+        };
+    }
+
+    key_generation!(key_generation_128, 2, 128);
+    key_generation!(key_generation_1024, 2, 1024);
+
+    key_generation!(key_generation_multi_3_256, 3, 256);
+
+    key_generation!(key_generation_multi_4_64, 4, 64);
+
+    key_generation!(key_generation_multi_5_64, 5, 64);
+    key_generation!(key_generation_multi_8_576, 8, 576);
+    key_generation!(key_generation_multi_16_1024, 16, 1024);
+
+    #[test]
+    #[ignore]
+    fn test_negative_decryption_value() {
+        todo!()
+    }
+
+    #[test]
+    #[ignore]
+    #[cfg(feature = "serde")]
+    fn test_serde() {
+        todo!()
+    }
+
+    #[test]
+    #[ignore]
+    fn invalid_coeff_private_key_regression() {
+        todo!()
+    }
+
+    #[test]
+    #[ignore]
+    fn reject_oversized_private_key() {
+        todo!()
+    }
+
+    #[test]
+    #[ignore]
+    fn build_key_from_primes() {
+        todo!()
+    }
+
+    #[test]
+    #[ignore]
+    fn build_key_from_p_q() {
+        todo!()
+    }
 }

@@ -1,4 +1,5 @@
 //! Supported padding schemes.
+use rand_core::CryptoRngCore;
 
 use crate::errors::Result;
 use crate::key::{RsaPrivateKey, RsaPublicKey};
@@ -6,7 +7,25 @@ use crate::key::{RsaPrivateKey, RsaPublicKey};
 use super::UnsignedModularInt;
 
 /// Padding scheme used for encryption.
-pub trait PaddingScheme {}
+pub trait PaddingScheme<T>
+where
+    T: UnsignedModularInt,
+{
+    /// Decrypt the given message using the given private key.
+    ///
+    /// If an `rng` is passed, it uses RSA blinding to help mitigate timing
+    /// side-channel attacks.
+
+    // Decrypt function
+
+    /// Encrypt the given message using the given public key.
+    fn encrypt<Rng: CryptoRngCore>(
+        self,
+        rng: &mut Rng,
+        pub_key: &RsaPublicKey<T>,
+        msg: &[u8],
+    ) -> Result<()>;
+}
 
 /// Digital signature scheme.
 pub trait SignatureScheme<T>
@@ -15,7 +34,7 @@ where
 {
     /// Sign the given digest.
 
-    // sign function
+    // Sign function
 
     /// Verify a signed message.
     ///

@@ -20,23 +20,41 @@ pub use self::{
 #[cfg(feature = "std")]
 use std::println;
 
+use const_oid::AssociatedOid;
 use core::fmt::Debug;
 use core::marker::PhantomData;
+use digest::Digest;
 use rand_core::CryptoRngCore;
 use zeroize::Zeroize;
+use zeroize::Zeroizing;
 
 use crate::algorithms::pad::{uint_to_be_pad, uint_to_zeroizing_be_pad};
 use crate::algorithms::pkcs1v15::*;
-use crate::algorithms::rsa::rsa_encrypt;
+use crate::algorithms::rsa::{rsa_decrypt_and_check, rsa_encrypt};
 use crate::errors::{Error, Result};
 use crate::key::{self, RsaPrivateKey, RsaPublicKey};
-use crate::traits::{PaddingScheme, PublicKeyParts, SignatureScheme, UnsignedModularInt};
+use crate::traits::UnsignedModularInt;
+use crate::traits::{PaddingScheme, PublicKeyParts, SignatureScheme};
 
 /// Encryption using PKCS#1 v1.5 padding.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Pkcs1v15Encrypt;
 
-impl PaddingScheme for Pkcs1v15Encrypt {}
+impl<T> PaddingScheme<T> for Pkcs1v15Encrypt
+where
+    T: UnsignedModularInt,
+{
+    // Decrypt
+
+    fn encrypt<Rng: CryptoRngCore>(
+        self,
+        rng: &mut Rng,
+        pub_key: &RsaPublicKey<T>,
+        msg: &[u8],
+    ) -> Result<()> {
+        todo!()
+    }
+}
 
 /// `RSASSA-PKCS1-v1_5`: digital signatures using PKCS#1 v1.5 padding.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -53,9 +71,12 @@ impl Pkcs1v15Sign {
     ///
     /// The digest must have an [`AssociatedOid`]. Make sure to enable the `oid`
     /// feature of the relevant digest crate.
-    pub fn new<D>() -> Self {
+    pub fn new<D>() -> Self
+    where
+        D: Digest,
+    {
         Self {
-            hash_len: None,
+            hash_len: Some(<D as Digest>::output_size()),
             prefix: Default::default(),
         }
     }
@@ -75,6 +96,8 @@ impl<T> SignatureScheme<T> for Pkcs1v15Sign
 where
     T: UnsignedModularInt,
 {
+    // Sign
+
     fn verify(self, pub_key: &RsaPublicKey<T>, hashed: &[u8], sig: &[u8]) -> Result<()> {
         if let Some(hash_len) = self.hash_len {
             if hashed.len() != hash_len {
@@ -191,9 +214,154 @@ where
     pkcs1v15_sign_unpad(prefix, hashed, em, pub_key.size())
 }
 
-mod oid {}
+mod oid {
+    use const_oid::ObjectIdentifier;
+
+    /// A trait which associates an RSA-specific OID with a type.
+    pub trait RsaSignatureAssociatedOid {
+        /// The OID associated with this type.
+        const OID: ObjectIdentifier;
+    }
+
+    #[cfg(feature = "sha1")]
+    impl RsaSignatureAssociatedOid for sha1::Sha1 {
+        const OID: ObjectIdentifier =
+            const_oid::ObjectIdentifier::new_unwrap("1.2.840.113549.1.1.5");
+    }
+
+    #[cfg(feature = "sha2")]
+    impl RsaSignatureAssociatedOid for sha2::Sha224 {
+        const OID: ObjectIdentifier =
+            const_oid::ObjectIdentifier::new_unwrap("1.2.840.113549.1.1.14");
+    }
+
+    #[cfg(feature = "sha2")]
+    impl RsaSignatureAssociatedOid for sha2::Sha256 {
+        const OID: ObjectIdentifier =
+            const_oid::ObjectIdentifier::new_unwrap("1.2.840.113549.1.1.11");
+    }
+
+    #[cfg(feature = "sha2")]
+    impl RsaSignatureAssociatedOid for sha2::Sha384 {
+        const OID: ObjectIdentifier =
+            const_oid::ObjectIdentifier::new_unwrap("1.2.840.113549.1.1.12");
+    }
+
+    #[cfg(feature = "sha2")]
+    impl RsaSignatureAssociatedOid for sha2::Sha512 {
+        const OID: ObjectIdentifier =
+            const_oid::ObjectIdentifier::new_unwrap("1.2.840.113549.1.1.13");
+    }
+}
+
+pub use oid::RsaSignatureAssociatedOid;
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ::signature::{
+        hazmat::{PrehashSigner, PrehashVerifier},
+        DigestSigner, DigestVerifier, Keypair, RandomizedDigestSigner, RandomizedSigner,
+        SignatureEncoding, Signer, Verifier,
+    };
+    use hex_literal::hex;
+    use num_bigint::BigUint;
+    use num_traits::FromPrimitive;
+    use num_traits::Num;
+    use rand_chacha::{
+        rand_core::{RngCore, SeedableRng},
+        ChaCha8Rng,
+    };
+    use sha1::{Digest, Sha1};
+    use sha2::Sha256;
+    use sha3::Sha3_256;
+
+    use crate::traits::{
+        Decryptor, EncryptingKeypair, PublicKeyParts, RandomizedDecryptor, RandomizedEncryptor,
+    };
+    use crate::{RsaPrivateKey, RsaPublicKey};
+
+    #[test]
+    #[ignore]
+    fn test_decrypt_pkcs1v15() {
+        todo!()
+    }
+
+    #[test]
+    #[ignore]
+    fn test_encrypt_decrypt_pkcs1v15() {
+        todo!()
+    }
+
+    #[test]
+    #[ignore]
+    fn test_decrypt_pkcs1v15_traits() {
+        todo!()
+    }
+
+    #[test]
+    #[ignore]
+    fn test_encrypt_decrypt_pkcs1v15_traits() {
+        todo!()
+    }
+
+    #[test]
+    #[ignore]
+    fn test_sign_pkcs1v15() {
+        todo!()
+    }
+
+    #[test]
+    #[ignore]
+    fn test_sign_pkcs1v15_signer() {
+        todo!()
+    }
+
+    #[test]
+    #[ignore]
+    fn test_sign_pkcs1v15_signer_sha2_256() {
+        todo!()
+    }
+
+    #[test]
+    #[ignore]
+    fn test_sign_pkcs1v15_signer_sha3_256() {
+        todo!()
+    }
+
+    #[test]
+    #[ignore]
+    fn test_sign_pkcs1v15_digest_signer() {
+        todo!()
+    }
+
+    #[test]
+    #[ignore]
+    fn test_verify_pkcs1v15() {
+        todo!()
+    }
+
+    #[test]
+    #[ignore]
+    fn test_verify_pkcs1v15_signer() {
+        todo!()
+    }
+
+    #[test]
+    #[ignore]
+    fn test_verify_pkcs1v15_digest_signer() {
+        todo!()
+    }
+
+    #[test]
+    #[ignore]
+    fn test_unpadded_signature() {
+        todo!()
+    }
+
+    #[test]
+    #[ignore]
+    fn test_unpadded_signature_hazmat() {
+        todo!()
+    }
 }

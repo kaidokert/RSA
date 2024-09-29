@@ -1,6 +1,7 @@
 //! Generic RSA implementation
 
 use num_traits::{FromPrimitive, One, Pow, Signed, Zero};
+use rand_core::CryptoRngCore;
 use zeroize::{Zeroize, Zeroizing};
 
 use super::modular::exp::mod_exp;
@@ -46,14 +47,20 @@ fn rsa_decrypt() {
 ///
 /// Use this function with great care! Raw RSA should never be used without an appropriate padding
 /// or signature scheme. See the [module-level documentation][crate::hazmat] for more information.
-
-fn rsa_decrypt_and_check() {
+#[inline]
+pub fn rsa_decrypt_and_check() {
     todo!()
 }
 
 /// Returns the blinded c, along with the unblinding factor.
-
-fn blind() {
+fn blind<T, R: CryptoRngCore, K: PublicKeyParts<T>>(rng: &mut R, key: &K, c: &T) -> (T, T)
+where
+    T: UnsignedModularInt,
+{
+    // Blinding involves multiplying c by r^e.
+    // Then the decryption operation performs (m^e * r^e)^d mod n
+    // which equals mr mod n. The factor of r can then be removed
+    // by multiplying by the multiplicative inverse of r.
     todo!()
 }
 

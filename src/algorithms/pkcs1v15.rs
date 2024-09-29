@@ -6,10 +6,13 @@
 //!
 //! [RFC8017 § 8.2]: https://datatracker.ietf.org/doc/html/rfc8017#section-8.2
 
+use const_oid::AssociatedOid;
 use digest::Digest;
 use rand_core::CryptoRngCore;
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq};
 use zeroize::Zeroizing;
+
+use crate::Prefix;
 
 use crate::errors::{Error, Result};
 #[cfg(feature = "std")]
@@ -103,7 +106,43 @@ pub(crate) fn pkcs1v15_sign_unpad(prefix: &[u8], hashed: &[u8], em: &[u8], k: us
     Ok(())
 }
 
+/// prefix = 0x30 <oid_len + 8 + digest_len> 0x30 <oid_len + 4> 0x06 <oid_len> oid 0x05 0x00 0x04 <digest_len>
+#[inline]
+pub(crate) fn pkcs1v15_generate_prefix<D>() -> Prefix
+where
+    D: Digest + AssociatedOid,
+{
+    let oid = D::OID.as_bytes();
+    let oid_len = oid.len() as u8;
+    let digest_len = <D as Digest>::output_size() as u8;
+    let mut v = Prefix::new();
+    v.extend([
+        0x30,
+        oid_len + 8 + digest_len,
+        0x30,
+        oid_len + 4,
+        0x6,
+        oid_len,
+    ]);
+    v.extend_from_slice(oid);
+    v.extend_from_slice(&[0x05, 0x00, 0x04, digest_len]);
+    v
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rand_chacha::{rand_core::SeedableRng, ChaCha8Rng};
+
+    #[test]
+    fn test_non_zero_bytes() {
+        for _ in 0..10 {
+            let mut rng = ChaCha8Rng::from_seed([42; 32]);
+            let mut b = vec![0u8; 512];
+            non_zero_random_bytes(&mut rng, &mut b);
+            for el in &b {
+                assert_ne!(*el, 0u8);
+            }
+        }
+    }
 }

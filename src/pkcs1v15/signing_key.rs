@@ -1,8 +1,16 @@
-use super::{sign, Signature, VerifyingKey};
-use crate::{key::RsaPrivateKey, traits::UnsignedModularInt, Result};
+use super::{oid, pkcs1v15_generate_prefix, sign, Signature, VerifyingKey};
+use crate::{dummy_rng::DummyRng, Result, RsaPrivateKey};
+use const_oid::AssociatedOid;
 use core::marker::PhantomData;
+use digest::Digest;
+use rand_core::CryptoRngCore;
 
+use signature::{
+    hazmat::PrehashSigner, DigestSigner, Keypair, RandomizedDigestSigner, RandomizedSigner, Signer,
+};
 use zeroize::ZeroizeOnDrop;
+
+use crate::traits::UnsignedModularInt;
 
 /// Signing key for `RSASSA-PKCS1-v1_5` signatures as described in [RFC8017 § 8.2].
 ///
@@ -87,6 +95,22 @@ where
 {
     fn from(key: SigningKey<D, T>) -> Self {
         key.inner
+    }
+}
+
+impl<D, T> Keypair for SigningKey<D, T>
+where
+    D: Digest,
+    T: UnsignedModularInt,
+{
+    type VerifyingKey = VerifyingKey<D, T>;
+
+    fn verifying_key(&self) -> Self::VerifyingKey {
+        VerifyingKey {
+            inner: self.inner.to_public_key(),
+            prefix: self.prefix.clone(),
+            phantom: Default::default(),
+        }
     }
 }
 
