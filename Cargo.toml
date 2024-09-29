@@ -25,6 +25,8 @@ fixed-bigint = { path = "../fixed-bigint-rs", version = "0.1.9", optional = true
 
 [dev-dependencies]
 sha1 = { version = "=0.11.0-pre.4", default-features = false, features = ["oid"] }
+rand_chacha = "0.3"
+rand = "0.8"
 
 [features]
 default = [ "fixed-bigint", "std" ]

@@ -15,6 +15,22 @@ use crate::errors::{Error, Result};
 #[cfg(feature = "std")]
 use std::println;
 
+/// Fills the provided slice with random values, which are guaranteed
+/// to not be zero.
+#[inline]
+fn non_zero_random_bytes<R: CryptoRngCore + ?Sized>(rng: &mut R, data: &mut [u8]) {
+    rng.fill_bytes(data);
+
+    for el in data {
+        if *el == 0u8 {
+            // TODO: break after a certain amount of time
+            while *el == 0u8 {
+                rng.fill_bytes(core::slice::from_mut(el));
+            }
+        }
+    }
+}
+
 /// Applied the padding scheme from PKCS#1 v1.5 for encryption.  The message must be no longer than
 /// the length of the public modulus minus 11 bytes.
 pub(crate) fn pkcs1v15_encrypt_pad<'a, R>(
@@ -26,7 +42,18 @@ pub(crate) fn pkcs1v15_encrypt_pad<'a, R>(
 where
     R: CryptoRngCore + ?Sized,
 {
-    todo!()
+    if msg.len() > k - 11 {
+        return Err(Error::MessageTooLong);
+    }
+    // TODO: em should be a Zeroizing type
+    // EM = 0x00 || 0x02 || PS || 0x00 || M
+    let em = storage.get_mut(..k).ok_or(Error::OutputBufferTooSmall)?;
+    em[0] = 0;
+    em[1] = 2;
+    non_zero_random_bytes(rng, &mut em[2..k - msg.len() - 1]);
+    em[k - msg.len() - 1] = 0;
+    em[k - msg.len()..].copy_from_slice(msg);
+    Ok(em)
 }
 
 #[inline]

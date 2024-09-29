@@ -23,6 +23,7 @@ use std::println;
 use core::fmt::Debug;
 use core::marker::PhantomData;
 use rand_core::CryptoRngCore;
+use zeroize::Zeroize;
 
 use crate::algorithms::pad::{uint_to_be_pad, uint_to_zeroizing_be_pad};
 use crate::algorithms::pkcs1v15::*;
@@ -97,12 +98,20 @@ fn encrypt<'a, T, R: CryptoRngCore + ?Sized>(
 ) -> Result<&'a [u8]>
 where
     T: UnsignedModularInt,
+    <T as num_traits::FromBytes>::Bytes: num_traits::ops::bytes::NumBytes + Default,
 {
     key::check_public(pub_key)?;
 
     let em = pkcs1v15_encrypt_pad(rng, msg, pub_key.size(), storage)?;
-
-    todo!()
+    let mut bytes = <T as num_traits::FromBytes>::Bytes::default();
+    bytes.as_mut().copy_from_slice(em);
+    storage.zeroize(); // Zero as soon as possible
+    let mut padded_em = T::from_be_bytes(&bytes);
+    bytes.as_mut().zeroize();
+    let encr = rsa_encrypt(pub_key, padded_em);
+    // zero out last copy
+    padded_em.zeroize();
+    uint_to_be_pad(encr, pub_key.size(), storage)
 }
 
 /// Decrypts a plaintext using RSA and the padding scheme from PKCS#1 v1.5.

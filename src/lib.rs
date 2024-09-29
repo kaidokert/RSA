@@ -1,3 +1,4 @@
+#![allow(unused_variables, unused_mut, unused_imports, dead_code)]
 #![cfg_attr(not(test), no_std)]
 
 #[cfg(feature = "std")]

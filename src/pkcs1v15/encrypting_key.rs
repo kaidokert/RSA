@@ -29,6 +29,7 @@ where
 impl<T> RandomizedEncryptor for EncryptingKey<T>
 where
     T: UnsignedModularInt,
+    <T as num_traits::FromBytes>::Bytes: num_traits::ops::bytes::NumBytes + Default,
 {
     fn encrypt_with_rng<'a, R: CryptoRngCore + ?Sized>(
         &self,
