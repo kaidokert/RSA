@@ -17,6 +17,9 @@ pub use self::{
     signing_key::SigningKey, verifying_key::VerifyingKey,
 };
 
+#[cfg(feature = "std")]
+use std::println;
+
 use core::fmt::Debug;
 use core::marker::PhantomData;
 use zeroize::{DefaultIsZeroes, Zeroizing};
@@ -143,10 +146,23 @@ pub fn verify<T>(
     sig_len: usize,
 ) -> Result<()>
 where
-    T: UnsignedModularInt + DefaultIsZeroes,
+    T: UnsignedModularInt + DefaultIsZeroes + core::fmt::Debug,
 {
     let enn = pub_key.n();
     let pksize = pub_key.size();
+    #[cfg(feature = "std")]
+    println!(
+        "enn: {:?}, pksize: {:?} sig_len: {:?}",
+        enn, pksize, sig_len
+    );
+    if sig >= pub_key.n() {
+        #[cfg(feature = "std")]
+        println!("sig > pub_key.n()");
+    }
+    if sig_len != pub_key.size() {
+        #[cfg(feature = "std")]
+        println!("sig_len != pub_key.size()");
+    }
 
     if sig >= pub_key.n() || sig_len != pub_key.size() {
         return Err(Error::Verification);

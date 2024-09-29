@@ -33,19 +33,24 @@ pub(crate) fn pkcs1v15_sign_unpad(prefix: &[u8], hashed: &[u8], em: &[u8], k: us
     let mut ok = em[0].ct_eq(&0u8);
     ok &= em[1].ct_eq(&1u8);
     #[cfg(feature = "std")]
-    println!("hash_block: {:x?}", &em[k - hash_len..k]);
+    println!("hash_block: {:x?} {:?}", &em[k - hash_len..k], ok);
     ok &= em[k - hash_len..k].ct_eq(hashed);
     #[cfg(feature = "std")]
-    println!("prefix_block: {:x?}", &em[k - t_len..k - hash_len]);
+    println!(
+        "prefix_block: {:x?} prefix={:x?} {:?}",
+        &em[k - t_len..k - hash_len],
+        prefix,
+        ok
+    );
     ok &= em[k - t_len..k - hash_len].ct_eq(prefix);
 
     #[cfg(feature = "std")]
-    println!("required zero: {:x?}", &em[k - t_len - 1]);
+    println!("required zero: {:x?} {:?}", &em[k - t_len - 1], ok);
     ok &= em[k - t_len - 1].ct_eq(&0u8);
 
     for el in em.iter().skip(2).take(k - t_len - 3) {
         #[cfg(feature = "std")]
-        println!("looking for 0xff: got {:x?}", el);
+        println!("looking for 0xff: got {:x?} ok={:?}", el, ok);
         ok &= el.ct_eq(&0xff)
     }
 

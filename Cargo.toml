@@ -27,7 +27,7 @@ fixed-bigint = { path = "../fixed-bigint-rs", version = "0.1.9", optional = true
 sha1 = { version = "=0.11.0-pre.4", default-features = false, features = ["oid"] }
 
 [features]
-default = [ "fixed-bigint" ]
+default = [ "fixed-bigint", "std" ]
 nightly = []
 getrandom = []
 pkcs5 = []
@@ -35,4 +35,4 @@ serde = []
 hazmat = []
 pem = []
 sha2 = []
-std = []
+std = [ "signature/std" ]

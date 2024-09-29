@@ -58,12 +58,12 @@ where
 impl<D, T> Verifier<Signature<T>> for VerifyingKey<D, T>
 where
     D: Digest,
-    T: UnsignedModularInt + DefaultIsZeroes,
+    T: UnsignedModularInt + DefaultIsZeroes + core::fmt::Debug,
 {
     fn verify(&self, msg: &[u8], signature: &Signature<T>) -> Result<(), signature::Error> {
         verify(
             &self.inner,
-            &[0x0A_u8; 1],
+            &[0x00_u8; 1],
             &D::digest(msg),
             &signature.inner,
             signature.len,

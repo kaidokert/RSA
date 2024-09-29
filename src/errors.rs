@@ -65,6 +65,21 @@ pub enum Error {
     OutputBufferTooSmall,
 }
 
+#[cfg(feature = "std")]
+impl std::error::Error for Error {}
+impl core::fmt::Display for Error {
+    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+        todo!()
+    }
+}
+
+#[cfg(feature = "std")]
+impl From<Error> for signature::Error {
+    fn from(err: Error) -> Self {
+        Self::from_source(err)
+    }
+}
+
 #[cfg(not(feature = "std"))]
 impl From<Error> for signature::Error {
     fn from(_err: Error) -> Self {
