@@ -22,6 +22,7 @@ use std::println;
 
 use core::fmt::Debug;
 use core::marker::PhantomData;
+use rand_core::CryptoRngCore;
 
 use crate::algorithms::pad::{uint_to_be_pad, uint_to_zeroizing_be_pad};
 use crate::algorithms::pkcs1v15::*;
@@ -88,11 +89,19 @@ where
 /// scheme from PKCS#1 v1.5.  The message must be no longer than the
 /// length of the public modulus minus 11 bytes.
 #[inline]
-fn encrypt<T>(pub_key: &RsaPublicKey<T>, msg: &[u8]) -> Result<()>
+fn encrypt<'a, T, R: CryptoRngCore + ?Sized>(
+    rng: &mut R,
+    pub_key: &RsaPublicKey<T>,
+    msg: &[u8],
+    storage: &'a mut [u8],
+) -> Result<&'a [u8]>
 where
     T: UnsignedModularInt,
 {
     key::check_public(pub_key)?;
+
+    let em = pkcs1v15_encrypt_pad(rng, msg, pub_key.size(), storage)?;
+
     todo!()
 }
 

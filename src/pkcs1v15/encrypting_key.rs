@@ -3,6 +3,7 @@ use crate::{
     traits::{RandomizedEncryptor, UnsignedModularInt},
     Result, RsaPublicKey,
 };
+use rand_core::CryptoRngCore;
 
 /// Encryption key for PKCS#1 v1.5 encryption as described in [RFC8017 § 7.2].
 ///
@@ -25,7 +26,19 @@ where
     }
 }
 
-impl<T> RandomizedEncryptor for EncryptingKey<T> where T: UnsignedModularInt {}
+impl<T> RandomizedEncryptor for EncryptingKey<T>
+where
+    T: UnsignedModularInt,
+{
+    fn encrypt_with_rng<'a, R: CryptoRngCore + ?Sized>(
+        &self,
+        rng: &mut R,
+        msg: &[u8],
+        storage: &'a mut [u8],
+    ) -> Result<&'a [u8]> {
+        encrypt(rng, &self.inner, msg, storage)
+    }
+}
 
 #[cfg(test)]
 mod tests {}

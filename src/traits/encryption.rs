@@ -1,9 +1,18 @@
 //! Encryption-related traits.
+use rand_core::CryptoRngCore;
 
 use crate::errors::Result;
 
 /// Encrypt the message using provided random source
-pub trait RandomizedEncryptor {}
+pub trait RandomizedEncryptor {
+    /// Encrypt the given message.
+    fn encrypt_with_rng<'a, R: CryptoRngCore + ?Sized>(
+        &self,
+        rng: &mut R,
+        msg: &[u8],
+        storage: &'a mut [u8],
+    ) -> Result<&'a [u8]>;
+}
 
 /// Decrypt the given message
 pub trait Decryptor {}

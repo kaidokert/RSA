@@ -7,12 +7,27 @@
 //! [RFC8017 § 8.2]: https://datatracker.ietf.org/doc/html/rfc8017#section-8.2
 
 use digest::Digest;
+use rand_core::CryptoRngCore;
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq};
 use zeroize::Zeroizing;
 
 use crate::errors::{Error, Result};
 #[cfg(feature = "std")]
 use std::println;
+
+/// Applied the padding scheme from PKCS#1 v1.5 for encryption.  The message must be no longer than
+/// the length of the public modulus minus 11 bytes.
+pub(crate) fn pkcs1v15_encrypt_pad<'a, R>(
+    rng: &mut R,
+    msg: &[u8],
+    k: usize,
+    storage: &'a mut [u8],
+) -> Result<&'a [u8]>
+where
+    R: CryptoRngCore + ?Sized,
+{
+    todo!()
+}
 
 #[inline]
 pub(crate) fn pkcs1v15_sign_unpad(prefix: &[u8], hashed: &[u8], em: &[u8], k: usize) -> Result<()> {
