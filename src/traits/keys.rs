@@ -1,7 +1,7 @@
 //! Traits related to the key components
 
 use num_traits::{Num, One, PrimInt, Signed, Unsigned, Zero};
-use zeroize::{DefaultIsZeroes, Zeroize};
+use zeroize::Zeroize;
 
 use crate::traits::modular::UnsignedModularInt;
 
@@ -26,7 +26,7 @@ where
 /// Components of an RSA private key.
 pub trait PrivateKeyParts<T>: PublicKeyParts<T>
 where
-    T: UnsignedModularInt + DefaultIsZeroes,
+    T: UnsignedModularInt,
 {
     /// Returns the private exponent of the key.
     fn d(&self) -> &T;
@@ -55,7 +55,7 @@ where
 #[derive(Debug, Clone)]
 pub struct CrtValue<T>
 where
-    T: UnsignedModularInt + DefaultIsZeroes + Clone,
+    T: UnsignedModularInt + Clone,
 {
     /// D mod (prime - 1)
     pub(crate) exp: T,
@@ -67,7 +67,7 @@ where
 
 impl<T> Zeroize for CrtValue<T>
 where
-    T: UnsignedModularInt + DefaultIsZeroes + Clone,
+    T: UnsignedModularInt + Clone,
 {
     fn zeroize(&mut self) {
         self.exp.zeroize();
@@ -78,7 +78,7 @@ where
 
 impl<T> Drop for CrtValue<T>
 where
-    T: UnsignedModularInt + DefaultIsZeroes + Clone,
+    T: UnsignedModularInt + Clone,
 {
     fn drop(&mut self) {
         self.zeroize();

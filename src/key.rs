@@ -1,6 +1,6 @@
 use core::hash::{Hash, Hasher};
 use num_traits::{FromPrimitive, One, ToPrimitive, Zero};
-use zeroize::{DefaultIsZeroes, Zeroize, ZeroizeOnDrop};
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::traits::UnsignedModularInt;
 
@@ -27,7 +27,7 @@ where
 #[derive(Debug, Clone)]
 pub struct RsaPrivateKey<T>
 where
-    T: DefaultIsZeroes + UnsignedModularInt,
+    T: UnsignedModularInt,
 {
     /// Public components of the private key.
     pubkey_components: RsaPublicKey<T>,
@@ -39,8 +39,8 @@ where
     pub(crate) precomputed: Option<PrecomputedValues<T>>,
 }
 
-impl<T: UnsignedModularInt + DefaultIsZeroes> Eq for RsaPrivateKey<T> {}
-impl<T: UnsignedModularInt + DefaultIsZeroes> PartialEq for RsaPrivateKey<T> {
+impl<T: UnsignedModularInt> Eq for RsaPrivateKey<T> {}
+impl<T: UnsignedModularInt> PartialEq for RsaPrivateKey<T> {
     #[inline]
     fn eq(&self, other: &Self) -> bool {
         self.pubkey_components == other.pubkey_components
@@ -49,13 +49,13 @@ impl<T: UnsignedModularInt + DefaultIsZeroes> PartialEq for RsaPrivateKey<T> {
     }
 }
 
-impl<T: UnsignedModularInt + DefaultIsZeroes> AsRef<RsaPublicKey<T>> for RsaPrivateKey<T> {
+impl<T: UnsignedModularInt> AsRef<RsaPublicKey<T>> for RsaPrivateKey<T> {
     fn as_ref(&self) -> &RsaPublicKey<T> {
         &self.pubkey_components
     }
 }
 
-impl<T: UnsignedModularInt + DefaultIsZeroes> Drop for RsaPrivateKey<T> {
+impl<T: UnsignedModularInt> Drop for RsaPrivateKey<T> {
     fn drop(&mut self) {
         self.d.zeroize();
         self.primes.zeroize();
@@ -63,10 +63,10 @@ impl<T: UnsignedModularInt + DefaultIsZeroes> Drop for RsaPrivateKey<T> {
     }
 }
 
-impl<T: UnsignedModularInt + DefaultIsZeroes> ZeroizeOnDrop for RsaPrivateKey<T> {}
+impl<T: UnsignedModularInt> ZeroizeOnDrop for RsaPrivateKey<T> {}
 
 #[derive(Debug, Clone)]
-pub(crate) struct PrecomputedValues<T: Zeroize + DefaultIsZeroes + UnsignedModularInt> {
+pub(crate) struct PrecomputedValues<T: Zeroize + UnsignedModularInt> {
     /// D mod (P-1)
     pub(crate) dp: T,
     /// D mod (Q-1)
@@ -81,7 +81,7 @@ pub(crate) struct PrecomputedValues<T: Zeroize + DefaultIsZeroes + UnsignedModul
     pub(crate) crt_values: [CrtValue<T>; 3],
 }
 
-impl<T: Zeroize + DefaultIsZeroes + UnsignedModularInt> Zeroize for PrecomputedValues<T> {
+impl<T: Zeroize + UnsignedModularInt> Zeroize for PrecomputedValues<T> {
     fn zeroize(&mut self) {
         self.dp.zeroize();
         self.dq.zeroize();
@@ -92,13 +92,13 @@ impl<T: Zeroize + DefaultIsZeroes + UnsignedModularInt> Zeroize for PrecomputedV
     }
 }
 
-impl<T: Zeroize + DefaultIsZeroes + UnsignedModularInt> Drop for PrecomputedValues<T> {
+impl<T: Zeroize + UnsignedModularInt> Drop for PrecomputedValues<T> {
     fn drop(&mut self) {
         self.zeroize();
     }
 }
 
-impl<T: UnsignedModularInt + DefaultIsZeroes> PublicKeyParts<T> for RsaPublicKey<T> {
+impl<T: UnsignedModularInt> PublicKeyParts<T> for RsaPublicKey<T> {
     fn n(&self) -> &T {
         &self.n
     }
@@ -125,7 +125,7 @@ impl<T: UnsignedModularInt + Clone> RsaPublicKey<T> {
     }
 }
 
-impl<T: UnsignedModularInt + DefaultIsZeroes> RsaPublicKey<T> {
+impl<T: UnsignedModularInt> RsaPublicKey<T> {
     /// Minimum value of the public exponent `e`.
     pub const MIN_PUB_EXPONENT: u64 = 2;
 
@@ -161,7 +161,7 @@ impl<T: UnsignedModularInt + DefaultIsZeroes> RsaPublicKey<T> {
     }
 }
 
-impl<T: UnsignedModularInt + DefaultIsZeroes> PublicKeyParts<T> for RsaPrivateKey<T> {
+impl<T: UnsignedModularInt> PublicKeyParts<T> for RsaPrivateKey<T> {
     fn n(&self) -> &T {
         &self.pubkey_components.n
     }
@@ -174,7 +174,7 @@ impl<T: UnsignedModularInt + DefaultIsZeroes> PublicKeyParts<T> for RsaPrivateKe
     }
 }
 
-impl<T: UnsignedModularInt + DefaultIsZeroes> RsaPrivateKey<T> {
+impl<T: UnsignedModularInt> RsaPrivateKey<T> {
     /// Default exponent for RSA keys.
     const EXP: u64 = 65537;
 
@@ -289,7 +289,7 @@ impl<T: UnsignedModularInt + DefaultIsZeroes> RsaPrivateKey<T> {
     }
 }
 
-impl<T: UnsignedModularInt + DefaultIsZeroes> PrivateKeyParts<T> for RsaPrivateKey<T> {
+impl<T: UnsignedModularInt> PrivateKeyParts<T> for RsaPrivateKey<T> {
     fn d(&self) -> &T {
         &self.d
     }
@@ -324,7 +324,7 @@ impl<T: UnsignedModularInt + DefaultIsZeroes> PrivateKeyParts<T> for RsaPrivateK
 #[inline]
 pub fn check_public<T>(public_key: &impl PublicKeyParts<T>) -> Result<()>
 where
-    T: UnsignedModularInt + DefaultIsZeroes,
+    T: UnsignedModularInt,
 {
     check_public_with_max_size(public_key, RsaPublicKey::<T>::MAX_SIZE)
 }
@@ -333,7 +333,7 @@ where
 #[inline]
 fn check_public_with_max_size<T>(public_key: &impl PublicKeyParts<T>, max_size: usize) -> Result<()>
 where
-    T: UnsignedModularInt + DefaultIsZeroes,
+    T: UnsignedModularInt,
 {
     if public_key.n().bits() > max_size {
         return Err(Error::ModulusTooLarge);

@@ -1,8 +1,8 @@
 use num_traits::{FromBytes, PrimInt, ToBytes, Unsigned, WrappingAdd, WrappingSub};
-
+use zeroize::DefaultIsZeroes;
 // Marker trait for types that can be used as unsigned modular integers.
 pub trait UnsignedModularInt:
-    PrimInt + Unsigned + WrappingAdd + WrappingSub + PartialEq + ToBytes + FromBytes
+    PrimInt + Unsigned + WrappingAdd + WrappingSub + PartialEq + ToBytes + FromBytes + DefaultIsZeroes
 {
     fn bits(&self) -> usize {
         let mut count = 0;
@@ -21,7 +21,14 @@ pub trait UnsignedModularInt:
 }
 
 impl<T> UnsignedModularInt for T where
-    T: PrimInt + Unsigned + WrappingAdd + WrappingSub + PartialEq + ToBytes + FromBytes
+    T: PrimInt
+        + Unsigned
+        + WrappingAdd
+        + WrappingSub
+        + PartialEq
+        + ToBytes
+        + FromBytes
+        + DefaultIsZeroes
 {
 }
 

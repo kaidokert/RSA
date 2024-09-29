@@ -22,7 +22,6 @@ use std::println;
 
 use core::fmt::Debug;
 use core::marker::PhantomData;
-use zeroize::{DefaultIsZeroes, Zeroizing};
 
 use crate::algorithms::pad::{uint_to_be_pad, uint_to_zeroizing_be_pad};
 use crate::algorithms::pkcs1v15::*;
@@ -91,7 +90,7 @@ where
 #[inline]
 fn encrypt<T>(pub_key: &RsaPublicKey<T>, msg: &[u8]) -> Result<()>
 where
-    T: UnsignedModularInt + DefaultIsZeroes,
+    T: UnsignedModularInt,
 {
     key::check_public(pub_key)?;
     todo!()
@@ -109,7 +108,7 @@ where
 #[inline]
 fn decrypt<T>(priv_key: &RsaPrivateKey<T>, ciphertext: &[u8]) -> Result<()>
 where
-    T: UnsignedModularInt + DefaultIsZeroes,
+    T: UnsignedModularInt,
 {
     key::check_public(priv_key)?;
     todo!()
@@ -131,7 +130,7 @@ where
 #[inline]
 fn sign<T>(priv_key: &RsaPrivateKey<T>, prefix: &[u8], hashed: &[u8]) -> Result<()>
 where
-    T: UnsignedModularInt + DefaultIsZeroes,
+    T: UnsignedModularInt,
 {
     todo!()
 }
@@ -146,7 +145,7 @@ pub fn verify<T>(
     sig_len: usize,
 ) -> Result<()>
 where
-    T: UnsignedModularInt + DefaultIsZeroes + core::fmt::Debug,
+    T: UnsignedModularInt + core::fmt::Debug,
 {
     let enn = pub_key.n();
     let pksize = pub_key.size();

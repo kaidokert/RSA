@@ -1,5 +1,3 @@
-use zeroize::DefaultIsZeroes;
-
 use super::encrypt;
 use crate::{
     traits::{RandomizedEncryptor, UnsignedModularInt},
@@ -12,14 +10,14 @@ use crate::{
 #[derive(Debug, Clone, PartialEq)]
 pub struct EncryptingKey<T>
 where
-    T: UnsignedModularInt + DefaultIsZeroes,
+    T: UnsignedModularInt,
 {
     pub(super) inner: RsaPublicKey<T>,
 }
 
 impl<T> EncryptingKey<T>
 where
-    T: UnsignedModularInt + DefaultIsZeroes,
+    T: UnsignedModularInt,
 {
     /// Create a new verifying key from an RSA public key.
     pub fn new(key: RsaPublicKey<T>) -> Self {
@@ -27,7 +25,7 @@ where
     }
 }
 
-impl<T> RandomizedEncryptor for EncryptingKey<T> where T: UnsignedModularInt + DefaultIsZeroes {}
+impl<T> RandomizedEncryptor for EncryptingKey<T> where T: UnsignedModularInt {}
 
 #[cfg(test)]
 mod tests {}

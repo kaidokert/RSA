@@ -3,8 +3,6 @@ use crate::{traits::UnsignedModularInt, RsaPublicKey};
 use core::marker::PhantomData;
 use digest::Digest;
 
-use zeroize::DefaultIsZeroes;
-
 use signature::Verifier;
 
 /// Verifying key for `RSASSA-PKCS1-v1_5` signatures as described in [RFC8017 § 8.2].
@@ -13,7 +11,7 @@ use signature::Verifier;
 #[derive(Debug)]
 pub struct VerifyingKey<D, T>
 where
-    T: UnsignedModularInt + DefaultIsZeroes,
+    T: UnsignedModularInt,
 {
     pub(super) inner: RsaPublicKey<T>,
     pub(super) prefix: PhantomData<D>,
@@ -22,7 +20,7 @@ where
 
 impl<D, T> VerifyingKey<D, T>
 where
-    T: UnsignedModularInt + DefaultIsZeroes,
+    T: UnsignedModularInt,
 {
     /// Create a new verifying key with a prefix for the digest `D`.
     pub fn new(key: RsaPublicKey<T>) -> Self {
@@ -36,7 +34,7 @@ where
 
 impl<D, T> VerifyingKey<D, T>
 where
-    T: UnsignedModularInt + DefaultIsZeroes,
+    T: UnsignedModularInt,
 {
     /// Create a new verifying key from an RSA public key with an empty prefix.
     ///
@@ -58,7 +56,7 @@ where
 impl<D, T> Verifier<Signature<T>> for VerifyingKey<D, T>
 where
     D: Digest,
-    T: UnsignedModularInt + DefaultIsZeroes + core::fmt::Debug,
+    T: UnsignedModularInt + core::fmt::Debug,
 {
     fn verify(&self, msg: &[u8], signature: &Signature<T>) -> Result<(), signature::Error> {
         verify(
@@ -78,7 +76,7 @@ where
 
 impl<D, T> AsRef<RsaPublicKey<T>> for VerifyingKey<D, T>
 where
-    T: UnsignedModularInt + DefaultIsZeroes,
+    T: UnsignedModularInt,
 {
     fn as_ref(&self) -> &RsaPublicKey<T> {
         &self.inner
@@ -88,7 +86,7 @@ where
 // Implemented manually so we don't have to bind D with Clone
 impl<D, T> Clone for VerifyingKey<D, T>
 where
-    T: UnsignedModularInt + DefaultIsZeroes,
+    T: UnsignedModularInt,
 {
     fn clone(&self) -> Self {
         Self {
@@ -101,7 +99,7 @@ where
 
 impl<D, T> From<RsaPublicKey<T>> for VerifyingKey<D, T>
 where
-    T: UnsignedModularInt + DefaultIsZeroes,
+    T: UnsignedModularInt,
 {
     fn from(key: RsaPublicKey<T>) -> Self {
         Self::new_unprefixed(key)
@@ -110,7 +108,7 @@ where
 
 impl<D, T> From<VerifyingKey<D, T>> for RsaPublicKey<T>
 where
-    T: UnsignedModularInt + DefaultIsZeroes,
+    T: UnsignedModularInt,
 {
     fn from(key: VerifyingKey<D, T>) -> Self {
         key.inner
@@ -119,7 +117,7 @@ where
 
 impl<D, T> PartialEq for VerifyingKey<D, T>
 where
-    T: UnsignedModularInt + DefaultIsZeroes,
+    T: UnsignedModularInt,
 {
     fn eq(&self, other: &Self) -> bool {
         self.inner == other.inner && self.prefix == other.prefix

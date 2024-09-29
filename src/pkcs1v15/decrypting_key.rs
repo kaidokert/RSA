@@ -5,7 +5,6 @@ use crate::{
     traits::{Decryptor, EncryptingKeypair, RandomizedDecryptor},
     Result,
 };
-use zeroize::DefaultIsZeroes;
 use zeroize::ZeroizeOnDrop;
 
 /// Decryption key for PKCS#1 v1.5 decryption as described in [RFC8017 § 7.2].
@@ -14,14 +13,14 @@ use zeroize::ZeroizeOnDrop;
 #[derive(Debug, Clone, PartialEq)]
 pub struct DecryptingKey<T>
 where
-    T: UnsignedModularInt + DefaultIsZeroes,
+    T: UnsignedModularInt,
 {
     inner: RsaPrivateKey<T>,
 }
 
 impl<T> DecryptingKey<T>
 where
-    T: UnsignedModularInt + DefaultIsZeroes,
+    T: UnsignedModularInt,
 {
     /// Create a new verifying key from an RSA public key.
     pub fn new(key: RsaPrivateKey<T>) -> Self {
@@ -29,13 +28,13 @@ where
     }
 }
 
-impl<T> Decryptor for DecryptingKey<T> where T: UnsignedModularInt + DefaultIsZeroes {}
+impl<T> Decryptor for DecryptingKey<T> where T: UnsignedModularInt {}
 
-impl<T> RandomizedDecryptor for DecryptingKey<T> where T: UnsignedModularInt + DefaultIsZeroes {}
+impl<T> RandomizedDecryptor for DecryptingKey<T> where T: UnsignedModularInt {}
 
 impl<T> EncryptingKeypair for DecryptingKey<T>
 where
-    T: UnsignedModularInt + DefaultIsZeroes,
+    T: UnsignedModularInt,
 {
     type EncryptingKey = EncryptingKey<T>;
     fn encrypting_key(&self) -> EncryptingKey<T> {
@@ -43,7 +42,7 @@ where
     }
 }
 
-impl<T> ZeroizeOnDrop for DecryptingKey<T> where T: UnsignedModularInt + DefaultIsZeroes {}
+impl<T> ZeroizeOnDrop for DecryptingKey<T> where T: UnsignedModularInt {}
 
 #[cfg(test)]
 mod tests {}
