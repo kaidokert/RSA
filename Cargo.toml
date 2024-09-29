@@ -19,8 +19,12 @@ const-oid = { version = "0.10.0-rc.0", default-features = false }
 rand_core = { version = "0.6.4", default-features = false }
 
 num-traits = { version = "0.2.19", default-features = false, features = ["i128"] }
+signature = { version = "=2.3.0-pre.4", default-features = false, features = ["digest"] }
 zeroize = { version = "1.8.1" }
 fixed-bigint = { path = "../fixed-bigint-rs", version = "0.1.9", optional = true, features=["zeroize","use-unsafe"] }
+
+[dev-dependencies]
+sha1 = { version = "=0.11.0-pre.4", default-features = false, features = ["oid"] }
 
 [features]
 default = [ "fixed-bigint" ]

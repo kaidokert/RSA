@@ -1,4 +1,6 @@
 use core::ops::Deref;
+use sha1::Sha1;
+use signature::Verifier;
 
 #[cfg(feature = "fixed-bigint")]
 use fixed_bigint::FixedUInt;
@@ -32,4 +34,12 @@ fn test_verify_signature_fixedbigint() {
     ];
     let sig = FixedUInt::<u32, 8>::from_le_bytes(&signature);
     verify(&key, &[0x0A_u8; 1], &hashed, &sig, 32);
+    let verifying_key = VerifyingKey::<Sha1, _>::new_unprefixed(key);
+    let data = "hello world".as_bytes();
+
+    let refme: &[u8] = signature.as_ref();
+    let sig = refme.try_into().unwrap();
+
+    verifying_key.verify(data, &sig).expect("failed to verify");
+    //verifying_key.verify(data, &sig).expect("failed to verify");
 }

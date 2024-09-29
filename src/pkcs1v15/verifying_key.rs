@@ -1,8 +1,11 @@
 use super::{verify, Signature};
 use crate::{traits::UnsignedModularInt, RsaPublicKey};
 use core::marker::PhantomData;
+use digest::Digest;
 
 use zeroize::DefaultIsZeroes;
+
+use signature::Verifier;
 
 /// Verifying key for `RSASSA-PKCS1-v1_5` signatures as described in [RFC8017 § 8.2].
 ///
@@ -46,6 +49,26 @@ where
             prefix: Default::default(),
             phantom: Default::default(),
         }
+    }
+}
+
+//
+// `*Verifier` trait impls
+//
+impl<D, T> Verifier<Signature<T>> for VerifyingKey<D, T>
+where
+    D: Digest,
+    T: UnsignedModularInt + DefaultIsZeroes,
+{
+    fn verify(&self, msg: &[u8], signature: &Signature<T>) -> Result<(), signature::Error> {
+        verify(
+            &self.inner,
+            &[0x0A_u8; 1],
+            &D::digest(msg),
+            &signature.inner,
+            signature.len,
+        )
+        .map_err(|e| e.into())
     }
 }
 

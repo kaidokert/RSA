@@ -64,3 +64,10 @@ pub enum Error {
     /// Output buffer too small
     OutputBufferTooSmall,
 }
+
+#[cfg(not(feature = "std"))]
+impl From<Error> for signature::Error {
+    fn from(_err: Error) -> Self {
+        Self::new()
+    }
+}

@@ -19,10 +19,10 @@ pub(crate) fn pkcs1v15_sign_unpad(prefix: &[u8], hashed: &[u8], em: &[u8], k: us
     let hash_len = hashed.len();
     #[cfg(feature = "std")]
     {
-    println!("len em: {}", em.len());
-    println!("em: {:x?}", em);
-    println!("em[0]: {}", em[0]);
-    println!("em[1]: {}", em[1]);
+        println!("len em: {}", em.len());
+        println!("em: {:x?}", em);
+        println!("em[0]: {}", em[0]);
+        println!("em[1]: {}", em[1]);
     }
     let t_len = prefix.len() + hashed.len();
     if k < t_len + 11 {
