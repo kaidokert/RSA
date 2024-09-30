@@ -1,5 +1,5 @@
 use super::{oid, pkcs1v15_generate_prefix, sign, Signature, VerifyingKey};
-use crate::{dummy_rng::DummyRng, Result, RsaPrivateKey};
+use crate::{dummy_rng::DummyRng, Prefix, Result, RsaPrivateKey};
 use const_oid::AssociatedOid;
 use core::marker::PhantomData;
 use digest::Digest;
@@ -21,19 +21,20 @@ where
     T: UnsignedModularInt,
 {
     inner: RsaPrivateKey<T>,
-    prefix: PhantomData<D>,
+    prefix: Prefix,
     phantom: PhantomData<D>,
 }
 
 impl<D, T> SigningKey<D, T>
 where
+    D: Digest + AssociatedOid,
     T: UnsignedModularInt,
 {
     /// Create a new signing key with a prefix for the digest `D`.
     pub fn new(key: RsaPrivateKey<T>) -> Self {
         Self {
             inner: key,
-            prefix: Default::default(),
+            prefix: pkcs1v15_generate_prefix::<D>(),
             phantom: Default::default(),
         }
     }

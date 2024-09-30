@@ -69,7 +69,11 @@ pub enum Error {
 impl std::error::Error for Error {}
 impl core::fmt::Display for Error {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        todo!()
+        match self {
+            Error::Verification => write!(f, "verification error"),
+            Error::Internal => write!(f, "internal error"),
+            _ => write!(f, "{:?}", self),
+        }
     }
 }
 

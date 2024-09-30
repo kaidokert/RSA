@@ -35,6 +35,7 @@ use crate::errors::{Error, Result};
 use crate::key::{self, RsaPrivateKey, RsaPublicKey};
 use crate::traits::UnsignedModularInt;
 use crate::traits::{PaddingScheme, PublicKeyParts, SignatureScheme};
+use crate::Prefix;
 
 /// Encryption using PKCS#1 v1.5 padding.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -63,7 +64,7 @@ pub struct Pkcs1v15Sign {
     pub hash_len: Option<usize>,
 
     /// Prefix.
-    pub prefix: PhantomData<u8>,
+    pub prefix: Prefix,
 }
 
 impl Pkcs1v15Sign {
@@ -73,11 +74,11 @@ impl Pkcs1v15Sign {
     /// feature of the relevant digest crate.
     pub fn new<D>() -> Self
     where
-        D: Digest,
+        D: Digest + AssociatedOid,
     {
         Self {
             hash_len: Some(<D as Digest>::output_size()),
-            prefix: Default::default(),
+            prefix: pkcs1v15_generate_prefix::<D>(),
         }
     }
 

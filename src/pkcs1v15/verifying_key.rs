@@ -1,6 +1,6 @@
 use super::{oid, pkcs1v15_generate_prefix, verify, Signature};
-use crate::traits::UnsignedModularInt;
 use crate::RsaPublicKey;
+use crate::{traits::UnsignedModularInt, Prefix};
 use const_oid::AssociatedOid;
 use core::marker::PhantomData;
 use digest::Digest;
@@ -16,19 +16,20 @@ where
     T: UnsignedModularInt,
 {
     pub(super) inner: RsaPublicKey<T>,
-    pub(super) prefix: PhantomData<D>, // This just needs to be up to 32 bytes ( 19 max )
+    pub(super) prefix: Prefix,
     pub(super) phantom: PhantomData<D>,
 }
 
 impl<D, T> VerifyingKey<D, T>
 where
+    D: Digest + AssociatedOid,
     T: UnsignedModularInt,
 {
     /// Create a new verifying key with a prefix for the digest `D`.
     pub fn new(key: RsaPublicKey<T>) -> Self {
         Self {
             inner: key,
-            prefix: Default::default(),
+            prefix: pkcs1v15_generate_prefix::<D>(),
             phantom: Default::default(),
         }
     }
@@ -64,7 +65,7 @@ where
     fn verify_digest(&self, digest: D, signature: &Signature<T>) -> signature::Result<()> {
         verify(
             &self.inner,
-            &[0; 1],
+            &self.prefix,
             &digest.finalize(),
             &signature.inner,
             signature.len,
@@ -81,7 +82,7 @@ where
     fn verify_prehash(&self, prehash: &[u8], signature: &Signature<T>) -> signature::Result<()> {
         verify(
             &self.inner,
-            &[0; 1],
+            &self.prefix,
             prehash,
             &signature.inner,
             signature.len,
@@ -98,7 +99,7 @@ where
     fn verify(&self, msg: &[u8], signature: &Signature<T>) -> Result<(), signature::Error> {
         verify(
             &self.inner,
-            &[0x00_u8; 1],
+            &self.prefix.clone(),
             &D::digest(msg),
             &signature.inner,
             signature.len,
