@@ -101,7 +101,15 @@ where
     if sig >= pub_key.n() || sig_len != pub_key.size() {
         return Err(Error::Verification);
     }
-    todo!()
+    let encr = rsa_encrypt(pub_key, *sig);
+    let mut storage = [0u8; 1024]; // todo
+    let len = {
+        let mut em = uint_to_be_pad(encr, pub_key.size(), &mut storage)?;
+        em.len()
+    };
+    let mut mutslice = storage.get_mut(..len).ok_or(Error::OutputBufferTooSmall)?;
+
+    emsa_pss_verify_digest::<D>(hashed, &mut mutslice, salt_len, pub_key.n().bits())
 }
 
 /// SignPSS calculates the signature of hashed using RSASSA-PSS.

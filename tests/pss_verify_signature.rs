@@ -3,7 +3,7 @@ use signature::Verifier;
 
 #[cfg(feature = "fixed-bigint")]
 use fixed_bigint::FixedUInt;
-use rsa_generic::pkcs1v15::VerifyingKey;
+use rsa_generic::pss::VerifyingKey;
 use rsa_generic::RsaPublicKey;
 
 #[cfg(feature = "fixed-bigint")]
@@ -29,6 +29,5 @@ fn test_verify_512_bit() {
     let refme: &[u8] = signature.as_ref();
     let sig = refme.try_into().unwrap();
     let verifying_key = VerifyingKey::<Sha1, _>::new(key);
-
     verifying_key.verify(data, &sig).expect("failed to verify");
 }

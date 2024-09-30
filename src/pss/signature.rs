@@ -21,11 +21,18 @@ where
 impl<T> TryFrom<&[u8]> for Signature<T>
 where
     T: UnsignedModularInt,
+    <T as num_traits::FromBytes>::Bytes: num_traits::ops::bytes::NumBytes + Default,
 {
     type Error = signature::Error;
 
     fn try_from(bytes: &[u8]) -> signature::Result<Self> {
-        todo!()
+        let mut bytes2 = <T as num_traits::FromBytes>::Bytes::default();
+        bytes2.as_mut().copy_from_slice(bytes);
+        let result = T::from_be_bytes(&bytes2);
+        Ok(Self {
+            inner: result,
+            len: bytes.len(),
+        })
     }
 }
 
