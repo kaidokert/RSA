@@ -131,22 +131,34 @@ pub(crate) fn pkcs1v15_sign_pad(prefix: &[u8], hashed: &[u8], k: usize) -> Resul
     Ok(em)
 }
 
+use std::println;
+
+
 #[inline]
 pub(crate) fn pkcs1v15_sign_unpad(prefix: &[u8], hashed: &[u8], em: &[u8], k: usize) -> Result<()> {
     let hash_len = hashed.len();
     let t_len = prefix.len() + hashed.len();
+    println!("hash_len: {},  prefix_len:{}  t_len: {}, k: {}", hash_len, prefix.len(), t_len, k);
+    println!("em: {:x?}", em);
     if k < t_len + 11 {
+        println!("MessageTooLong");
         return Err(Error::Verification);
     }
 
     // EM = 0x00 || 0x01 || PS || 0x00 || T
     let mut ok = em[0].ct_eq(&0u8);
     ok &= em[1].ct_eq(&1u8);
+    println!("hash_block: {:x?} ok:{:?}", &em[k - hash_len..k],ok);
+    println!("hashed: {:x?}", hashed);
     ok &= em[k - hash_len..k].ct_eq(hashed);
+    let prefix_block = &em[k - t_len..k - hash_len];
+    println!("\nprefix:\n{:x?}\nprefix_block:\n{:x?}\nok:{:?}", prefix, prefix_block, ok);
     ok &= em[k - t_len..k - hash_len].ct_eq(prefix);
+    println!("required zero: {:x?} ok:{:?}", &em[k - t_len - 1],ok);
     ok &= em[k - t_len - 1].ct_eq(&0u8);
 
     for el in em.iter().skip(2).take(k - t_len - 3) {
+        println!("looking for 0xff: got {:x?} ok:{:?}", el, ok);
         ok &= el.ct_eq(&0xff)
     }
 

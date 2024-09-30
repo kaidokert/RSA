@@ -200,6 +200,8 @@ fn sign<R: CryptoRngCore + ?Sized>(
     )
 }
 
+use std::println;
+
 /// Verifies an RSA PKCS#1 v1.5 signature.
 #[inline]
 fn verify(
@@ -209,6 +211,10 @@ fn verify(
     sig: &BigUint,
     sig_len: usize,
 ) -> Result<()> {
+    let pk_n = pub_key.n();
+    let pk_size = pub_key.size();
+    println!("pk_n: {:?}", pk_n);
+    println!("pk_size: {:?}", pk_size);
     if sig >= pub_key.n() || sig_len != pub_key.size() {
         return Err(Error::Verification);
     }
