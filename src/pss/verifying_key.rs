@@ -29,7 +29,7 @@ where
 {
     /// Create a new RSASSA-PSS verifying key.
     /// Digest output size is used as a salt length.
-    pub fn new(key: RsaPublicKey<T>) -> Self {
+    pub fn new(key: RsaPublicKey<T>, storage: &mut [u8]) -> Self {
         Self::new_with_salt_len(key, <D as Digest>::output_size())
     }
 
@@ -138,7 +138,8 @@ where
     T: UnsignedModularInt,
 {
     fn from(key: RsaPublicKey<T>) -> Self {
-        Self::new(key)
+        let mut storage = [0u8; 1024]; // todo storage
+        Self::new(key, &mut storage)
     }
 }
 
