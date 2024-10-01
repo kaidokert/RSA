@@ -20,7 +20,7 @@ const-oid = { version = "0.10.0-rc.0", default-features = false }
 subtle = { version = "2.1.1", default-features = false }
 digest = { version = "=0.11.0-pre.9", default-features = false, features = ["oid"] }
 signature = { version = "=2.3.0-pre.4", default-features = false, features = ["digest", "rand_core"] }
-zeroize = { version = "1.8.1" }
+zeroize = { version = "1.8.1", default-features=false }
 
 # optional dependencies
 sha1 = { version = "=0.11.0-pre.4", optional = true, default-features = false, features = ["oid"] }
