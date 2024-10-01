@@ -94,6 +94,10 @@ fn emsa_pss_verify_pre<'a>(
 }
 
 fn emsa_pss_verify_salt(db: &[u8], em_len: usize, s_len: usize, h_len: usize) -> Choice {
+    // 10. If the emLen - hLen - sLen - 2 leftmost octets of DB are not zero
+    //     or if the octet at position emLen - hLen - sLen - 1 (the leftmost
+    //     position is "position 1") does not have hexadecimal value 0x01,
+    //     output "inconsistent" and stop.
     let (zeroes, rest) = db.split_at(em_len - h_len - s_len - 2);
     let valid: Choice = zeroes
         .iter()
@@ -109,7 +113,48 @@ pub(crate) fn emsa_pss_verify(
     hash: &mut dyn DynDigest,
     key_bits: usize,
 ) -> Result<()> {
-    todo!()
+    let em_bits = key_bits - 1;
+    let em_len = (em_bits + 7) / 8;
+    let key_len = (key_bits + 7) / 8;
+    let h_len = hash.output_size();
+
+    let em = &mut em[key_len - em_len..];
+
+    let (db, h) = emsa_pss_verify_pre(m_hash, em, em_bits, s_len, h_len)?;
+
+    // 7. Let dbMask = MGF(H, em_len - h_len - 1)
+    //
+    // 8. Let DB = maskedDB \xor dbMask
+    mgf1_xor(db, hash, &*h);
+
+    // 9.  Set the leftmost 8 * emLen - emBits bits of the leftmost octet in DB
+    //     to zero.
+    db[0] &= 0xFF >> /*uint*/(8 * em_len - em_bits);
+
+    let salt_valid = emsa_pss_verify_salt(db, em_len, s_len, h_len);
+
+    // 11. Let salt be the last s_len octets of DB.
+    let salt = &db[db.len() - s_len..];
+
+    // 12. Let
+    //          M' = (0x)00 00 00 00 00 00 00 00 || mHash || salt ;
+    //     M' is an octet string of length 8 + hLen + sLen with eight
+    //     initial zero octets.
+    //
+    // 13. Let H' = Hash(M'), an octet string of length hLen.
+    let prefix = [0u8; 8];
+
+    hash.update(&prefix[..]);
+    hash.update(m_hash);
+    hash.update(salt);
+    let h0 = hash.finalize_reset();
+
+    // 14. If H = H', output "consistent." Otherwise, output "inconsistent."
+    if (salt_valid & h0.ct_eq(h)).into() {
+        Ok(())
+    } else {
+        Err(Error::Verification)
+    }
 }
 
 pub(crate) fn emsa_pss_verify_digest<D>(
