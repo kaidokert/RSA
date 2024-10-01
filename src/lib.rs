@@ -21,6 +21,7 @@ pub use signature;
 
 mod algorithms;
 pub mod errors;
+pub mod oaep;
 pub mod pkcs1v15;
 pub mod pss;
 pub mod traits;
@@ -36,6 +37,7 @@ pub use sha2;
 pub use crate::{
     errors::{Error, Result},
     key::{RsaPrivateKey, RsaPublicKey},
+    oaep::Oaep,
     pkcs1v15::{Pkcs1v15Encrypt, Pkcs1v15Sign},
     prefix::Prefix,
     pss::Pss,

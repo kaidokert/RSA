@@ -19,12 +19,13 @@ where
     // Decrypt function
 
     /// Encrypt the given message using the given public key.
-    fn encrypt<Rng: CryptoRngCore>(
+    fn encrypt<'a, Rng: CryptoRngCore>(
         self,
         rng: &mut Rng,
         pub_key: &RsaPublicKey<T>,
         msg: &[u8],
-    ) -> Result<()>;
+        storage: &'a mut [u8],
+    ) -> Result<&'a [u8]>;
 }
 
 /// Digital signature scheme.
