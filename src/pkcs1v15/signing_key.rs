@@ -99,21 +99,25 @@ where
     }
 }
 
+/*
 impl<D, T> Keypair for SigningKey<D, T>
 where
     D: Digest,
     T: UnsignedModularInt,
 {
-    type VerifyingKey = VerifyingKey<D, T>;
+    type VerifyingKey = VerifyingKey<'a, D, T> where Self: 'a;
 
     fn verifying_key(&self) -> Self::VerifyingKey {
         VerifyingKey {
             inner: self.inner.to_public_key(),
             prefix: self.prefix.clone(),
             phantom: Default::default(),
+            storage: Default::default(),
         }
     }
 }
+
+ */
 
 impl<D, T> ZeroizeOnDrop for SigningKey<D, T> where T: UnsignedModularInt {}
 

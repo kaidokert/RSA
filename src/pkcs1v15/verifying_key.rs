@@ -11,31 +11,33 @@ use signature::{hazmat::PrehashVerifier, DigestVerifier, Verifier};
 ///
 /// [RFC8017 § 8.2]: https://datatracker.ietf.org/doc/html/rfc8017#section-8.2
 #[derive(Debug)]
-pub struct VerifyingKey<D, T>
+pub struct VerifyingKey<'a, D, T>
 where
     T: UnsignedModularInt,
 {
     pub(super) inner: RsaPublicKey<T>,
     pub(super) prefix: Prefix,
     pub(super) phantom: PhantomData<D>,
+    pub(super) storage: &'a mut [u8],
 }
 
-impl<D, T> VerifyingKey<D, T>
+impl<'a, D, T> VerifyingKey<'a, D, T>
 where
     D: Digest + AssociatedOid,
     T: UnsignedModularInt,
 {
     /// Create a new verifying key with a prefix for the digest `D`.
-    pub fn new(key: RsaPublicKey<T>, storage: &mut [u8]) -> Self {
+    pub fn new(key: RsaPublicKey<T>, storage: &'a mut [u8]) -> Self {
         Self {
             inner: key,
             prefix: pkcs1v15_generate_prefix::<D>(),
             phantom: Default::default(),
+            storage,
         }
     }
 }
 
-impl<D, T> VerifyingKey<D, T>
+impl<'a, D, T> VerifyingKey<'a, D, T>
 where
     T: UnsignedModularInt,
 {
@@ -44,11 +46,12 @@ where
     /// ## Note: unprefixed signatures are uncommon
     ///
     /// In most cases you'll want to use [`VerifyingKey::new`] instead.
-    pub fn new_unprefixed(key: RsaPublicKey<T>, storage: &mut [u8]) -> Self {
+    pub fn new_unprefixed(key: RsaPublicKey<T>, storage: &'a mut [u8]) -> Self {
         Self {
             inner: key,
             prefix: Default::default(),
             phantom: Default::default(),
+            storage,
         }
     }
 }
@@ -57,7 +60,7 @@ where
 // `*Verifier` trait impls
 //
 
-impl<D, T> DigestVerifier<D, Signature<T>> for VerifyingKey<D, T>
+impl<'a, D, T> DigestVerifier<D, Signature<T>> for VerifyingKey<'a, D, T>
 where
     D: Digest,
     T: UnsignedModularInt,
@@ -70,13 +73,13 @@ where
             &digest.finalize(),
             &signature.inner,
             signature.len,
-            &mut storage
+            &mut storage,
         )
         .map_err(|e| e.into())
     }
 }
 
-impl<D, T> PrehashVerifier<Signature<T>> for VerifyingKey<D, T>
+impl<'a, D, T> PrehashVerifier<Signature<T>> for VerifyingKey<'a, D, T>
 where
     D: Digest,
     T: UnsignedModularInt,
@@ -89,13 +92,13 @@ where
             prehash,
             &signature.inner,
             signature.len,
-            &mut storage
+            &mut storage,
         )
         .map_err(|e| e.into())
     }
 }
 
-impl<D, T> Verifier<Signature<T>> for VerifyingKey<D, T>
+impl<'a, D, T> Verifier<Signature<T>> for VerifyingKey<'a, D, T>
 where
     D: Digest,
     T: UnsignedModularInt + core::fmt::Debug,
@@ -108,7 +111,7 @@ where
             &D::digest(msg),
             &signature.inner,
             signature.len,
-            &mut storage
+            &mut storage,
         )
         .map_err(|e| e.into())
     }
@@ -118,7 +121,7 @@ where
 // Other trait impls
 //
 
-impl<D, T> AsRef<RsaPublicKey<T>> for VerifyingKey<D, T>
+impl<'a, D, T> AsRef<RsaPublicKey<T>> for VerifyingKey<'a, D, T>
 where
     T: UnsignedModularInt,
 {
@@ -127,31 +130,18 @@ where
     }
 }
 
-// Implemented manually so we don't have to bind D with Clone
-impl<D, T> Clone for VerifyingKey<D, T>
-where
-    T: UnsignedModularInt,
-{
-    fn clone(&self) -> Self {
-        Self {
-            inner: self.inner.clone(),
-            prefix: self.prefix.clone(),
-            phantom: Default::default(),
-        }
-    }
-}
-
-impl<D, T> From<RsaPublicKey<T>> for VerifyingKey<D, T>
+impl<'a, D, T> From<RsaPublicKey<T>> for VerifyingKey<'a, D, T>
 where
     T: UnsignedModularInt,
 {
     fn from(key: RsaPublicKey<T>) -> Self {
-        let mut storage = [0u8; 1024]; // todo storage
-        Self::new_unprefixed(key, &mut storage)
+        todo!()
+        //let mut storage = [0u8; 1024]; // todo storage
+        //Self::new_unprefixed(key, &mut storage)
     }
 }
 
-impl<D, T> From<VerifyingKey<D, T>> for RsaPublicKey<T>
+impl<'a, D, T> From<VerifyingKey<'a, D, T>> for RsaPublicKey<T>
 where
     T: UnsignedModularInt,
 {
@@ -160,7 +150,7 @@ where
     }
 }
 
-impl<D, T> PartialEq for VerifyingKey<D, T>
+impl<'a, D, T> PartialEq for VerifyingKey<'a, D, T>
 where
     T: UnsignedModularInt,
 {
