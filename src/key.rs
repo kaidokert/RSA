@@ -123,10 +123,9 @@ impl<T: UnsignedModularInt + Clone> RsaPublicKey<T> {
         rng: &mut R,
         padding: P,
         msg: &[u8],
+        storage: &mut [u8],
     ) -> Result<()> {
-        // todo
-        let mut storage = [0u8; 1024];
-        padding.encrypt(rng, self, msg, &mut storage).map(|_| ())
+        padding.encrypt(rng, self, msg, storage).map(|_| ())
     }
 
     /// Verify a signed message.

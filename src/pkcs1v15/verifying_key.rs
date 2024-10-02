@@ -1,4 +1,5 @@
 use super::{oid, pkcs1v15_generate_prefix, verify, Signature};
+use crate::traits::PublicKeyParts;
 use crate::RsaPublicKey;
 use crate::{traits::UnsignedModularInt, Prefix};
 use const_oid::AssociatedOid;
@@ -26,7 +27,7 @@ where
     T: UnsignedModularInt,
 {
     /// Create a new verifying key with a prefix for the digest `D`.
-    pub fn new(key: RsaPublicKey<T>, storage: &mut [u8]) -> Self {
+    pub fn new(key: RsaPublicKey<T>) -> Self {
         Self {
             inner: key,
             prefix: pkcs1v15_generate_prefix::<D>(),
@@ -44,7 +45,7 @@ where
     /// ## Note: unprefixed signatures are uncommon
     ///
     /// In most cases you'll want to use [`VerifyingKey::new`] instead.
-    pub fn new_unprefixed(key: RsaPublicKey<T>, storage: &mut [u8]) -> Self {
+    pub fn new_unprefixed(key: RsaPublicKey<T>) -> Self {
         Self {
             inner: key,
             prefix: Default::default(),
@@ -63,14 +64,14 @@ where
     T: UnsignedModularInt,
 {
     fn verify_digest(&self, digest: D, signature: &Signature<T>) -> signature::Result<()> {
-        let mut storage = [0u8; 1024]; // todo
+        let mut cloned_t = (*self.inner.n()).to_be_bytes();
         verify(
             &self.inner,
             &self.prefix,
             &digest.finalize(),
             &signature.inner,
             signature.len,
-            &mut storage
+            cloned_t.as_mut(),
         )
         .map_err(|e| e.into())
     }
@@ -82,14 +83,14 @@ where
     T: UnsignedModularInt,
 {
     fn verify_prehash(&self, prehash: &[u8], signature: &Signature<T>) -> signature::Result<()> {
-        let mut storage = [0u8; 1024]; // todo
+        let mut cloned_t = (*self.inner.n()).to_be_bytes();
         verify(
             &self.inner,
             &self.prefix,
             prehash,
             &signature.inner,
             signature.len,
-            &mut storage
+            cloned_t.as_mut(),
         )
         .map_err(|e| e.into())
     }
@@ -101,14 +102,14 @@ where
     T: UnsignedModularInt + core::fmt::Debug,
 {
     fn verify(&self, msg: &[u8], signature: &Signature<T>) -> Result<(), signature::Error> {
-        let mut storage = [0u8; 1024]; // todo
+        let mut cloned_t = (*self.inner.n()).to_be_bytes();
         verify(
             &self.inner,
             &self.prefix.clone(),
             &D::digest(msg),
             &signature.inner,
             signature.len,
-            &mut storage
+            cloned_t.as_mut(),
         )
         .map_err(|e| e.into())
     }
@@ -146,8 +147,7 @@ where
     T: UnsignedModularInt,
 {
     fn from(key: RsaPublicKey<T>) -> Self {
-        let mut storage = [0u8; 1024]; // todo storage
-        Self::new_unprefixed(key, &mut storage)
+        Self::new_unprefixed(key)
     }
 }
 

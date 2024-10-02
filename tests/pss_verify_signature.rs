@@ -28,7 +28,6 @@ fn test_verify_512_bit() {
     let key = RsaPublicKey::new(n, 3u8.into()).unwrap();
     let refme: &[u8] = signature.as_ref();
     let sig = refme.try_into().unwrap();
-    let mut storage = [0u8; 1024];
-    let verifying_key = VerifyingKey::<Sha1, _>::new(key, &mut storage);
+    let verifying_key = VerifyingKey::<Sha1, _>::new(key);
     verifying_key.verify(data, &sig).expect("failed to verify");
 }

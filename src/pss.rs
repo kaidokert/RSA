@@ -102,9 +102,10 @@ where
         return Err(Error::Verification);
     }
     let encr = rsa_encrypt(pub_key, *sig);
-    let mut storage = [0u8; 1024]; // todo
+    let mut cloned_t = (*sig).to_be_bytes();
+    let storage = cloned_t.as_mut();
     let len = {
-        let mut em = uint_to_be_pad(encr, pub_key.size(), &mut storage)?;
+        let mut em = uint_to_be_pad(encr, pub_key.size(), storage)?;
         em.len()
     };
     let mut mutslice = storage.get_mut(..len).ok_or(Error::OutputBufferTooSmall)?;
