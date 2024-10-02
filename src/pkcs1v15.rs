@@ -186,7 +186,7 @@ pub fn verify<T>(
     hashed: &[u8],
     sig: &T,
     sig_len: usize,
-    storage: &mut [u8]
+    storage: &mut [u8],
 ) -> Result<()>
 where
     T: UnsignedModularInt + core::fmt::Debug,

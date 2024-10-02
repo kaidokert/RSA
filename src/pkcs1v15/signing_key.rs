@@ -16,7 +16,7 @@ use crate::traits::UnsignedModularInt;
 ///
 /// [RFC8017 § 8.2]: https://datatracker.ietf.org/doc/html/rfc8017#section-8.2
 #[derive(Debug, Clone)]
-pub struct SigningKey<D, T>
+pub struct SigningKey<D, T, const N: usize>
 where
     T: UnsignedModularInt,
 {
@@ -25,7 +25,7 @@ where
     phantom: PhantomData<D>,
 }
 
-impl<D, T> SigningKey<D, T>
+impl<D, T, const N: usize> SigningKey<D, T, N>
 where
     D: Digest + AssociatedOid,
     T: UnsignedModularInt,
@@ -45,7 +45,7 @@ where
     }
 }
 
-impl<D, T> SigningKey<D, T>
+impl<D, T, const N: usize> SigningKey<D, T, N>
 where
     T: UnsignedModularInt,
 {
@@ -72,7 +72,7 @@ where
 // Other trait impls
 //
 
-impl<D, T> AsRef<RsaPrivateKey<T>> for SigningKey<D, T>
+impl<D, T, const N: usize> AsRef<RsaPrivateKey<T>> for SigningKey<D, T, N>
 where
     T: UnsignedModularInt,
 {
@@ -81,7 +81,7 @@ where
     }
 }
 
-impl<D, T> From<RsaPrivateKey<T>> for SigningKey<D, T>
+impl<D, T, const N: usize> From<RsaPrivateKey<T>> for SigningKey<D, T, N>
 where
     T: UnsignedModularInt,
 {
@@ -90,21 +90,21 @@ where
     }
 }
 
-impl<D, T> From<SigningKey<D, T>> for RsaPrivateKey<T>
+impl<D, T, const N: usize> From<SigningKey<D, T, N>> for RsaPrivateKey<T>
 where
     T: UnsignedModularInt,
 {
-    fn from(key: SigningKey<D, T>) -> Self {
+    fn from(key: SigningKey<D, T, N>) -> Self {
         key.inner
     }
 }
 
-impl<D, T> Keypair for SigningKey<D, T>
+impl<D, T, const N: usize> Keypair for SigningKey<D, T, N>
 where
     D: Digest,
     T: UnsignedModularInt,
 {
-    type VerifyingKey = VerifyingKey<D, T>;
+    type VerifyingKey = VerifyingKey<D, T, N>; // todo
 
     fn verifying_key(&self) -> Self::VerifyingKey {
         VerifyingKey {
@@ -115,9 +115,9 @@ where
     }
 }
 
-impl<D, T> ZeroizeOnDrop for SigningKey<D, T> where T: UnsignedModularInt {}
+impl<D, T, const N: usize> ZeroizeOnDrop for SigningKey<D, T, N> where T: UnsignedModularInt {}
 
-impl<D, T> PartialEq for SigningKey<D, T>
+impl<D, T, const N: usize> PartialEq for SigningKey<D, T, N>
 where
     T: UnsignedModularInt,
 {

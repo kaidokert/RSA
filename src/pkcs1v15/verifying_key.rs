@@ -11,7 +11,7 @@ use signature::{hazmat::PrehashVerifier, DigestVerifier, Verifier};
 ///
 /// [RFC8017 § 8.2]: https://datatracker.ietf.org/doc/html/rfc8017#section-8.2
 #[derive(Debug)]
-pub struct VerifyingKey<D, T>
+pub struct VerifyingKey<D, T, const N: usize>
 where
     T: UnsignedModularInt,
 {
@@ -20,13 +20,13 @@ where
     pub(super) phantom: PhantomData<D>,
 }
 
-impl<D, T> VerifyingKey<D, T>
+impl<D, T, const N: usize> VerifyingKey<D, T, N>
 where
     D: Digest + AssociatedOid,
     T: UnsignedModularInt,
 {
     /// Create a new verifying key with a prefix for the digest `D`.
-    pub fn new(key: RsaPublicKey<T>, storage: &mut [u8]) -> Self {
+    pub fn new(key: RsaPublicKey<T>) -> Self {
         Self {
             inner: key,
             prefix: pkcs1v15_generate_prefix::<D>(),
@@ -35,7 +35,7 @@ where
     }
 }
 
-impl<D, T> VerifyingKey<D, T>
+impl<D, T, const N: usize> VerifyingKey<D, T, N>
 where
     T: UnsignedModularInt,
 {
@@ -44,7 +44,7 @@ where
     /// ## Note: unprefixed signatures are uncommon
     ///
     /// In most cases you'll want to use [`VerifyingKey::new`] instead.
-    pub fn new_unprefixed(key: RsaPublicKey<T>, storage: &mut [u8]) -> Self {
+    pub fn new_unprefixed(key: RsaPublicKey<T>) -> Self {
         Self {
             inner: key,
             prefix: Default::default(),
@@ -57,58 +57,58 @@ where
 // `*Verifier` trait impls
 //
 
-impl<D, T> DigestVerifier<D, Signature<T>> for VerifyingKey<D, T>
+impl<D, T, const N: usize> DigestVerifier<D, Signature<T>> for VerifyingKey<D, T, N>
 where
     D: Digest,
     T: UnsignedModularInt,
 {
     fn verify_digest(&self, digest: D, signature: &Signature<T>) -> signature::Result<()> {
-        let mut storage = [0u8; 1024]; // todo
+        let mut storage = [0u8; N];
         verify(
             &self.inner,
             &self.prefix,
             &digest.finalize(),
             &signature.inner,
             signature.len,
-            &mut storage
+            &mut storage,
         )
         .map_err(|e| e.into())
     }
 }
 
-impl<D, T> PrehashVerifier<Signature<T>> for VerifyingKey<D, T>
+impl<D, T, const N: usize> PrehashVerifier<Signature<T>> for VerifyingKey<D, T, N>
 where
     D: Digest,
     T: UnsignedModularInt,
 {
     fn verify_prehash(&self, prehash: &[u8], signature: &Signature<T>) -> signature::Result<()> {
-        let mut storage = [0u8; 1024]; // todo
+        let mut storage = [0u8; N];
         verify(
             &self.inner,
             &self.prefix,
             prehash,
             &signature.inner,
             signature.len,
-            &mut storage
+            &mut storage,
         )
         .map_err(|e| e.into())
     }
 }
 
-impl<D, T> Verifier<Signature<T>> for VerifyingKey<D, T>
+impl<D, T, const N: usize> Verifier<Signature<T>> for VerifyingKey<D, T, N>
 where
     D: Digest,
     T: UnsignedModularInt + core::fmt::Debug,
 {
     fn verify(&self, msg: &[u8], signature: &Signature<T>) -> Result<(), signature::Error> {
-        let mut storage = [0u8; 1024]; // todo
+        let mut storage = [0u8; N];
         verify(
             &self.inner,
             &self.prefix.clone(),
             &D::digest(msg),
             &signature.inner,
             signature.len,
-            &mut storage
+            &mut storage,
         )
         .map_err(|e| e.into())
     }
@@ -118,7 +118,7 @@ where
 // Other trait impls
 //
 
-impl<D, T> AsRef<RsaPublicKey<T>> for VerifyingKey<D, T>
+impl<D, T, const N: usize> AsRef<RsaPublicKey<T>> for VerifyingKey<D, T, N>
 where
     T: UnsignedModularInt,
 {
@@ -128,7 +128,7 @@ where
 }
 
 // Implemented manually so we don't have to bind D with Clone
-impl<D, T> Clone for VerifyingKey<D, T>
+impl<D, T, const N: usize> Clone for VerifyingKey<D, T, N>
 where
     T: UnsignedModularInt,
 {
@@ -141,26 +141,25 @@ where
     }
 }
 
-impl<D, T> From<RsaPublicKey<T>> for VerifyingKey<D, T>
+impl<D, T, const N: usize> From<RsaPublicKey<T>> for VerifyingKey<D, T, N>
 where
     T: UnsignedModularInt,
 {
     fn from(key: RsaPublicKey<T>) -> Self {
-        let mut storage = [0u8; 1024]; // todo storage
-        Self::new_unprefixed(key, &mut storage)
+        Self::new_unprefixed(key)
     }
 }
 
-impl<D, T> From<VerifyingKey<D, T>> for RsaPublicKey<T>
+impl<D, T, const N: usize> From<VerifyingKey<D, T, N>> for RsaPublicKey<T>
 where
     T: UnsignedModularInt,
 {
-    fn from(key: VerifyingKey<D, T>) -> Self {
+    fn from(key: VerifyingKey<D, T, N>) -> Self {
         key.inner
     }
 }
 
-impl<D, T> PartialEq for VerifyingKey<D, T>
+impl<D, T, const N: usize> PartialEq for VerifyingKey<D, T, N>
 where
     T: UnsignedModularInt,
 {
