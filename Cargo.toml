@@ -19,14 +19,15 @@ rand_core = { version = "0.6.4", default-features = false }
 const-oid = { version = "0.10.0-rc.0", default-features = false }
 subtle = { version = "2.1.1", default-features = false }
 digest = { version = "=0.11.0-pre.9", default-features = false, features = ["oid"] }
+pkcs1 = { version = "0.8.0-rc.0", default-features = false, features = ["pkcs8"] }
+pkcs8 = { version = "0.11.0-rc.0", default-features = false }
 signature = { version = "=2.3.0-pre.4", default-features = false, features = ["digest", "rand_core"] }
+spki = { version = "0.8.0-rc.0", default-features = false }
 zeroize = { version = "1.8.1", default-features=false }
 
 # optional dependencies
 sha1 = { version = "=0.11.0-pre.4", optional = true, default-features = false, features = ["oid"] }
 sha2 = { version = "=0.11.0-pre.4", optional = true, default-features = false, features = ["oid"] }
-
-fixed-bigint = { path = "../fixed-bigint-rs", version = "0.1.9", optional = true, features=["zeroize","use-unsafe"] }
 heapless = { version = "0.8.0", default-features = false }
 
 [dev-dependencies]
@@ -40,9 +41,10 @@ sha2 = { version = "=0.11.0-pre.4", default-features = false, features = ["oid"]
 sha3 = { version = "=0.11.0-pre.4", default-features = false, features = ["oid"] }
 num-bigint = { version = "0.8.2", features = ["i128", "prime", "zeroize"], default-features = false, package = "num-bigint-dig" }
 crypto-bigint = { path= "../crypto-bigint", version = "0.6.0-rc.5", default-features= false, features = ["zeroize" ]}
+fixed-bigint = { path = "../fixed-bigint-rs", version = "0.1.9", features=["zeroize","use-unsafe"] }
 
 [features]
-default = [ "fixed-bigint", "std" ]
+default = [ "std" ]
 nightly = []
 pkcs5 = []
 serde = []

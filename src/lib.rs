@@ -20,6 +20,7 @@ pub use rand_core;
 pub use signature;
 
 mod algorithms;
+pub mod encoding;
 pub mod errors;
 pub mod oaep;
 pub mod pkcs1v15;

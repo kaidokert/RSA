@@ -4,7 +4,6 @@ use rsa_generic::pkcs1v15::EncryptingKey;
 use rsa_generic::traits::RandomizedEncryptor;
 use rsa_generic::RsaPublicKey;
 
-#[cfg(feature = "fixed-bigint")]
 use fixed_bigint::FixedUInt;
 
 #[test]
