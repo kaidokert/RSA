@@ -18,6 +18,10 @@ use crate::errors::{Error, Result};
 #[cfg(feature = "std")]
 use std::println;
 
+// Maxiumum supported length of digests
+// This gets temporarily stack-allocated
+const MAX_DIGEST_LEN: usize = 64;
+
 pub(crate) fn emsa_pss_encode(
     m_hash: &[u8],
     em_bits: usize,
@@ -147,7 +151,10 @@ pub(crate) fn emsa_pss_verify(
     hash.update(&prefix[..]);
     hash.update(m_hash);
     hash.update(salt);
-    let h0 = hash.finalize_reset();
+    let mut digest_storage = [0u8; MAX_DIGEST_LEN];
+    hash.finalize_into_reset(&mut digest_storage)
+        .or(Err(Error::DigestBufferTooSmall))?;
+    let h0 = &digest_storage[..h_len];
 
     // 14. If H = H', output "consistent." Otherwise, output "inconsistent."
     if (salt_valid & h0.ct_eq(h)).into() {

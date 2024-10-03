@@ -63,6 +63,9 @@ pub enum Error {
 
     /// Output buffer too small
     OutputBufferTooSmall,
+
+    /// Digest buffer too small
+    DigestBufferTooSmall,
 }
 
 #[cfg(feature = "std")]

@@ -17,6 +17,9 @@ use heapless::String;
 /// for all hash functions.
 const MAX_LABEL_LEN: u64 = 1 << 61;
 
+// Maxiumum supported length of digests
+const MAX_DIGEST_LEN: usize = 64;
+
 #[inline]
 fn encrypt_internal<'a, R: CryptoRngCore + ?Sized, MGF: FnMut(&mut [u8], &mut [u8])>(
     rng: &mut R,
@@ -75,7 +78,11 @@ pub(crate) fn oaep_encrypt<'a, R: CryptoRngCore + ?Sized>(
     }
 
     digest.update(label.as_bytes());
-    let p_hash = digest.finalize_reset();
+    let mut digest_storage = [0u8; MAX_DIGEST_LEN];
+    digest
+        .finalize_into_reset(&mut digest_storage)
+        .or(Err(Error::DigestBufferTooSmall))?;
+    let p_hash = &digest_storage[..h_size];
 
     encrypt_internal(
         rng,
