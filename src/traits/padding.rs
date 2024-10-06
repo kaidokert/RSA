@@ -1,43 +1,41 @@
 //! Supported padding schemes.
-
-use alloc::vec::Vec;
-
 use rand_core::CryptoRngCore;
 
 use crate::errors::Result;
 use crate::key::{RsaPrivateKey, RsaPublicKey};
 
+use super::UnsignedModularInt;
+
 /// Padding scheme used for encryption.
-pub trait PaddingScheme {
+pub trait PaddingScheme<T>
+where
+    T: UnsignedModularInt,
+{
     /// Decrypt the given message using the given private key.
     ///
     /// If an `rng` is passed, it uses RSA blinding to help mitigate timing
     /// side-channel attacks.
-    fn decrypt<Rng: CryptoRngCore>(
-        self,
-        rng: Option<&mut Rng>,
-        priv_key: &RsaPrivateKey,
-        ciphertext: &[u8],
-    ) -> Result<Vec<u8>>;
+
+    // Decrypt function
 
     /// Encrypt the given message using the given public key.
-    fn encrypt<Rng: CryptoRngCore>(
+    fn encrypt<'a, Rng: CryptoRngCore>(
         self,
         rng: &mut Rng,
-        pub_key: &RsaPublicKey,
+        pub_key: &RsaPublicKey<T>,
         msg: &[u8],
-    ) -> Result<Vec<u8>>;
+        storage: &'a mut [u8],
+    ) -> Result<&'a [u8]>;
 }
 
 /// Digital signature scheme.
-pub trait SignatureScheme {
+pub trait SignatureScheme<T>
+where
+    T: UnsignedModularInt + Clone,
+{
     /// Sign the given digest.
-    fn sign<Rng: CryptoRngCore>(
-        self,
-        rng: Option<&mut Rng>,
-        priv_key: &RsaPrivateKey,
-        hashed: &[u8],
-    ) -> Result<Vec<u8>>;
+
+    // Sign function
 
     /// Verify a signed message.
     ///
@@ -45,5 +43,5 @@ pub trait SignatureScheme {
     /// passed in through `hash`.
     ///
     /// If the message is valid `Ok(())` is returned, otherwise an `Err` indicating failure.
-    fn verify(self, pub_key: &RsaPublicKey, hashed: &[u8], sig: &[u8]) -> Result<()>;
+    fn verify(self, pub_key: &RsaPublicKey<T>, hashed: &[u8], sig: &[u8]) -> Result<()>;
 }

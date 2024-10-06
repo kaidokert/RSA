@@ -49,12 +49,6 @@ pub enum Error {
     /// Public exponent too large.
     PublicExponentTooLarge,
 
-    /// PKCS#1 error.
-    Pkcs1(pkcs1::Error),
-
-    /// PKCS#8 error.
-    Pkcs8(pkcs8::Error),
-
     /// Internal error.
     Internal,
 
@@ -66,6 +60,12 @@ pub enum Error {
 
     /// Invalid arguments.
     InvalidArguments,
+
+    /// Output buffer too small
+    OutputBufferTooSmall,
+
+    /// Digest buffer too small
+    DigestBufferTooSmall,
 }
 
 #[cfg(feature = "std")]
@@ -73,41 +73,10 @@ impl std::error::Error for Error {}
 impl core::fmt::Display for Error {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         match self {
-            Error::InvalidPaddingScheme => write!(f, "invalid padding scheme"),
-            Error::Decryption => write!(f, "decryption error"),
             Error::Verification => write!(f, "verification error"),
-            Error::MessageTooLong => write!(f, "message too long"),
-            Error::InputNotHashed => write!(f, "input must be hashed"),
-            Error::NprimesTooSmall => write!(f, "nprimes must be >= 2"),
-            Error::TooFewPrimes => {
-                write!(f, "too few primes of given length to generate an RSA key")
-            }
-            Error::InvalidPrime => write!(f, "invalid prime value"),
-            Error::InvalidModulus => write!(f, "invalid modulus"),
-            Error::InvalidExponent => write!(f, "invalid exponent"),
-            Error::InvalidCoefficient => write!(f, "invalid coefficient"),
-            Error::ModulusTooLarge => write!(f, "modulus too large"),
-            Error::PublicExponentTooSmall => write!(f, "public exponent too small"),
-            Error::PublicExponentTooLarge => write!(f, "public exponent too large"),
-            Error::Pkcs1(err) => write!(f, "{}", err),
-            Error::Pkcs8(err) => write!(f, "{}", err),
             Error::Internal => write!(f, "internal error"),
-            Error::LabelTooLong => write!(f, "label too long"),
-            Error::InvalidPadLen => write!(f, "invalid padding length"),
-            Error::InvalidArguments => write!(f, "invalid arguments"),
+            _ => write!(f, "{:?}", self),
         }
-    }
-}
-
-impl From<pkcs1::Error> for Error {
-    fn from(err: pkcs1::Error) -> Error {
-        Error::Pkcs1(err)
-    }
-}
-
-impl From<pkcs8::Error> for Error {
-    fn from(err: pkcs8::Error) -> Error {
-        Error::Pkcs8(err)
     }
 }
 
