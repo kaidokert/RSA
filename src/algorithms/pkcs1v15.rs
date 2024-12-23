@@ -43,7 +43,7 @@ pub(crate) fn pkcs1v15_encrypt_pad<'a, R>(
 where
     R: CryptoRngCore + ?Sized,
 {
-    if msg.len() > k - 11 {
+    if msg.len() + 11 > k {
         return Err(Error::MessageTooLong);
     }
     // EM = 0x00 || 0x02 || PS || 0x00 || M
@@ -120,5 +120,15 @@ mod tests {
                 assert_ne!(*el, 0u8);
             }
         }
+    }
+
+    #[test]
+    fn test_encrypt_tiny_no_crash() {
+        let mut rng = ChaCha8Rng::from_seed([42; 32]);
+        let k = 8;
+        let message = vec![1u8; 4];
+        let mut buffer = [0u8; 32];
+        let res = pkcs1v15_encrypt_pad(&mut rng, &message, k, &mut buffer);
+        assert_eq!(res, Err(Error::MessageTooLong));
     }
 }
