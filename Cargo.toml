@@ -27,7 +27,9 @@ zeroize = { version = "1.8.1", default-features=false }
 
 # optional dependencies
 sha1 = { version = "=0.11.0-pre.4", optional = true, default-features = false, features = ["oid"] }
+serdect = { version = "0.3.0", optional = true, default-features = false, features = ["derive"] }
 sha2 = { version = "=0.11.0-pre.4", optional = true, default-features = false, features = ["oid"] }
+serde = { version = "1.0.184", optional = true, default-features = false, features = ["derive"] }
 heapless = { version = "0.8.0", default-features = false }
 
 [dev-dependencies]
@@ -47,7 +49,7 @@ fixed-bigint = { version = "0.1.11", features=["zeroize","use-unsafe"] }
 default = [ "std" ]
 nightly = []
 pkcs5 = []
-serde = []
+serde = ["dep:serde"]
 hazmat = []
 getrandom = ["rand_core/getrandom"]
 pem = []
