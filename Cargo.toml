@@ -1,11 +1,11 @@
 [package]
 name = "rsa_heapless"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["RustCrypto Developers", "dignifiedquire <dignifiedquire@gmail.com>", "kaidokert@gmail.com"]
 edition = "2021"
 description = "Pure Rust RSA implementation - heapless version"
 license = "MIT OR Apache-2.0"
-
+documentation = "https://docs.rs/rsa_heapless"
 repository = "https://github.com/kaidokert/RSA"
 keywords = ["rsa", "encryption", "security", "crypto"]
 categories = ["cryptography"]
@@ -33,7 +33,10 @@ serde = { version = "1.0.184", optional = true, default-features = false, featur
 heapless = { version = "0.8.0", default-features = false }
 
 [dev-dependencies]
+base64ct = { version = "1", features = ["alloc"] }
 hex-literal = "0.4.1"
+proptest = "1"
+serde_test = "1.0.89"
 rand_xorshift = "0.3"
 rand_chacha = "0.3"
 rand = "0.8"
@@ -47,10 +50,22 @@ fixed-bigint = { version = "0.1.11", features=["zeroize","use-unsafe"] }
 
 [features]
 default = [ "std" ]
-nightly = []
-pkcs5 = []
-serde = ["dep:serde"]
 hazmat = []
 getrandom = ["rand_core/getrandom"]
+nightly = []
+serde = ["dep:serde"]
 pem = []
+pkcs5 = []
+u64_digit = []
 std = ["digest/std", "rand_core/std", "signature/std"]
+
+[package.metadata.docs.rs]
+features = ["std", "pem", "serde", "hazmat", "sha2"]
+rustdoc-args = ["--cfg", "docsrs"]
+
+[profile.dev]
+opt-level = 2
+
+[patch.crates-io]
+pkcs1 = { git = "https://github.com/RustCrypto/formats.git" }
+pkcs8 = { git = "https://github.com/RustCrypto/formats.git" }
