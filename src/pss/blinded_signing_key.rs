@@ -8,8 +8,13 @@ use signature::{
     hazmat::RandomizedPrehashSigner, Keypair, RandomizedDigestSigner, RandomizedSigner,
 };
 use zeroize::ZeroizeOnDrop;
+#[cfg(feature = "serde")]
+use {
+    serdect::serde::{de, ser, Deserialize, Serialize},
+};
 
 use crate::traits::UnsignedModularInt;
+
 /// Signing key for producing "blinded" RSASSA-PSS signatures as described in
 /// [draft-irtf-cfrg-rsa-blind-signatures](https://datatracker.ietf.org/doc/draft-irtf-cfrg-rsa-blind-signatures/).
 #[derive(Debug, Clone)]
@@ -138,12 +143,52 @@ where
     }
 }
 
+#[cfg(feature = "serde")]
+impl<D, T> Serialize for BlindedSigningKey<D, T>
+where
+    D: Digest,
+    T: UnsignedModularInt,
+{
+    fn serialize<S>(&self, serializer: S) -> core::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        todo!()
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de, D, T> Deserialize<'de> for BlindedSigningKey<D, T>
+where
+    D: Digest + AssociatedOid,
+    T: UnsignedModularInt,
+{
+    fn deserialize<De>(deserializer: De) -> core::result::Result<Self, De::Error>
+    where
+        De: serde::Deserializer<'de>,
+    {
+        todo!()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
-    #[ignore]
     #[cfg(feature = "serde")]
     fn test_serde() {
-        todo!()
+        use super::*;
+        use rand_chacha::{rand_core::SeedableRng, ChaCha8Rng};
+        use serde_test::{assert_tokens, Configure, Token};
+        use sha2::Sha256;
+
+        let mut rng = ChaCha8Rng::from_seed([42; 32]);
+        let signing_key = BlindedSigningKey::<Sha256>::new(
+            RsaPrivateKey::new(&mut rng, 64).expect("failed to generate key"),
+        );
+
+        let tokens = [
+            Token::Str("3054020100300d06092a864886f70d01010105000440303e020100020900cc6c6130e35b46bf0203010001020863de1ac858580019020500f65cff5d020500d46b68cb02046d9a09f102047b4e3a4f020500f45065cc")
+        ];
+        assert_tokens(&signing_key.readable(), &tokens);
     }
 }

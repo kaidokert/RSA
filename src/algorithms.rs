@@ -4,6 +4,7 @@ pub(crate) mod modular;
 
 mod mgf;
 
+pub(crate) mod generate;
 pub(crate) mod oaep;
 pub(crate) mod pad;
 pub(crate) mod pkcs1v15;

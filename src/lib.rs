@@ -20,7 +20,6 @@ pub use rand_core;
 pub use signature;
 
 mod algorithms;
-pub mod encoding;
 pub mod errors;
 pub mod oaep;
 pub mod pkcs1v15;
@@ -28,7 +27,11 @@ pub mod pss;
 pub mod traits;
 
 mod dummy_rng;
+mod encoding;
 mod key;
+
+pub use pkcs1;
+pub use pkcs8;
 
 mod prefix;
 

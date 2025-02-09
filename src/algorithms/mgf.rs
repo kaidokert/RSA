@@ -5,14 +5,39 @@ use digest::{Digest, DynDigest, FixedOutputReset};
 /// Mask generation function.
 ///
 /// Panics if out is larger than 2**32. This is in accordance with RFC 8017 - PKCS #1 B.2.1
-pub(crate) fn mgf1_xor(out: &mut [u8], digest: &mut dyn DynDigest, seed: &[u8]) {
+pub(crate) fn mgf1_xor<D>(out: &mut [u8], digest: &mut D, seed: &[u8])
+where
+    D: Digest + FixedOutputReset,
+{
     let mut counter = [0u8; 4];
     let mut i = 0;
 
     const MAX_LEN: u64 = u32::MAX as u64 + 1;
     assert!(out.len() as u64 <= MAX_LEN);
 
-    todo!()
+
+    while i < out.len() {
+        //todo: Clean this up, it's random sized stack alloc, based on typical digest sizes
+        const MAX_SEED_LEN: usize = 256;
+        let buffer = &mut [0u8; MAX_SEED_LEN];
+        let mut digest_input = buffer.get_mut(..seed.len() + 4).unwrap();
+        digest_input[0..seed.len()].copy_from_slice(seed);
+        digest_input[seed.len()..].copy_from_slice(&counter);
+
+        Digest::update(digest, digest_input);
+        let digest_output = &*digest.finalize_reset();
+        let mut j = 0;
+        loop {
+            if j >= digest_output.len() || i >= out.len() {
+                break;
+            }
+
+            out[i] ^= digest_output[j];
+            j += 1;
+            i += 1;
+        }
+        inc_counter(&mut counter);
+    }
 }
 
 /// Mask generation function.

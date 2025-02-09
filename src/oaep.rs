@@ -4,12 +4,12 @@
 //!
 //! See [code example in the toplevel rustdoc](../index.html#oaep-encryption).
 
+mod decrypting_key;
 mod encrypting_key;
 
-pub use self::encrypting_key::EncryptingKey;
+pub use self::{decrypting_key::DecryptingKey, encrypting_key::EncryptingKey};
 
 use core::fmt;
-use core::marker::PhantomData;
 
 use digest::{Digest, DynDigest, FixedOutputReset};
 use rand_core::CryptoRngCore;
@@ -20,9 +20,12 @@ use crate::algorithms::pad::{uint_to_be_pad, uint_to_zeroizing_be_pad};
 use crate::algorithms::rsa::{rsa_decrypt_and_check, rsa_encrypt};
 use crate::errors::{Error, Result};
 use crate::key::{self, RsaPrivateKey, RsaPublicKey};
-use crate::traits::{PaddingScheme, PublicKeyParts, UnsignedModularInt};
+use crate::traits::{PaddingScheme, PublicKeyParts};
 
+use crate::traits::UnsignedModularInt;
 use heapless::String;
+
+use core::marker::PhantomData;
 
 /// Encryption and Decryption using [OAEP padding](https://datatracker.ietf.org/doc/html/rfc8017#section-7.1).
 ///
@@ -43,7 +46,7 @@ pub struct Oaep {
     pub mgf_digest: PhantomData<u8>, //Box<dyn DynDigest + Send + Sync>,
 
     /// Optional label.
-    pub label: Option<String<128>>,
+    pub label: Option<Label>,
 }
 
 impl Oaep {
@@ -142,17 +145,18 @@ impl fmt::Debug for Oaep {
 ///
 /// [PKCS#1 OAEP]: https://datatracker.ietf.org/doc/html/rfc8017#section-7.1
 #[inline]
-fn encrypt<'a, T, R: CryptoRngCore + ?Sized>(
+fn encrypt<'a, T, R: CryptoRngCore + ?Sized, D>(
     rng: &mut R,
     pub_key: &RsaPublicKey<T>,
     msg: &[u8],
-    digest: &mut dyn DynDigest,
-    mgf_digest: &mut dyn DynDigest,
-    label: Option<String<128>>,
+    digest: &mut D,
+    mgf_digest: &mut D,
+    label: Option<Label>,
     storage: &'a mut [u8],
 ) -> Result<&'a [u8]>
 where
     T: UnsignedModularInt,
+    D: Digest + FixedOutputReset,
 {
     key::check_public(pub_key)?;
 
@@ -174,7 +178,7 @@ fn encrypt_digest<'a, T, R: CryptoRngCore + ?Sized, D: Digest, MGD: Digest + Fix
     rng: &mut R,
     pub_key: &RsaPublicKey<T>,
     msg: &[u8],
-    label: Option<String<128>>,
+    label: Option<Label>,
     storage: &'a mut [u8],
 ) -> Result<&'a [u8]>
 where
@@ -187,6 +191,62 @@ where
     todo!()
     //let int = Zeroizing::new(BigUint::from_bytes_be(&em));
     //uint_to_be_pad(rsa_encrypt(pub_key, &int)?, pub_key.size())
+}
+
+
+/// Decrypts a plaintext using RSA and the padding scheme from [PKCS#1 OAEP].
+///
+/// If an `rng` is passed, it uses RSA blinding to avoid timing side-channel attacks.
+///
+/// Note that whether this function returns an error or not discloses secret
+/// information. If an attacker can cause this function to run repeatedly and
+/// learn whether each instance returned an error then they can decrypt and
+/// forge signatures as if they had the private key.
+///
+/// See `decrypt_session_key` for a way of solving this problem.
+///
+/// [PKCS#1 OAEP]: https://datatracker.ietf.org/doc/html/rfc8017#section-7.1
+#[inline]
+fn decrypt<'a,T, R: CryptoRngCore + ?Sized, D>(
+    rng: Option<&mut R>,
+    priv_key: &RsaPrivateKey<T>,
+    ciphertext: &[u8],
+    digest: &mut D,
+    mgf_digest: &mut D,
+    label: Option<Label>,
+    storage: &'a mut [u8],
+) -> Result<&'a [u8]>
+where
+    T: UnsignedModularInt,
+    D: Digest + FixedOutputReset,
+{
+    todo!()
+}
+
+/// Decrypts a plaintext using RSA and the padding scheme from [PKCS#1 OAEP].
+///
+/// If an `rng` is passed, it uses RSA blinding to avoid timing side-channel attacks.
+///
+/// Note that whether this function returns an error or not discloses secret
+/// information. If an attacker can cause this function to run repeatedly and
+/// learn whether each instance returned an error then they can decrypt and
+/// forge signatures as if they had the private key.
+///
+/// See `decrypt_session_key` for a way of solving this problem.
+///
+/// [PKCS#1 OAEP]: https://datatracker.ietf.org/doc/html/rfc8017#section-7.1
+#[inline]
+fn decrypt_digest<'a,T, R: CryptoRngCore + ?Sized, D: Digest, MGD: Digest + FixedOutputReset>(
+    rng: Option<&mut R>,
+    priv_key: &RsaPrivateKey<T>,
+    ciphertext: &[u8],
+    label: Option<Label>,
+) -> Result<&'a [u8]>
+where
+    T: UnsignedModularInt,
+    D: Digest + FixedOutputReset,
+{
+    todo!()
 }
 
 #[cfg(test)]

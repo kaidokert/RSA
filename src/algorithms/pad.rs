@@ -1,6 +1,6 @@
 //! Special handling for converting the BigUint to u8 vectors
 
-use zeroize::Zeroizing;
+use zeroize::{DefaultIsZeroes, Zeroizing};
 
 use crate::errors::{Error, Result};
 use crate::traits::UnsignedModularInt;
@@ -45,14 +45,15 @@ pub(crate) fn uint_to_zeroizing_be_pad<T>(
 ) -> Result<&[u8]>
 where
     T: UnsignedModularInt + num_traits::ToBytes,
+    <T as num_traits::ToBytes>::Bytes: DefaultIsZeroes + AsRef<[u8]>,
 {
-    todo!()
+    let m = Zeroizing::new(input);
+    let m = Zeroizing::new(m.to_be_bytes());
+    left_pad(m.as_ref().as_ref(), padded_len, storage)
 }
 
 #[cfg(test)]
 mod tests {
-    use core::borrow::Borrow;
-
     use super::*;
 
     #[test]

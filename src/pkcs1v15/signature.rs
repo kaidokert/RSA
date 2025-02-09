@@ -1,8 +1,12 @@
 //! `RSASSA-PKCS1-v1_5` signatures.
 
+use crate::algorithms::pad::uint_to_be_pad;
+use ::signature::SignatureEncoding;
 use core::fmt::{Debug, Display, Formatter, LowerHex, UpperHex};
+#[cfg(feature = "serde")]
+use serdect::serde::{de, Deserialize, Serialize};
 
-use crate::{algorithms::pad::uint_to_be_pad, traits::UnsignedModularInt};
+use crate::traits::UnsignedModularInt;
 
 /// `RSASSA-PKCS1-v1_5` signatures as described in [RFC8017 § 8.2].
 ///
@@ -67,5 +71,39 @@ where
     }
 }
 
+#[cfg(feature = "serde")]
+impl<T> Serialize for Signature<T> {
+    fn serialize<S>(&self, serializer: S) -> core::result::Result<S::Ok, S::Error>
+    where
+        S: serdect::serde::Serializer,
+    {
+        todo!()
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de,T > Deserialize<'de> for Signature<T> {
+    fn deserialize<D>(deserializer: D) -> core::result::Result<Self, D::Error>
+    where
+        D: serdect::serde::Deserializer<'de>,
+    {
+        todo!()
+    }
+}
+
 #[cfg(test)]
-mod tests {}
+mod tests {
+    #[test]
+    #[cfg(feature = "serde")]
+    fn test_serde() {
+        use super::*;
+        use serde_test::{assert_tokens, Configure, Token};
+        let signature = Signature {
+            inner: BigUint::new(Vec::from([42])),
+            len: 1,
+        };
+
+        let tokens = [Token::Str("2a")];
+        assert_tokens(&signature.readable(), &tokens);
+    }
+}

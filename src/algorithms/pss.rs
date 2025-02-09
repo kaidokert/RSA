@@ -27,6 +27,26 @@ pub(crate) fn emsa_pss_encode(
     salt: &[u8],
     hash: &mut dyn DynDigest,
 ) -> Result<()> {
+    // See [1], section 9.1.1
+    let h_len = hash.output_size();
+    let s_len = salt.len();
+    let em_len = (em_bits + 7) / 8;
+
+    // 1. If the length of M is greater than the input limitation for the
+    //     hash function (2^61 - 1 octets for SHA-1), output "message too
+    //     long" and stop.
+    //
+    // 2.  Let mHash = Hash(M), an octet string of length hLen.
+    if m_hash.len() != h_len {
+        return Err(Error::InputNotHashed);
+    }
+
+    // 3. If em_len < h_len + s_len + 2, output "encoding error" and stop.
+    if em_len < h_len + s_len + 2 {
+        // TODO: Key size too small
+        return Err(Error::Internal);
+    }
+
     todo!()
 }
 
@@ -34,7 +54,26 @@ pub(crate) fn emsa_pss_encode_digest<D>(m_hash: &[u8], em_bits: usize, salt: &[u
 where
     D: Digest + FixedOutputReset,
 {
-    let _ = PhantomData::<D>;
+    // See [1], section 9.1.1
+    let h_len = <D as Digest>::output_size();
+    let s_len = salt.len();
+    let em_len = (em_bits + 7) / 8;
+
+    // 1. If the length of M is greater than the input limitation for the
+    //     hash function (2^61 - 1 octets for SHA-1), output "message too
+    //     long" and stop.
+    //
+    // 2.  Let mHash = Hash(M), an octet string of length hLen.
+    if m_hash.len() != h_len {
+        return Err(Error::InputNotHashed);
+    }
+
+    // 3. If em_len < h_len + s_len + 2, output "encoding error" and stop.
+    if em_len < h_len + s_len + 2 {
+        // TODO: Key size too small
+        return Err(Error::Internal);
+    }
+
     todo!()
 }
 
@@ -99,17 +138,20 @@ fn emsa_pss_verify_salt(db: &[u8], em_len: usize, s_len: usize, h_len: usize) ->
     valid & rest[0].ct_eq(&0x01)
 }
 
-pub(crate) fn emsa_pss_verify(
+pub(crate) fn emsa_pss_verify<D>(
     m_hash: &[u8],
     em: &mut [u8],
     s_len: usize,
-    hash: &mut dyn DynDigest,
+    hash: &mut D,
     key_bits: usize,
-) -> Result<()> {
+) -> Result<()> 
+where
+    D: Digest + FixedOutputReset,
+{
     let em_bits = key_bits - 1;
     let em_len = (em_bits + 7) / 8;
     let key_len = (key_bits + 7) / 8;
-    let h_len = hash.output_size();
+    let h_len = <D as Digest>::output_size();
 
     let em = &mut em[key_len - em_len..];
 
@@ -137,20 +179,11 @@ pub(crate) fn emsa_pss_verify(
     // 13. Let H' = Hash(M'), an octet string of length hLen.
     let prefix = [0u8; 8];
 
-    hash.update(&prefix[..]);
-    hash.update(m_hash);
-    hash.update(salt);
+    Digest::update(hash, &prefix[..]);
+    Digest::update(hash, m_hash);
+    Digest::update(hash, salt);
     let mut digest_storage = [0u8; MAX_DIGEST_LEN];
-    hash.finalize_into_reset(&mut digest_storage)
-        .or(Err(Error::DigestBufferTooSmall))?;
-    let h0 = &digest_storage[..h_len];
-
-    // 14. If H = H', output "consistent." Otherwise, output "inconsistent."
-    if (salt_valid & h0.ct_eq(h)).into() {
-        Ok(())
-    } else {
-        Err(Error::Verification)
-    }
+    todo!()
 }
 
 pub(crate) fn emsa_pss_verify_digest<D>(

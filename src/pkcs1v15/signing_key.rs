@@ -1,16 +1,21 @@
 use super::{oid, pkcs1v15_generate_prefix, sign, Signature, VerifyingKey};
-use crate::{dummy_rng::DummyRng, Prefix, Result, RsaPrivateKey};
-use const_oid::AssociatedOid;
+use crate::{dummy_rng::DummyRng, Result, RsaPrivateKey};
 use core::marker::PhantomData;
 use digest::Digest;
 use rand_core::CryptoRngCore;
+#[cfg(feature = "serde")]
+use {
+    serdect::serde::{de, ser, Deserialize, Serialize},
+};
 
 use signature::{
     hazmat::PrehashSigner, DigestSigner, Keypair, RandomizedDigestSigner, RandomizedSigner, Signer,
 };
 use zeroize::ZeroizeOnDrop;
 
-use crate::traits::UnsignedModularInt;
+// New imports
+use const_oid::AssociatedOid;
+use crate::{Prefix, traits::UnsignedModularInt};
 
 /// Signing key for `RSASSA-PKCS1-v1_5` signatures as described in [RFC8017 § 8.2].
 ///
@@ -67,6 +72,12 @@ where
         todo!()
     }
 }
+
+//
+// `*Signer` trait impls
+//
+
+
 
 //
 // Other trait impls
@@ -126,5 +137,52 @@ where
     }
 }
 
+#[cfg(feature = "serde")]
+impl<D, T> Serialize for SigningKey<D, T>
+where
+    D: Digest,
+    T: UnsignedModularInt,
+{
+    fn serialize<S>(&self, serializer: S) -> core::result::Result<S::Ok, S::Error>
+    where
+        S: serdect::serde::Serializer,
+    {
+        todo!()
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de, D, T> Deserialize<'de> for SigningKey<D, T>
+where
+    D: Digest + AssociatedOid,
+    T: UnsignedModularInt,
+{
+    fn deserialize<De>(deserializer: De) -> core::result::Result<Self, De::Error>
+    where
+        De: serdect::serde::Deserializer<'de>,
+    {
+        todo!()
+    }
+}
+
 #[cfg(test)]
-mod tests {}
+mod tests {
+    #[test]
+    #[cfg(feature = "serde")]
+    fn test_serde() {
+        use super::*;
+        use rand_chacha::{rand_core::SeedableRng, ChaCha8Rng};
+        use serde_test::{assert_tokens, Configure, Token};
+        use sha2::Sha256;
+
+        let mut rng = ChaCha8Rng::from_seed([42; 32]);
+        let priv_key = crate::RsaPrivateKey::new(&mut rng, 64).expect("failed to generate key");
+        let signing_key = SigningKey::<Sha256>::new(priv_key);
+
+        let tokens = [
+            Token::Str("3054020100300d06092a864886f70d01010105000440303e020100020900cc6c6130e35b46bf0203010001020863de1ac858580019020500f65cff5d020500d46b68cb02046d9a09f102047b4e3a4f020500f45065cc")
+        ];
+
+        assert_tokens(&signing_key.readable(), &tokens);
+    }
+}

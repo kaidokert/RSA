@@ -188,6 +188,7 @@ where
 #[cfg(test)]
 mod test {
     use crate::pss::{BlindedSigningKey, Pss, Signature, SigningKey, VerifyingKey};
+    use crate::traits::UnsignedModularInt;
     use crate::{RsaPrivateKey, RsaPublicKey};
 
     use hex_literal::hex;
@@ -196,6 +197,21 @@ mod test {
     use sha1::{Digest, Sha1};
     use signature::hazmat::{PrehashVerifier, RandomizedPrehashSigner};
     use signature::{DigestVerifier, Keypair, RandomizedDigestSigner, RandomizedSigner, Verifier};
+
+    fn get_private_key<T: UnsignedModularInt>() -> RsaPrivateKey<T> {
+        // In order to generate new test vectors you'll need the PEM form of this key:
+        // -----BEGIN RSA PRIVATE KEY-----
+        // MIIBOgIBAAJBALKZD0nEffqM1ACuak0bijtqE2QrI/KLADv7l3kK3ppMyCuLKoF0
+        // fd7Ai2KW5ToIwzFofvJcS/STa6HA5gQenRUCAwEAAQJBAIq9amn00aS0h/CrjXqu
+        // /ThglAXJmZhOMPVn4eiu7/ROixi9sex436MaVeMqSNf7Ex9a8fRNfWss7Sqd9eWu
+        // RTUCIQDasvGASLqmjeffBNLTXV2A5g4t+kLVCpsEIZAycV5GswIhANEPLmax0ME/
+        // EO+ZJ79TJKN5yiGBRsv5yvx5UiHxajEXAiAhAol5N4EUyq6I9w1rYdhPMGpLfk7A
+        // IU2snfRJ6Nq2CQIgFrPsWRCkV+gOYcajD17rEqmuLrdIRexpg8N1DOSXoJ8CIGlS
+        // tAboUGBxTDq3ZroNism3DaMIbKPyYrAqhKov1h5V
+        // -----END RSA PRIVATE KEY-----
+
+        todo!()
+    }
 
     #[test]
     #[ignore]
