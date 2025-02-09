@@ -145,9 +145,10 @@ where
 impl<D, T> From<RsaPublicKey<T>> for VerifyingKey<D, T>
 where
     T: UnsignedModularInt,
+    D: Digest + AssociatedOid,
 {
     fn from(key: RsaPublicKey<T>) -> Self {
-        Self::new_unprefixed(key)
+        Self::new(key)
     }
 }
 
