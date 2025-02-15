@@ -2,12 +2,9 @@ use core::hash::{Hash, Hasher};
 use num_integer::Integer;
 use num_traits::{FromPrimitive, One, ToPrimitive};
 use rand_core::CryptoRngCore;
-use zeroize::{Zeroize, ZeroizeOnDrop};
 #[cfg(feature = "serde")]
-use {
-    serdect::serde::{de, ser, Deserialize, Serialize},
-};
-
+use serdect::serde::{de, ser, Deserialize, Serialize};
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 use crate::traits::UnsignedModularInt;
 
@@ -388,7 +385,10 @@ where
 }
 
 #[cfg(feature = "serde")]
-impl<T> Serialize for RsaPublicKey<T> where T: UnsignedModularInt {
+impl<T> Serialize for RsaPublicKey<T>
+where
+    T: UnsignedModularInt,
+{
     fn serialize<S>(&self, serializer: S) -> core::prelude::v1::Result<S::Ok, S::Error>
     where
         S: serdect::serde::Serializer,
@@ -398,7 +398,10 @@ impl<T> Serialize for RsaPublicKey<T> where T: UnsignedModularInt {
 }
 
 #[cfg(feature = "serde")]
-impl<'de, T> Deserialize<'de> for RsaPublicKey<T> where T: UnsignedModularInt {
+impl<'de, T> Deserialize<'de> for RsaPublicKey<T>
+where
+    T: UnsignedModularInt,
+{
     fn deserialize<D>(deserializer: D) -> core::prelude::v1::Result<Self, D::Error>
     where
         D: serdect::serde::Deserializer<'de>,
@@ -408,7 +411,10 @@ impl<'de, T> Deserialize<'de> for RsaPublicKey<T> where T: UnsignedModularInt {
 }
 
 #[cfg(feature = "serde")]
-impl<T> Serialize for RsaPrivateKey<T> where T: UnsignedModularInt {
+impl<T> Serialize for RsaPrivateKey<T>
+where
+    T: UnsignedModularInt,
+{
     fn serialize<S>(&self, serializer: S) -> core::prelude::v1::Result<S::Ok, S::Error>
     where
         S: ser::Serializer,
@@ -418,7 +424,10 @@ impl<T> Serialize for RsaPrivateKey<T> where T: UnsignedModularInt {
 }
 
 #[cfg(feature = "serde")]
-impl<'de, T> Deserialize<'de> for RsaPrivateKey<T> where T: UnsignedModularInt {
+impl<'de, T> Deserialize<'de> for RsaPrivateKey<T>
+where
+    T: UnsignedModularInt,
+{
     fn deserialize<D>(deserializer: D) -> core::prelude::v1::Result<Self, D::Error>
     where
         D: de::Deserializer<'de>,

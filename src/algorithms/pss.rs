@@ -144,7 +144,7 @@ pub(crate) fn emsa_pss_verify<D>(
     s_len: usize,
     hash: &mut D,
     key_bits: usize,
-) -> Result<()> 
+) -> Result<()>
 where
     D: Digest + FixedOutputReset,
 {

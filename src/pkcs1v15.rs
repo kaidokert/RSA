@@ -268,7 +268,10 @@ mod tests {
     };
     use crate::{RsaPrivateKey, RsaPublicKey};
 
-    fn get_private_key<T>() -> RsaPrivateKey<T> where T: UnsignedModularInt {
+    fn get_private_key<T>() -> RsaPrivateKey<T>
+    where
+        T: UnsignedModularInt,
+    {
         // In order to generate new test vectors you'll need the PEM form of this key:
         // -----BEGIN RSA PRIVATE KEY-----
         // MIIBOgIBAAJBALKZD0nEffqM1ACuak0bijtqE2QrI/KLADv7l3kK3ppMyCuLKoF0

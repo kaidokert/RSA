@@ -83,7 +83,7 @@ impl<T> Serialize for Signature<T> {
 }
 
 #[cfg(feature = "serde")]
-impl<'de,T > Deserialize<'de> for Signature<T> {
+impl<'de, T> Deserialize<'de> for Signature<T> {
     fn deserialize<D>(deserializer: D) -> core::result::Result<Self, D::Error>
     where
         D: serdect::serde::Deserializer<'de>,

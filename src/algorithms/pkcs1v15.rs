@@ -191,7 +191,8 @@ where
         oid_len,
     ]);
     v.extend_from_slice(oid).unwrap();
-    v.extend_from_slice(&[0x05, 0x00, 0x04, digest_len]).unwrap();
+    v.extend_from_slice(&[0x05, 0x00, 0x04, digest_len])
+        .unwrap();
     v
 }
 

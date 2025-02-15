@@ -14,7 +14,7 @@ use crate::traits::UnsignedModularInt;
 /// [RFC8017 § 7.1]: https://datatracker.ietf.org/doc/html/rfc8017#section-7.1
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct EncryptingKey<T,D, MGD = D>
+pub struct EncryptingKey<T, D, MGD = D>
 where
     D: Digest,
     MGD: Digest + FixedOutputReset,

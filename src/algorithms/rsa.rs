@@ -77,8 +77,9 @@ pub fn rsa_decrypt_and_check<T, R: CryptoRngCore + ?Sized>(
     priv_key: &impl PrivateKeyParts<T>,
     rng: Option<&mut R>,
     c: &T,
-) -> Result<T> 
-where T: UnsignedModularInt
+) -> Result<T>
+where
+    T: UnsignedModularInt,
 {
     todo!()
 }

@@ -14,8 +14,8 @@ use signature::{
 use zeroize::ZeroizeOnDrop;
 
 // New imports
+use crate::{traits::UnsignedModularInt, Prefix};
 use const_oid::AssociatedOid;
-use crate::{Prefix, traits::UnsignedModularInt};
 
 /// Signing key for `RSASSA-PKCS1-v1_5` signatures as described in [RFC8017 § 8.2].
 ///
@@ -76,8 +76,6 @@ where
 //
 // `*Signer` trait impls
 //
-
-
 
 //
 // Other trait impls

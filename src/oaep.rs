@@ -193,7 +193,6 @@ where
     //uint_to_be_pad(rsa_encrypt(pub_key, &int)?, pub_key.size())
 }
 
-
 /// Decrypts a plaintext using RSA and the padding scheme from [PKCS#1 OAEP].
 ///
 /// If an `rng` is passed, it uses RSA blinding to avoid timing side-channel attacks.
@@ -207,7 +206,7 @@ where
 ///
 /// [PKCS#1 OAEP]: https://datatracker.ietf.org/doc/html/rfc8017#section-7.1
 #[inline]
-fn decrypt<'a,T, R: CryptoRngCore + ?Sized, D>(
+fn decrypt<'a, T, R: CryptoRngCore + ?Sized, D>(
     rng: Option<&mut R>,
     priv_key: &RsaPrivateKey<T>,
     ciphertext: &[u8],
@@ -236,7 +235,7 @@ where
 ///
 /// [PKCS#1 OAEP]: https://datatracker.ietf.org/doc/html/rfc8017#section-7.1
 #[inline]
-fn decrypt_digest<'a,T, R: CryptoRngCore + ?Sized, D: Digest, MGD: Digest + FixedOutputReset>(
+fn decrypt_digest<'a, T, R: CryptoRngCore + ?Sized, D, MGD: Digest + FixedOutputReset>(
     rng: Option<&mut R>,
     priv_key: &RsaPrivateKey<T>,
     ciphertext: &[u8],

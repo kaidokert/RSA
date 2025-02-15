@@ -87,7 +87,7 @@ where
 }
 
 #[cfg(feature = "serde")]
-impl<'de,T> Deserialize<'de> for Signature<T>
+impl<'de, T> Deserialize<'de> for Signature<T>
 where
     T: UnsignedModularInt,
 {

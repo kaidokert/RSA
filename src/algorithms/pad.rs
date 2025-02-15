@@ -49,7 +49,7 @@ where
 {
     let m = Zeroizing::new(input);
     let m = Zeroizing::new(m.to_be_bytes());
-    left_pad(m.as_ref().as_ref(), padded_len, storage)
+    left_pad(m.as_ref(), padded_len, storage)
 }
 
 #[cfg(test)]

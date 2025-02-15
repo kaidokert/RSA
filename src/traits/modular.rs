@@ -19,7 +19,7 @@ pub trait UnsignedModularInt:
         let mut value = *self;
 
         while value != Self::zero() {
-            value = value >> 1;
+            value >>= 1;
             count += 1;
         }
 

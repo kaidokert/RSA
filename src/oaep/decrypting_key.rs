@@ -11,8 +11,8 @@ use rand_core::CryptoRngCore;
 use serde::{Deserialize, Serialize};
 use zeroize::ZeroizeOnDrop;
 
-use crate::traits::UnsignedModularInt;
 use crate::algorithms::oaep::Label;
+use crate::traits::UnsignedModularInt;
 
 /// Decryption key for PKCS#1 v1.5 decryption as described in [RFC8017 § 7.1].
 ///
@@ -31,7 +31,7 @@ where
     mg_phantom: PhantomData<MGD>,
 }
 
-impl<T,D, MGD> DecryptingKey<T, D, MGD>
+impl<T, D, MGD> DecryptingKey<T, D, MGD>
 where
     T: UnsignedModularInt,
     D: Digest,
@@ -58,7 +58,7 @@ where
     }
 }
 
-impl<T,D, MGD> Decryptor for DecryptingKey<T, D, MGD>
+impl<T, D, MGD> Decryptor for DecryptingKey<T, D, MGD>
 where
     T: UnsignedModularInt,
     D: Digest,
@@ -66,7 +66,7 @@ where
 {
 }
 
-impl<T,D, MGD> RandomizedDecryptor for DecryptingKey<T, D, MGD>
+impl<T, D, MGD> RandomizedDecryptor for DecryptingKey<T, D, MGD>
 where
     D: Digest,
     MGD: Digest + FixedOutputReset,
@@ -74,7 +74,7 @@ where
 {
 }
 
-impl<T,D, MGD> ZeroizeOnDrop for DecryptingKey<T, D, MGD>
+impl<T, D, MGD> ZeroizeOnDrop for DecryptingKey<T, D, MGD>
 where
     D: Digest,
     MGD: Digest + FixedOutputReset,
@@ -82,7 +82,7 @@ where
 {
 }
 
-impl<T,D, MGD> PartialEq for DecryptingKey<T, D, MGD>
+impl<T, D, MGD> PartialEq for DecryptingKey<T, D, MGD>
 where
     D: Digest,
     MGD: Digest + FixedOutputReset,
@@ -104,7 +104,7 @@ mod tests {
         use sha2::Sha256;
 
         let mut rng = ChaCha8Rng::from_seed([42; 32]);
-        /* TODO: 
+        /* TODO:
         let decrypting_key = DecryptingKey::<Sha256>::new(
             RsaPrivateKey::new(&mut rng, 64).expect("failed to generate key"),
         );
