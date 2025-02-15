@@ -4,7 +4,8 @@ use num_traits::{FromPrimitive, One, Pow, Signed, Zero};
 use rand_core::CryptoRngCore;
 use zeroize::{Zeroize, Zeroizing};
 
-use super::modular::exp::mod_exp;
+use modmath::basic_mod_exp as mod_exp;
+
 use crate::traits::modular::UnsignedModularInt;
 
 use crate::errors::{Error, Result};

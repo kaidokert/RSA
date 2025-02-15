@@ -10,6 +10,8 @@ pub trait UnsignedModularInt:
     + ToBytes
     + FromBytes
     + DefaultIsZeroes
+    + core::ops::ShrAssign<usize>
+    + core::ops::RemAssign
     + core::fmt::Debug
 {
     fn bits(&self) -> usize {
@@ -37,6 +39,8 @@ impl<T> UnsignedModularInt for T where
         + ToBytes
         + FromBytes
         + DefaultIsZeroes
+        + core::ops::ShrAssign<usize>
+        + core::ops::RemAssign
         + core::fmt::Debug
 {
 }

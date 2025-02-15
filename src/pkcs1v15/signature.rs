@@ -26,7 +26,8 @@ where
 
     fn try_from(value: &[u8]) -> Result<Self, Self::Error> {
         let mut bytes = <T as num_traits::FromBytes>::Bytes::default();
-        bytes.as_mut().copy_from_slice(value);
+        let source_slice = bytes.as_mut();
+        source_slice.copy_from_slice(&value[..source_slice.len()]);
         let result = T::from_be_bytes(&bytes);
         Ok(Self {
             inner: result,

@@ -1,7 +1,5 @@
 //! Useful algorithms related to RSA.
 
-pub(crate) mod modular;
-
 mod mgf;
 
 pub(crate) mod generate;
