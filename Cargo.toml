@@ -10,7 +10,7 @@ repository = "https://github.com/kaidokert/RSA"
 keywords = ["rsa", "encryption", "security", "crypto"]
 categories = ["cryptography"]
 readme = "README.md"
-rust-version = "1.81"
+rust-version = "1.83"
 
 [dependencies]
 num-traits = { version = "0.2.19", default-features = false, features = ["i128"] }
