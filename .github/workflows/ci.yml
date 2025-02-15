@@ -19,6 +19,7 @@ jobs:
           - 1.81.0 # MSRV
           - stable
         target:
+          - thumbv6m-none-eabi
           - thumbv7em-none-eabi
           - wasm32-unknown-unknown
     steps:
