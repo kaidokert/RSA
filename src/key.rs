@@ -2,9 +2,12 @@ use core::hash::{Hash, Hasher};
 use num_integer::Integer;
 use num_traits::{FromPrimitive, One, ToPrimitive};
 use rand_core::CryptoRngCore;
-#[cfg(feature = "serde")]
-use serdect::serde::{de, ser, Deserialize, Serialize};
 use zeroize::{Zeroize, ZeroizeOnDrop};
+#[cfg(feature = "serde")]
+use {
+    serdect::serde::{de, ser, Deserialize, Serialize},
+};
+
 
 use crate::traits::UnsignedModularInt;
 
