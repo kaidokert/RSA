@@ -1,12 +1,10 @@
 use sha1::Sha1;
 use signature::Verifier;
 
-#[cfg(feature = "fixed-bigint")]
 use fixed_bigint::FixedUInt;
 use rsa_heapless::pss::VerifyingKey;
 use rsa_heapless::RsaPublicKey;
 
-#[cfg(feature = "fixed-bigint")]
 #[test]
 fn test_verify_512_bit() {
     let data = b"hello world!";

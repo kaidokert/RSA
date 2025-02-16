@@ -13,7 +13,6 @@ use core::fmt;
 
 use digest::{Digest, DynDigest, FixedOutputReset};
 use rand_core::CryptoRngCore;
-use zeroize::Zeroizing;
 
 use crate::algorithms::oaep::*;
 use crate::algorithms::pad::{uint_to_be_pad, uint_to_zeroizing_be_pad};

@@ -251,10 +251,8 @@ mod tests {
         SignatureEncoding, Signer, Verifier,
     };
     use base64ct::{Base64, Encoding};
+    use crypto_bigint::Odd;
     use hex_literal::hex;
-    use num_bigint::BigUint;
-    use num_traits::FromPrimitive;
-    use num_traits::Num;
     use rand_chacha::{
         rand_core::{RngCore, SeedableRng},
         ChaCha8Rng,

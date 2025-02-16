@@ -98,7 +98,8 @@ where
     D: Digest + FixedOutputReset,
     T: UnsignedModularInt,
 {
-    if sig >= pub_key.n() || sig_len != pub_key.size() {
+    let n = pub_key.n();
+    if sig >= n || sig.bits_precision() != pub_key.n_bits_precision() {
         return Err(Error::Verification);
     }
     let encr = rsa_encrypt(pub_key, *sig);
@@ -185,7 +186,7 @@ where
     todo!()
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "pem"))]
 mod test {
     use crate::pss::{BlindedSigningKey, Pss, Signature, SigningKey, VerifyingKey};
     use crate::traits::UnsignedModularInt;

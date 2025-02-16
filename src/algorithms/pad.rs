@@ -26,6 +26,8 @@ fn left_pad<'a>(input: &[u8], padded_len: usize, storage: &'a mut [u8]) -> Resul
 }
 
 /// Converts input to the new vector of the given length, using BE and with 0s left padded.
+/// In some cases BoxedUint might already have leading zeroes, this function removes them
+/// before padding again.
 #[inline]
 pub(crate) fn uint_to_be_pad<T>(input: T, padded_len: usize, storage: &mut [u8]) -> Result<&[u8]>
 where
@@ -37,6 +39,8 @@ where
 }
 
 /// Converts input to the new vector of the given length, using BE and with 0s left padded.
+/// In some cases BoxedUint might already have leading zeroes, this function removes them
+/// before padding again.
 #[inline]
 pub(crate) fn uint_to_zeroizing_be_pad<T>(
     input: T,

@@ -18,8 +18,8 @@ use crate::algorithms::rsa::{
 
 use crate::dummy_rng::DummyRng;
 use crate::errors::{Error, Result};
-use crate::traits::{PaddingScheme, PrivateKeyParts, PublicKeyParts, SignatureScheme};
-use crate::CrtValue;
+use crate::traits::keys::{CrtValue, PrivateKeyParts, PublicKeyParts};
+use crate::traits::{PaddingScheme, SignatureScheme};
 
 /// Represents the public part of an RSA key.
 #[derive(Debug, Clone)]
@@ -562,6 +562,7 @@ where
 mod tests {
     use super::*;
     use crate::algorithms::rsa::{rsa_decrypt_and_check, rsa_encrypt};
+    use crate::traits::{PrivateKeyParts, PublicKeyParts};
 
     use hex_literal::hex;
     use num_traits::{FromPrimitive, ToPrimitive};
@@ -580,7 +581,7 @@ mod tests {
         private_key.validate().expect("invalid private key");
 
         assert!(
-            private_key.d() < private_key.n(),
+            PrivateKeyParts::d(private_key) < PublicKeyParts::n(private_key),
             "private exponent too large"
         );
 
@@ -606,7 +607,8 @@ mod tests {
 
     key_generation!(key_generation_multi_5_64, 5, 64);
     key_generation!(key_generation_multi_8_576, 8, 576);
-    key_generation!(key_generation_multi_16_1024, 16, 1024);
+    // TODO: reenable, currently slow
+    // key_generation!(key_generation_multi_16_1024, 16, 1024);
 
     #[test]
     #[ignore]

@@ -1,6 +1,5 @@
 //! `RSASSA-PKCS1-v1_5` signatures.
 
-use crate::algorithms::pad::uint_to_be_pad;
 use ::signature::SignatureEncoding;
 use core::fmt::{Debug, Display, Formatter, LowerHex, UpperHex};
 #[cfg(feature = "serde")]

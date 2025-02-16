@@ -5,8 +5,6 @@ use rsa_heapless::signature::Verifier;
 use rsa_heapless::RsaPublicKey;
 use sha1::Sha1;
 
-pub const DESC: &str = "[512-bit]";
-
 /// Verify example PKCS1v15 signature with RSA public key
 pub fn rsa_signature_verify<T: MachineWord + core::fmt::Debug, const N: usize>(
 ) -> Result<(), rsa_heapless::signature::Error> {

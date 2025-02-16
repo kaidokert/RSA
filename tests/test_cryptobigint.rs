@@ -1,9 +1,7 @@
 use crypto_bigint::U512;
-use num_traits::FromBytes;
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 use rsa_heapless::pkcs1v15::EncryptingKey;
-use rsa_heapless::traits::RandomizedEncryptor;
 use rsa_heapless::traits::UnsignedModularInt;
 use rsa_heapless::RsaPublicKey;
 
@@ -31,11 +29,11 @@ fn test_encrypt() {
     ];
     let n = U512::from_be_slice(&modulus);
     let key = RsaPublicKey::new(n, e).unwrap();
-    let encrypting_key = EncryptingKey::new(key);
+    let _encrypting_key = EncryptingKey::new(key);
 
-    let mut rng = ChaCha8Rng::from_seed([42; 32]);
-    let data = b"hello world!";
-    let mut storage = [0u8; 256];
+    let mut _rng = ChaCha8Rng::from_seed([42; 32]);
+    let _data = b"hello world!";
+    let mut _storage = [0u8; 256];
     /*
        let cipher = encrypting_key
            .encrypt_with_rng(&mut rng, data, &mut storage)

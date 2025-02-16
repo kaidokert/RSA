@@ -46,6 +46,10 @@ where
     todo!()
 }
 
+fn generate_prime_with_rng<T, R: CryptoRngCore>(rng: &mut R, bit_length: u32) -> T {
+    todo!()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

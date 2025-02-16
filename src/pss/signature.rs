@@ -1,6 +1,5 @@
 //! `RSASSA-PSS` signatures.
 
-use crate::algorithms::pad::uint_to_be_pad;
 use ::signature::SignatureEncoding;
 use core::fmt::{Debug, Display, Formatter, LowerHex, UpperHex};
 #[cfg(feature = "serde")]

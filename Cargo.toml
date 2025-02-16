@@ -34,6 +34,7 @@ heapless = { version = "0.8.0", default-features = false }
 modmath = { version = "0.1.0", default-features = false }
 # modmath = { path = "../modmath" }
 
+
 [dev-dependencies]
 base64ct = { version = "1", features = ["alloc"] }
 hex-literal = "0.4.1"
@@ -49,8 +50,8 @@ sha3 = { version = "=0.11.0-pre.4", default-features = false, features = ["oid"]
 num-bigint = { version = "0.8.2", features = ["i128", "prime", "zeroize"], default-features = false, package = "num-bigint-dig" }
 crypto-bigint = { package = "crypto-bigint", git = "https://github.com/kaidokert/crypto-bigint.git", tag = "v0.6.1_rsa_patch_2", default-features = false, features = ["zeroize"] }
 # crypto-bigint = { path = "../bn/crypto-bigint", default-features = false, features = ["zeroize"] }
-# fixed-bigint = { version = "0.1.14", features=["zeroize","use-unsafe"] }
-fixed-bigint = { path = "../fixed-bigint-rs", version = "0.1.15", features=["zeroize","use-unsafe"] }
+fixed-bigint = { version = "0.1.15", features=["zeroize","use-unsafe"] }
+# fixed-bigint = { path = "../fixed-bigint-rs", version = "0.1.15", features=["zeroize","use-unsafe"] }
 hex = { version = "0.4.3", features = ["serde"] }
 serde_json = "1.0.138"
 serde = { version = "1.0.184", features = ["derive"] }
@@ -63,7 +64,7 @@ serde = ["dep:serde", "dep:serdect"]
 pem = []
 pkcs5 = []
 std = ["digest/std", "pkcs1/std", "pkcs8/std", "rand_core/std", "signature/std"]
-
+wycheproof = []
 
 [package.metadata.docs.rs]
 features = ["std", "pem", "serde", "hazmat", "sha2"]

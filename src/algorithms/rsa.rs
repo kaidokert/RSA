@@ -4,7 +4,7 @@ use core::cmp::Ordering;
 
 use num_traits::{FromPrimitive, One, Pow, Signed, Zero};
 use rand_core::CryptoRngCore;
-use zeroize::{Zeroize, Zeroizing};
+use zeroize::Zeroize;
 
 use modmath::basic_mod_exp as mod_exp;
 
@@ -12,7 +12,7 @@ use crate::traits::modular::UnsignedModularInt;
 use crate::traits::modular::{MontyParams,MontyForm};
 
 use crate::errors::{Error, Result};
-use crate::traits::{PrivateKeyParts, PublicKeyParts};
+use crate::traits::keys::{PrivateKeyParts, PublicKeyParts};
 
 /// ⚠️ Raw RSA encryption of m with the public key. No padding is performed.
 ///
@@ -55,14 +55,11 @@ where
         return Err(Error::Decryption);
     }
 
-    let mut ir = None;
-
     let n_params = priv_key.n_params();
     let bits = d.bits_precision();
 
     let c = if let Some(ref mut rng) = rng {
         let (blinded, unblinder) = blind(rng, priv_key, c);
-        ir = Some(unblinder);
         blinded.widen(bits)
     } else {
         c.widen(bits)
@@ -106,7 +103,6 @@ where
     // Then the decryption operation performs (m^e * r^e)^d mod n
     // which equals mr mod n. The factor of r can then be removed
     // by multiplying by the multiplicative inverse of r.
-
     todo!()
 }
 
