@@ -22,7 +22,7 @@ use crate::traits::{PaddingScheme, PrivateKeyParts, PublicKeyParts, SignatureSch
 use crate::CrtValue;
 
 /// Represents the public part of an RSA key.
-#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct RsaPublicKey<T>
 where
     T: UnsignedModularInt,
@@ -32,8 +32,27 @@ where
     /// Public exponent: power to which a plaintext message is raised in
     /// order to encrypt it.
     ///
-    /// Typically 0x10001 (65537)
+    /// Typically `0x10001` (`65537`)
     e: T,
+
+    n_params: MontyParams<T>,
+}
+
+impl<T: UnsignedModularInt> Eq for RsaPublicKey<T> {}
+
+impl<T: UnsignedModularInt> PartialEq for RsaPublicKey<T> {
+    #[inline]
+    fn eq(&self, other: &RsaPublicKey<T>) -> bool {
+        self.n == other.n && self.e == other.e
+    }
+}
+
+impl<T: UnsignedModularInt> Hash for RsaPublicKey<T> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        // Domain separator for RSA private keys
+        state.write(b"RsaPublicKey");
+        todo!()
+    }
 }
 
 /// Represents a whole RSA key, public and private parts.
@@ -68,6 +87,14 @@ impl<T: UnsignedModularInt> AsRef<RsaPublicKey<T>> for RsaPrivateKey<T> {
     }
 }
 
+impl<T: UnsignedModularInt> Hash for RsaPrivateKey<T> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        // Domain separator for RSA private keys
+        state.write(b"RsaPrivateKey");
+        Hash::hash(&self.pubkey_components, state);
+    }
+}
+
 impl<T: UnsignedModularInt> Drop for RsaPrivateKey<T> {
     fn drop(&mut self) {
         self.d.zeroize();
@@ -85,29 +112,48 @@ pub(crate) struct PrecomputedValues<T: Zeroize + UnsignedModularInt> {
     /// D mod (Q-1)
     pub(crate) dq: T,
     /// Q^-1 mod P
-    pub(crate) qinv: T,
+    pub(crate) qinv: MontyForm<T>,
 
-    /// CRTValues is used for the 3rd and subsequent primes. Due to a
-    /// historical accident, the CRT for the first two primes is handled
-    /// differently in PKCS#1 and interoperability is sufficiently
-    /// important that we mirror this.
-    pub(crate) crt_values: [CrtValue<T>; 3],
+    /// Montgomery params for `p`
+    pub(crate) p_params: MontyParams<T>,
+    /// Montgomery params for `q`
+    pub(crate) q_params: MontyParams<T>,
 }
+
+impl<T: Zeroize + UnsignedModularInt> ZeroizeOnDrop for PrecomputedValues<T> {}
 
 impl<T: Zeroize + UnsignedModularInt> Zeroize for PrecomputedValues<T> {
     fn zeroize(&mut self) {
         self.dp.zeroize();
         self.dq.zeroize();
-        self.qinv.zeroize();
-        for val in self.crt_values.iter_mut() {
-            val.zeroize();
-        }
+        // TODO: once these have landed in crypto-bigint
+        // self.p_params.zeroize();
+        // self.q_params.zeroize();
     }
 }
 
 impl<T: UnsignedModularInt> Drop for PrecomputedValues<T> {
     fn drop(&mut self) {
         self.zeroize();
+    }
+}
+
+impl<T: UnsignedModularInt> From<RsaPrivateKey<T>> for RsaPublicKey<T> {
+    fn from(private_key: RsaPrivateKey<T>) -> Self {
+        todo!()
+    }
+}
+
+impl<T: UnsignedModularInt> From<&RsaPrivateKey<T>> for RsaPublicKey<T> {
+    fn from(private_key: &RsaPrivateKey<T>) -> Self {
+        let n = PublicKeyParts::n(private_key);
+        let e = PublicKeyParts::e(private_key);
+        let n_params = PublicKeyParts::n_params(private_key);
+        RsaPublicKey {
+            n: n.clone(),
+            e: e.clone(),
+            n_params: n_params.clone(),
+        }
     }
 }
 
@@ -172,9 +218,12 @@ impl<T: UnsignedModularInt> RsaPublicKey<T> {
 
     /// Create a new public key from its components.
     pub fn new_with_max_size(n: T, e: T, max_size: usize) -> Result<Self> {
-        let k = Self { n, e };
-        check_public_with_max_size(&k, max_size)?;
-        Ok(k)
+        check_public_with_max_size(&n, &e, max_size)?;
+
+        let n_odd = n.clone();
+        let n_params = MontyParams::new(n_odd);
+
+        Ok(Self { n, e, n_params })
     }
 
     /// Create a new public key, bypassing checks around the modulus and public
@@ -184,7 +233,7 @@ impl<T: UnsignedModularInt> RsaPublicKey<T> {
     /// Most applications should use [`RsaPublicKey::new`] or
     /// [`RsaPublicKey::new_with_max_size`] instead.
     pub fn new_unchecked(n: T, e: T) -> Self {
-        Self { n, e }
+        todo!()
     }
 }
 
@@ -196,9 +245,7 @@ impl<T: UnsignedModularInt> PublicKeyParts<T> for RsaPrivateKey<T> {
     fn e(&self) -> &T {
         &self.pubkey_components.e
     }
-    fn size(&self) -> usize {
-        todo!("Not yet implemented size")
-    }
+
     fn n_params(&self) -> &MontyParams<T> {
         todo!()
     }
@@ -207,6 +254,23 @@ impl<T: UnsignedModularInt> PublicKeyParts<T> for RsaPrivateKey<T> {
 impl<T: UnsignedModularInt> RsaPrivateKey<T> {
     /// Default exponent for RSA keys.
     const EXP: u64 = 65537;
+
+    /// Generate a new Rsa key pair of the given bit size using the passed in `rng`.
+    pub fn new<R: CryptoRngCore>(rng: &mut R, bit_size: usize) -> Result<RsaPrivateKey<T>> {
+        todo!()
+    }
+
+    /// Generate a new RSA key pair of the given bit size and the public exponent
+    /// using the passed in `rng`.
+    ///
+    /// Unless you have specific needs, you should use `RsaPrivateKey::new` instead.
+    pub fn new_with_exp<R: CryptoRngCore>(
+        rng: &mut R,
+        bit_size: usize,
+        exp: T,
+    ) -> Result<RsaPrivateKey<T>> {
+        todo!()
+    }
 
     /// Constructs an RSA key pair from individual components:
     ///
@@ -246,7 +310,7 @@ impl<T: UnsignedModularInt> RsaPrivateKey<T> {
             return Err(Error::NprimesTooSmall);
         }
 
-        // Makes sure that primes is pairwise unequal.
+        // Makes sure that the primes are pairwise unequal.
         for (i, prime1) in primes.iter().enumerate() {
             for prime2 in primes.iter().take(i) {
                 if prime1 == prime2 {
@@ -317,6 +381,49 @@ impl<T: UnsignedModularInt> RsaPrivateKey<T> {
 
         Ok(())
     }
+
+    /// Decrypt the given message.
+    pub fn decrypt<P: PaddingScheme<T>>(&self, padding: P, ciphertext: &[u8], storage: &mut [u8]) -> Result<&[u8]> {
+        todo!()
+    }
+
+    /// Decrypt the given message.
+    ///
+    /// Uses `rng` to blind the decryption process.
+    pub fn decrypt_blinded<R: CryptoRngCore, P: PaddingScheme<T>>(
+        &self,
+        rng: &mut R,
+        padding: P,
+        ciphertext: &[u8],
+        storage: &mut [u8],
+    ) -> Result<&[u8]> {
+        todo!()
+    }
+
+    /// Sign the given digest.
+    pub fn sign<S: SignatureScheme<T>>(&self, padding: S, digest_in: &[u8], storage: &mut [u8]) -> Result<&[u8]> {
+        todo!()
+    }
+
+    /// Sign the given digest using the provided `rng`, which is used in the
+    /// following ways depending on the [`SignatureScheme`]:
+    ///
+    /// - [`Pkcs1v15Sign`][`crate::Pkcs1v15Sign`] padding: uses the RNG
+    ///   to mask the private key operation with random blinding, which helps
+    ///   mitigate sidechannel attacks.
+    /// - [`Pss`][`crate::Pss`] always requires randomness. Use
+    ///   [`Pss::new`][`crate::Pss::new`] for a standard RSASSA-PSS signature, or
+    ///   [`Pss::new_blinded`][`crate::Pss::new_blinded`] for RSA-BSSA blind
+    ///   signatures.
+    pub fn sign_with_rng<R: CryptoRngCore, S: SignatureScheme<T>>(
+        &self,
+        rng: &mut R,
+        padding: S,
+        digest_in: &[u8],
+        storage: &mut [u8],
+    ) -> Result<&[u8]> {
+        todo!()
+    }
 }
 
 impl<T: UnsignedModularInt> PrivateKeyParts<T> for RsaPrivateKey<T> {
@@ -343,7 +450,7 @@ impl<T: UnsignedModularInt> PrivateKeyParts<T> for RsaPrivateKey<T> {
     fn crt_values(&self) -> Option<&[CrtValue<T>]> {
         /* for some reason the standard self.precomputed.as_ref().map() doesn't work */
         if let Some(p) = &self.precomputed {
-            Some(p.crt_values.as_slice())
+            todo!()
         } else {
             None
         }
@@ -365,37 +472,34 @@ pub fn check_public<T>(public_key: &impl PublicKeyParts<T>) -> Result<()>
 where
     T: UnsignedModularInt,
 {
-    check_public_with_max_size(public_key, RsaPublicKey::<T>::MAX_SIZE)
+        check_public_with_max_size(public_key.n(), public_key.e(), RsaPublicKey::<T>::MAX_SIZE)
 }
 
 /// Check that the public key is well formed and has an exponent within acceptable bounds.
 #[inline]
-fn check_public_with_max_size<T>(public_key: &impl PublicKeyParts<T>, max_size: usize) -> Result<()>
+fn check_public_with_max_size<T>(n: &T, e: &T, max_size: usize) -> Result<()>
 where
     T: UnsignedModularInt,
 {
-    if public_key.n().bits() > max_size {
+    if n.bits_precision() as usize > max_size {
         return Err(Error::ModulusTooLarge);
     }
 
-    let e = public_key
-        .e()
-        .to_u64()
-        .ok_or(Error::PublicExponentTooLarge)?;
-
-    if public_key.e() >= public_key.n() || public_key.n().is_even() {
+    if e >= n || n.is_even().into() || n.is_zero().into() {
         return Err(Error::InvalidModulus);
     }
 
-    if public_key.e().is_even() {
+    if e.is_even().into() {
         return Err(Error::InvalidExponent);
     }
 
-    if e < RsaPublicKey::<T>::MIN_PUB_EXPONENT {
+    // I want to use num_traits::FromPrimitive here for conversion
+
+    if e < &T::from(RsaPublicKey::<T>::MIN_PUB_EXPONENT).unwrap() {
         return Err(Error::PublicExponentTooSmall);
     }
 
-    if e > RsaPublicKey::<T>::MAX_PUB_EXPONENT {
+    if e > &T::from(RsaPublicKey::<T>::MAX_PUB_EXPONENT).unwrap() {
         return Err(Error::PublicExponentTooLarge);
     }
 

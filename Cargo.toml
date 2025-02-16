@@ -1,6 +1,6 @@
 [package]
 name = "rsa_heapless"
-version = "0.1.2"
+version = "0.1.3"
 authors = ["RustCrypto Developers", "dignifiedquire <dignifiedquire@gmail.com>", "kaidokert@gmail.com"]
 edition = "2021"
 description = "Pure Rust RSA implementation - heapless version"
@@ -47,8 +47,10 @@ sha1 = { version = "=0.11.0-pre.4", default-features = false, features = ["oid"]
 sha2 = { version = "=0.11.0-pre.4", default-features = false, features = ["oid"] }
 sha3 = { version = "=0.11.0-pre.4", default-features = false, features = ["oid"] }
 num-bigint = { version = "0.8.2", features = ["i128", "prime", "zeroize"], default-features = false, package = "num-bigint-dig" }
-crypto-bigint = { package = "crypto-bigint", git = "https://github.com/kaidokert/crypto-bigint.git", tag = "v0.6.1_rsa_patch_1", default-features = false, features = ["zeroize"] }
-fixed-bigint = { version = "0.1.11", features=["zeroize","use-unsafe"] }
+crypto-bigint = { package = "crypto-bigint", git = "https://github.com/kaidokert/crypto-bigint.git", tag = "v0.6.1_rsa_patch_2", default-features = false, features = ["zeroize"] }
+# crypto-bigint = { path = "../bn/crypto-bigint", default-features = false, features = ["zeroize"] }
+# fixed-bigint = { version = "0.1.14", features=["zeroize","use-unsafe"] }
+fixed-bigint = { path = "../fixed-bigint-rs", version = "0.1.15", features=["zeroize","use-unsafe"] }
 hex = { version = "0.4.3", features = ["serde"] }
 serde_json = "1.0.138"
 serde = { version = "1.0.184", features = ["derive"] }

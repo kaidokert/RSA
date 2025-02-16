@@ -72,6 +72,7 @@ impl<T> UnsignedModularInt for T where
 {
 }
 
+#[derive(Debug, Clone)]
 pub struct MontyParams<T>
 where
     T: UnsignedModularInt,
@@ -83,6 +84,9 @@ impl<T> MontyParams<T>
 where
     T: UnsignedModularInt,
 {
+    pub fn new(n: T) -> Self {
+        Self { modulus: n }
+    }
     pub fn modulus(&self) -> &T {
         &self.modulus
     }
@@ -92,6 +96,7 @@ where
 
 }
 
+#[derive(Debug, Clone)]
 pub struct MontyForm<T>
 where
     T: UnsignedModularInt,
@@ -103,7 +108,7 @@ impl<T> MontyForm<T>
 where
     T: UnsignedModularInt,
 {
-    pub fn new(n: T, p: &MontyParams<T>) -> Self {
+    pub fn new(n: T, p: MontyParams<T>) -> Self {
         Self { _phantom: core::marker::PhantomData }
     }
     pub fn pow(&self, exponent: &T) -> Self {
