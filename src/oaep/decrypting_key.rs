@@ -64,6 +64,9 @@ where
     D: Digest,
     MGD: Digest + FixedOutputReset,
 {
+    fn decrypt(&self, ciphertext: &[u8], storage: &mut [u8]) -> Result<&[u8]> {
+        todo!()
+    }
 }
 
 impl<T, D, MGD> RandomizedDecryptor for DecryptingKey<T, D, MGD>
@@ -72,6 +75,14 @@ where
     MGD: Digest + FixedOutputReset,
     T: UnsignedModularInt,
 {
+    fn decrypt_with_rng<R: CryptoRngCore + ?Sized>(
+        &self,
+        rng: &mut R,
+        ciphertext: &[u8],
+        storage: &mut [u8],
+    ) -> Result<&[u8]> {
+        todo!()
+    }
 }
 
 impl<T, D, MGD> ZeroizeOnDrop for DecryptingKey<T, D, MGD>

@@ -15,10 +15,21 @@ pub trait RandomizedEncryptor {
 }
 
 /// Decrypt the given message
-pub trait Decryptor {}
+pub trait Decryptor {
+    /// Decrypt the given message.
+    fn decrypt(&self, ciphertext: &[u8], storage: &mut [u8]) -> Result<&[u8]>;
+}
 
 /// Decrypt the given message using provided random source
-pub trait RandomizedDecryptor {}
+pub trait RandomizedDecryptor {
+    /// Decrypt the given message.
+    fn decrypt_with_rng<R: CryptoRngCore + ?Sized>(
+        &self,
+        rng: &mut R,
+        ciphertext: &[u8],
+        storage: &mut [u8],
+    ) -> Result<&[u8]>;
+}
 
 /// Encryption keypair with an associated encryption key.
 pub trait EncryptingKeypair {

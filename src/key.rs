@@ -9,7 +9,7 @@ use {
 };
 
 
-use crate::traits::{modular::MontyParams, UnsignedModularInt};
+use crate::traits::{modular::MontyParams, UnsignedModularInt, modular::MontyForm};
 
 use crate::algorithms::rsa::{
     compute_modulus, compute_private_exponent_carmicheal, compute_private_exponent_euler_totient,
@@ -336,8 +336,8 @@ impl<T: UnsignedModularInt> PrivateKeyParts<T> for RsaPrivateKey<T> {
         self.precomputed.as_ref().map(|p| &p.dq)
     }
 
-    fn qinv(&self) -> Option<&T> {
-        self.precomputed.as_ref().map(|p| &p.qinv)
+    fn qinv(&self) -> Option<&MontyForm<T>> {
+        todo!()
     }
 
     fn crt_values(&self) -> Option<&[CrtValue<T>]> {
@@ -348,6 +348,15 @@ impl<T: UnsignedModularInt> PrivateKeyParts<T> for RsaPrivateKey<T> {
             None
         }
     }
+
+    fn p_params(&self) -> Option<&MontyParams<T>> {
+        todo!()
+    }
+
+    fn q_params(&self) -> Option<&MontyParams<T>> {
+        todo!()
+    }
+    
 }
 
 /// Check that the public key is well formed and has an exponent within acceptable bounds.

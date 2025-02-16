@@ -4,7 +4,7 @@ use num_traits::{Num, One, PrimInt, Signed, Unsigned, Zero};
 use zeroize::Zeroize;
 
 use crate::traits::modular::UnsignedModularInt;
-use crate::traits::modular::MontyParams;
+use crate::traits::modular::{MontyParams, MontyForm};
 
 /// Components of an RSA public key.
 pub trait PublicKeyParts<T>
@@ -20,14 +20,14 @@ where
     /// Returns the modulus size in bytes. Raw signatures and ciphertexts for
     /// or by this public key will have the same size.
     fn size(&self) -> usize {
-        (self.n().bits() + 7) / 8
+        (self.n().bits() as usize + 7) / 8
     }
 
     /// Returns the parameters for montgomery operations.
     fn n_params(&self) -> &MontyParams<T>;
 
     /// Returns precision (in bits) of `n`.
-    fn n_bits_precision(&self) -> usize {
+    fn n_bits_precision(&self) -> u32 {
         self.n().bits_precision()
     }
 }
@@ -49,14 +49,17 @@ where
     /// Returns the precomputed dq value, D mod (Q-1)
     fn dq(&self) -> Option<&T>;
 
-    /// Returns the precomputed qinv value, Q^-1 mod P.
-    /// Since qinv can be negative, we use Signed trait here.
-    fn qinv(&self) -> Option<&T>
-    where
-        T: Signed;
+    /// Returns the precomputed qinv value, Q^-1 mod P
+    fn qinv(&self) -> Option<&MontyForm<T>>;
 
     /// Returns an iterator over the CRT Values
     fn crt_values(&self) -> Option<&[CrtValue<T>]>;
+
+    /// Returns the params for `p` if precomupted.
+    fn p_params(&self) -> Option<&MontyParams<T>>;
+
+    /// Returns the params for `q` if precomupted.
+    fn q_params(&self) -> Option<&MontyParams<T>>;
 }
 
 /// Contains the precomputed Chinese remainder theorem values.

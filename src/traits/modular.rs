@@ -31,19 +31,19 @@ pub trait UnsignedModularInt:
     fn is_even(&self) -> bool {
         *self & Self::one() == Self::zero()
     }
-    fn bits_precision(&self) -> usize {
+    fn bits_precision(&self) -> u32 {
         // we can check the size of ToBytes
-        core::mem::size_of::<<Self as ToBytes>::Bytes>() * 8
+        (core::mem::size_of::<<Self as ToBytes>::Bytes>() * 8) as u32
     }
-    fn widen(&self, bits: usize) -> Self {
+    fn widen(&self, bits: u32) -> Self {
         // no-op
         *self
     }
-    fn shorten(&self, bits: usize) -> Self {
+    fn shorten(&self, bits: u32) -> Self {
         // no-op
         *self
     }
-    fn one_with_precision(bits: usize) -> Self {
+    fn one_with_precision(bits: u32) -> Self {
         Self::one()
     }
     fn rem_vartime(&self, other: &Self) -> Self {
@@ -86,7 +86,7 @@ where
     pub fn modulus(&self) -> &T {
         &self.modulus
     }
-    pub fn bits_precision(&self) -> usize {
+    pub fn bits_precision(&self) -> u32 {
         self.modulus.bits_precision()
     }
 

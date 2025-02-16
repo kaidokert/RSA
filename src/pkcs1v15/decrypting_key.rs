@@ -33,9 +33,22 @@ where
     }
 }
 
-impl<T> Decryptor for DecryptingKey<T> where T: UnsignedModularInt {}
+impl<T> Decryptor for DecryptingKey<T> where T: UnsignedModularInt {
+    fn decrypt(&self, ciphertext: &[u8], storage: &mut [u8]) -> Result<&[u8]> {
+        todo!()
+    }
+}
 
-impl<T> RandomizedDecryptor for DecryptingKey<T> where T: UnsignedModularInt {}
+impl<T> RandomizedDecryptor for DecryptingKey<T> where T: UnsignedModularInt {
+    fn decrypt_with_rng<R: CryptoRngCore + ?Sized>(
+        &self,
+        rng: &mut R,
+        ciphertext: &[u8],
+        storage: &mut [u8],
+    ) -> Result<&[u8]> {
+        todo!()
+    }
+}
 
 impl<T> EncryptingKeypair for DecryptingKey<T>
 where
