@@ -9,7 +9,7 @@ use {
 };
 
 
-use crate::traits::UnsignedModularInt;
+use crate::traits::{modular::MontyParams, UnsignedModularInt};
 
 use crate::algorithms::rsa::{
     compute_modulus, compute_private_exponent_carmicheal, compute_private_exponent_euler_totient,
@@ -119,6 +119,9 @@ impl<T: UnsignedModularInt> PublicKeyParts<T> for RsaPublicKey<T> {
     fn e(&self) -> &T {
         &self.e
     }
+    fn n_params(&self) -> &MontyParams<T> {
+        todo!()
+    }
 }
 
 impl<T: UnsignedModularInt + Clone> RsaPublicKey<T> {
@@ -195,6 +198,9 @@ impl<T: UnsignedModularInt> PublicKeyParts<T> for RsaPrivateKey<T> {
     }
     fn size(&self) -> usize {
         todo!("Not yet implemented size")
+    }
+    fn n_params(&self) -> &MontyParams<T> {
+        todo!()
     }
 }
 

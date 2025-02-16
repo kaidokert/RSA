@@ -4,6 +4,7 @@ use num_traits::{Num, One, PrimInt, Signed, Unsigned, Zero};
 use zeroize::Zeroize;
 
 use crate::traits::modular::UnsignedModularInt;
+use crate::traits::modular::MontyParams;
 
 /// Components of an RSA public key.
 pub trait PublicKeyParts<T>
@@ -20,6 +21,14 @@ where
     /// or by this public key will have the same size.
     fn size(&self) -> usize {
         (self.n().bits() + 7) / 8
+    }
+
+    /// Returns the parameters for montgomery operations.
+    fn n_params(&self) -> &MontyParams<T>;
+
+    /// Returns precision (in bits) of `n`.
+    fn n_bits_precision(&self) -> usize {
+        self.n().bits_precision()
     }
 }
 

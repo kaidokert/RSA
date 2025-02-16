@@ -257,6 +257,7 @@ mod tests {
 
     use digest::{Digest, DynDigest, FixedOutputReset};
     use num_traits::FromPrimitive;
+    use proptest::strategy::NewTree;
     use rand_chacha::{
         rand_core::{RngCore, SeedableRng},
         ChaCha8Rng,
@@ -300,7 +301,24 @@ mod tests {
     #[test]
     #[ignore]
     fn test_encrypt_decrypt_oaep() {
-        todo!()
+        let priv_key = get_private_key::<u32>();
+        do_test_encrypt_decrypt_oaep::<_, Sha1>(&priv_key);
+        do_test_encrypt_decrypt_oaep::<_, Sha224>(&priv_key);
+        do_test_encrypt_decrypt_oaep::<_, Sha256>(&priv_key);
+        do_test_encrypt_decrypt_oaep::<_, Sha384>(&priv_key);
+        do_test_encrypt_decrypt_oaep::<_, Sha512>(&priv_key);
+        do_test_encrypt_decrypt_oaep::<_, Sha3_256>(&priv_key);
+        do_test_encrypt_decrypt_oaep::<_, Sha3_384>(&priv_key);
+        do_test_encrypt_decrypt_oaep::<_, Sha3_512>(&priv_key);
+
+        do_test_oaep_with_different_hashes::<_, Sha1, Sha1>(&priv_key);
+        do_test_oaep_with_different_hashes::<_, Sha224, Sha1>(&priv_key);
+        do_test_oaep_with_different_hashes::<_, Sha256, Sha1>(&priv_key);
+        do_test_oaep_with_different_hashes::<_, Sha384, Sha1>(&priv_key);
+        do_test_oaep_with_different_hashes::<_, Sha512, Sha1>(&priv_key);
+        do_test_oaep_with_different_hashes::<_, Sha3_256, Sha1>(&priv_key);
+        do_test_oaep_with_different_hashes::<_, Sha3_384, Sha1>(&priv_key);
+        do_test_oaep_with_different_hashes::<_, Sha3_512, Sha1>(&priv_key);
     }
 
     fn get_label(rng: &mut ChaCha8Rng) -> Option<String> {
@@ -335,7 +353,24 @@ mod tests {
     #[test]
     #[ignore]
     fn test_encrypt_decrypt_oaep_traits() {
-        todo!()
+        let priv_key = get_private_key::<u32>();
+        do_test_encrypt_decrypt_oaep_traits::<_, Sha1>(&priv_key);
+        do_test_encrypt_decrypt_oaep_traits::<_, Sha224>(&priv_key);
+        do_test_encrypt_decrypt_oaep_traits::<_, Sha256>(&priv_key);
+        do_test_encrypt_decrypt_oaep_traits::<_, Sha384>(&priv_key);
+        do_test_encrypt_decrypt_oaep_traits::<_, Sha512>(&priv_key);
+        do_test_encrypt_decrypt_oaep_traits::<_, Sha3_256>(&priv_key);
+        do_test_encrypt_decrypt_oaep_traits::<_, Sha3_384>(&priv_key);
+        do_test_encrypt_decrypt_oaep_traits::<_, Sha3_512>(&priv_key);
+
+        do_test_oaep_with_different_hashes_traits::<_, Sha1, Sha1>(&priv_key);
+        do_test_oaep_with_different_hashes_traits::<_, Sha224, Sha1>(&priv_key);
+        do_test_oaep_with_different_hashes_traits::<_, Sha256, Sha1>(&priv_key);
+        do_test_oaep_with_different_hashes_traits::<_, Sha384, Sha1>(&priv_key);
+        do_test_oaep_with_different_hashes_traits::<_, Sha512, Sha1>(&priv_key);
+        do_test_oaep_with_different_hashes_traits::<_, Sha3_256, Sha1>(&priv_key);
+        do_test_oaep_with_different_hashes_traits::<_, Sha3_384, Sha1>(&priv_key);
+        do_test_oaep_with_different_hashes_traits::<_, Sha3_512, Sha1>(&priv_key);
     }
 
     fn do_test_encrypt_decrypt_oaep_traits<T: UnsignedModularInt, D: Digest + FixedOutputReset>(
