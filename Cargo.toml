@@ -17,10 +17,10 @@ num-traits = { version = "0.2.19", default-features = false, features = ["i128"]
 num-integer = { version = "0.1.39", default-features = false }
 rand_core = { version = "0.6.4", default-features = false }
 const-oid = { version = "0.10.0-rc.3", default-features = false }
-subtle = { version = "2.1.1", default-features = false }
+subtle = { version = "2.6.1", default-features = false }
 digest = { version = "=0.11.0-pre.9", default-features = false, features = ["oid"] }
-pkcs1 = { version = "0.8.0-rc.0", default-features = false, features = ["pkcs8"] }
-pkcs8 = { version = "0.11.0-rc.0", default-features = false }
+pkcs1 = { version = "0.8.0-rc.1", default-features = false, features = ["pkcs8"] }
+pkcs8 = { version = "0.11.0-rc.1", default-features = false }
 signature = { version = "=2.3.0-pre.4", default-features = false, features = ["digest", "rand_core"] }
 spki = { version = "0.8.0-rc.1", default-features = false }
 zeroize = { version = "1.8.1", default-features=false }
@@ -49,17 +49,19 @@ sha3 = { version = "=0.11.0-pre.4", default-features = false, features = ["oid"]
 num-bigint = { version = "0.8.2", features = ["i128", "prime", "zeroize"], default-features = false, package = "num-bigint-dig" }
 crypto-bigint = { package = "crypto-bigint", git = "https://github.com/kaidokert/crypto-bigint.git", tag = "v0.6.1_rsa_patch_1", default-features = false, features = ["zeroize"] }
 fixed-bigint = { version = "0.1.11", features=["zeroize","use-unsafe"] }
+hex = { version = "0.4.3", features = ["serde"] }
+serde_json = "1.0.138"
+serde = { version = "1.0.184", features = ["derive"] }
 
 [features]
 default = [ "std" ]
 hazmat = []
 getrandom = ["rand_core/getrandom"]
-nightly = []
 serde = ["dep:serde", "dep:serdect"]
 pem = []
 pkcs5 = []
-u64_digit = []
-std = ["digest/std", "rand_core/std", "signature/std"]
+std = ["digest/std", "pkcs1/std", "pkcs8/std", "rand_core/std", "signature/std"]
+
 
 [package.metadata.docs.rs]
 features = ["std", "pem", "serde", "hazmat", "sha2"]
@@ -68,6 +70,5 @@ rustdoc-args = ["--cfg", "docsrs"]
 [profile.dev]
 opt-level = 2
 
-[patch.crates-io]
-pkcs1 = { git = "https://github.com/RustCrypto/formats.git" }
-pkcs8 = { git = "https://github.com/RustCrypto/formats.git" }
+[profile.bench]
+debug = true

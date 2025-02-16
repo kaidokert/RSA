@@ -108,11 +108,10 @@ mod tests {
         use serde_test::{assert_tokens, Configure, Token};
         /*
         let signature = Signature {
-            inner: BigUint::new(Vec::from([42])),
-            len: 1,
+            inner: BoxedUint::from(42u32),
         };
 
-        let tokens = [Token::Str("2a")];
+        let tokens = [Token::Str("000000000000002a")];
         assert_tokens(&signature.readable(), &tokens);
          */
     }
