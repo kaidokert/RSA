@@ -1,21 +1,23 @@
 use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 use rsa_heapless::pkcs1v15::EncryptingKey;
-use rsa_heapless::traits::RandomizedEncryptor;
+use rsa_heapless::traits::{RandomizedEncryptor, UnsignedModularInt};
 use rsa_heapless::RsaPublicKey;
 
-use fixed_bigint::FixedUInt;
+type CreateKey<'a, T> = &'a dyn Fn(&[u8]) -> T;
 
-#[test]
-fn test_encrypt() {
-    let e: FixedUInt<u32, 8> = 3u8.into();
+fn test_encrypt<T>(create_key: CreateKey<T>) -> Result<(), i8>
+where
+    T: UnsignedModularInt + From<u8>,
+    <T as fixed_bigint::num_traits::FromBytes>::Bytes: Default,
+{
     let modulus: [u8; 32] = [
         0xBD, 0xE3, 0x6F, 0x89, 0xE0, 0x61, 0x3B, 0xAB, 0x1E, 0x02, 0x41, 0xFD, 0xD3, 0x40, 0xDE,
         0x82, 0xD7, 0x2F, 0x4E, 0x4F, 0x6F, 0x07, 0x00, 0x4B, 0x24, 0x8C, 0x20, 0x42, 0x81, 0x27,
         0x54, 0xFD,
     ];
-    let n = FixedUInt::<u32, 8>::from_be_bytes(&modulus);
-    let key = RsaPublicKey::new(n, e).unwrap();
+    let n = create_key(&modulus);
+    let key = RsaPublicKey::new(n, 3u8.into()).unwrap();
     let encrypting_key = EncryptingKey::new(key);
 
     let mut rng = ChaCha8Rng::from_seed([42; 32]);
@@ -31,5 +33,28 @@ fn test_encrypt() {
             0xa2, 0x5f, 0xba, 0xfd, 0x44, 0x8, 0x53, 0xc3, 0xde, 0x3b, 0x93, 0xf8, 0x29, 0x75,
             0xad, 0x57, 0xd1, 0x28
         ]
-    )
+    );
+    Ok(())
+}
+
+#[test]
+fn test_with_fixed_bigint() {
+    test_encrypt::<fixed_bigint::FixedUInt<u32, 8>>(&|bytes| {
+        fixed_bigint::FixedUInt::<u32, 8>::from_be_bytes(bytes)
+    })
+    .unwrap();
+}
+
+#[test]
+fn test_with_fixed_bigint_8_bit_math() {
+    test_encrypt::<fixed_bigint::FixedUInt<u8, 32>>(&|bytes| {
+        fixed_bigint::FixedUInt::<u8, 32>::from_be_bytes(bytes)
+    })
+    .unwrap();
+}
+
+#[test]
+fn test_with_crypto_bigint() {
+    test_encrypt::<crypto_bigint::U256>(&|bytes| crypto_bigint::U256::from_be_slice(bytes))
+        .unwrap();
 }

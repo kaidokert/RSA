@@ -58,6 +58,14 @@ fn test_with_fixed_bigint() {
 }
 
 #[test]
+fn test_with_fixed_bigint_8_bit_math() {
+    test_verify_512_bit::<fixed_bigint::FixedUInt<u8, 64>>(
+        &|bytes| 
+        fixed_bigint::FixedUInt::<u8, 64>::from_be_bytes(bytes)
+    ).unwrap();
+}
+
+#[test]
 #[ignore]
 fn test_with_bnum() {
     test_verify_512_bit::<bnum::types::U512>(
