@@ -16,6 +16,9 @@ pub trait UnsignedModularInt:
     + core::ops::RemAssign
     + core::ops::MulAssign
     + core::fmt::Debug
+    + for<'a> core::ops::RemAssign<&'a Self>
+    + for<'a> core::ops::Rem<&'a Self>
+    + for<'a> core::ops::DivAssign<&'a Self>
 {
     fn bits(&self) -> usize {
         let mut count = 0;
@@ -69,6 +72,9 @@ impl<T> UnsignedModularInt for T where
         + core::ops::RemAssign
         + core::ops::MulAssign
         + core::fmt::Debug
+        + for<'a> core::ops::RemAssign<&'a T>
+        + for<'a> core::ops::Rem<&'a T>
+        + for<'a> core::ops::DivAssign<&'a T>
 {
 }
 
