@@ -135,7 +135,6 @@ where
     result
 }
 
-
 #[cfg(test)]
 macro_rules! select_mod_mul {
     ($mod_mul:path, $t:ty, by_ref) => {

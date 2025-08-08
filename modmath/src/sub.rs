@@ -1,4 +1,3 @@
-
 /// # Modular Subtraction (Basic)
 /// Simple version that operates on values and copies them. Requires
 /// `WrappingAdd` and `WrappingSub` traits to be implemented.

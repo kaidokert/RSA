@@ -1,6 +1,5 @@
 use super::mul::{basic_mod_mul, constrained_mod_mul, strict_mod_mul};
 
-
 /// # Modular Exponentiation (Basic)
 /// Simple version that operates on values and copies them. Requires
 /// `WrappingAdd` and `WrappingSub` traits to be implemented.
