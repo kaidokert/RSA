@@ -16,30 +16,35 @@ rust-version = "1.83"
 num-traits = { version = "0.2.19", default-features = false, features = ["i128"] }
 num-integer = { version = "0.1.39", default-features = false }
 rand_core = { version = "0.6.4", default-features = false }
-const-oid = { version = "0.10.0-rc.3", default-features = false }
 subtle = { version = "2.6.1", default-features = false }
-block-buffer = { version = "=0.11.0-rc.3", default-features = false } # pin: 0.11.0 stable broke hybrid-array compat with digest pre.9
-digest = { version = "=0.11.0-pre.9", default-features = false, features = ["oid"] }
-pkcs1 = { version = "0.8.0-rc.1", default-features = false }
-pkcs8 = { version = "0.11.0-rc.1", default-features = false }
-signature = { version = "=2.3.0-pre.4", default-features = false, features = ["digest", "rand_core"] }
-spki = { version = "0.8.0-rc.1", default-features = false }
 zeroize = { version = "1.8.1", default-features=false }
+heapless = { version = "0.8.0", default-features = false }
+modmath = { version = "0.1.0", default-features = false }
+# modmath = { path = "../modmath" }
+
+# Exact pins for RustCrypto pre-release crates: newer versions use edition 2024
+# (requires Rust 1.85+) which breaks MSRV 1.83, and have incompatible API changes.
+const-oid = { version = "=0.10.0-rc.3", default-features = false }
+der = { version = "=0.8.0-rc.1", default-features = false }
+crypto-common = { version = "=0.2.0-rc.1", default-features = false }
+block-buffer = { version = "=0.11.0-rc.3", default-features = false }
+digest = { version = "=0.11.0-pre.9", default-features = false, features = ["oid"] }
+pkcs1 = { version = "=0.8.0-rc.1", default-features = false, features = ["pkcs8"] }
+pkcs8 = { version = "=0.11.0-rc.1", default-features = false }
+signature = { version = "=2.3.0-pre.4", default-features = false, features = ["digest", "rand_core"] }
+spki = { version = "=0.8.0-rc.1", default-features = false }
 
 # optional dependencies
 sha1 = { version = "=0.11.0-pre.4", optional = true, default-features = false, features = ["oid"] }
 serdect = { version = "0.3.0", optional = true, default-features = false, features = ["derive"] }
 sha2 = { version = "=0.11.0-pre.4", optional = true, default-features = false, features = ["oid"] }
 serde = { version = "1.0.184", optional = true, default-features = false, features = ["derive"] }
-heapless = { version = "0.8.0", default-features = false }
-modmath = { version = "0.1.0", default-features = false }
-# modmath = { path = "../modmath" }
 
 
 [dev-dependencies]
-base64ct = { version = "1", features = ["alloc"] }
+base64ct = { version = "1.7", features = ["alloc"] }
 hex-literal = "0.4.1"
-proptest = "1"
+proptest = "1.9"
 serde_test = "1.0.89"
 rand_xorshift = "0.3"
 rand_chacha = "0.3"
