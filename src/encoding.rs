@@ -47,11 +47,12 @@ where
     fn try_from(private_key_info: pkcs8::PrivateKeyInfoRef<'_>) -> pkcs8::Result<Self> {
         verify_algorithm_id(&private_key_info.algorithm)?;
 
-        let pkcs1_key = pkcs1::RsaPrivateKey::try_from(private_key_info.private_key)?;
+        let pkcs1_key = pkcs1::RsaPrivateKey::try_from(private_key_info.private_key)
+            .map_err(|_| pkcs8::Error::KeyMalformed)?;
 
         // Multi-prime RSA keys not currently supported
         if pkcs1_key.version() != pkcs1::Version::TwoPrime {
-            return Err(pkcs1::Error::Version.into());
+            return Err(pkcs8::Error::KeyMalformed);
         }
 
         todo!()
@@ -71,7 +72,8 @@ where
             spki.subject_public_key
                 .as_bytes()
                 .ok_or(pkcs8::spki::Error::KeyMalformed)?,
-        )?;
+        )
+        .map_err(|_| pkcs8::spki::Error::KeyMalformed)?;
         todo!()
     }
 }
