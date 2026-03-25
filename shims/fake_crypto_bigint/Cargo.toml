@@ -1,0 +1,15 @@
+[package]
+name = "crypto-bigint"
+version = "0.6.0"
+edition = "2024"
+
+[dependencies]
+real_crypto_bigint = { package = "crypto-bigint", version = "=0.6.0", default-features = false, features = ["zeroize"] }
+
+[features]
+default = []
+alloc = ["real_crypto_bigint/alloc"]
+zeroize = ["real_crypto_bigint/zeroize"]
+rand_core = ["real_crypto_bigint/rand_core"]
+serde = ["real_crypto_bigint/serde"]
+rand = ["real_crypto_bigint/rand"]
