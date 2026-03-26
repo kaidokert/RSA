@@ -249,7 +249,6 @@ pub mod pss;
 pub mod traits;
 
 mod dummy_rng;
-#[cfg(feature = "alloc")]
 mod encoding;
 mod key;
 
