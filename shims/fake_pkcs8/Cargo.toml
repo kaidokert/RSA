@@ -1,11 +1,11 @@
 [package]
 name = "pkcs8"
-version = "0.11.0-rc.1"
+version = "0.11.0-rc.10"
 edition = "2024"
 
 [dependencies]
-real_pkcs8 = { package = "pkcs8", version = "=0.11.0-rc.1", default-features = false, features = [] }
-const-oid = { version = "0.10.0-rc.3", default-features = false }
+real_pkcs8 = { package = "pkcs8", version = "0.11.0-rc.10", default-features = false, features = [] }
+const-oid = { version = "0.10", default-features = false }
 spki = { path = "../fake_spki", package = "spki", default-features = false, features = [] }
 
 [features]

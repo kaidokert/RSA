@@ -1,5 +1,6 @@
 #![cfg_attr(not(test), no_std)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
+#![cfg_attr(not(feature = "alloc"), allow(unused))]
 #![doc = include_str!("../README.md")]
 #![doc(html_logo_url = "https://raw.githubusercontent.com/RustCrypto/meta/master/logo_small.png")]
 #![warn(missing_docs)]
@@ -240,12 +241,15 @@ pub use signature;
 
 mod algorithms;
 pub mod errors;
+#[cfg(feature = "alloc")]
 pub mod oaep;
 pub mod pkcs1v15;
+#[cfg(feature = "alloc")]
 pub mod pss;
 pub mod traits;
 
 mod dummy_rng;
+#[cfg(feature = "alloc")]
 mod encoding;
 mod key;
 
@@ -256,6 +260,7 @@ pub use pkcs8;
 #[cfg(feature = "sha2")]
 pub use sha2;
 
+#[cfg(feature = "alloc")]
 pub use crate::{
     errors::{Error, Result},
     key::{RsaPrivateKey, RsaPublicKey},
@@ -265,5 +270,13 @@ pub use crate::{
     traits::keys::CrtValue,
 };
 
-#[cfg(feature = "hazmat")]
+#[cfg(not(feature = "alloc"))]
+pub use crate::{
+    errors::{Error, Result},
+    key::{RsaPrivateKey, RsaPublicKey},
+    pkcs1v15::{Pkcs1v15Encrypt, Pkcs1v15Sign},
+    traits::keys::CrtValue,
+};
+
+#[cfg(all(feature = "hazmat", feature = "alloc"))]
 pub mod hazmat;

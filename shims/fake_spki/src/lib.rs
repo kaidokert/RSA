@@ -2,7 +2,7 @@
 
 #[cfg(feature = "alloc")]
 pub use real_spki::{
-    AlgorithmIdentifierOwned, AlgorithmIdentifierRef, AssociatedAlgorithmIdentifier,
+    AlgorithmIdentifierOwned, DynSignatureAlgorithmIdentifier, AlgorithmIdentifierRef, AssociatedAlgorithmIdentifier,
     DecodePublicKey, Document, EncodePublicKey, Error, Result, SignatureAlgorithmIdentifier,
     SignatureBitStringEncoding,
 };

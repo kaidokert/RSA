@@ -5,7 +5,7 @@ use core::hash::{Hash, Hasher};
 
 use crypto_bigint::{
     modular::{BoxedMontyForm, BoxedMontyParams},
-    BoxedUint, ConcatenatingMul, Integer, NonZero, Odd, Resize,
+    BitOps, BoxedUint, ConcatenatingMul, Integer, NonZero, Odd, Resize,
 };
 use rand_core::CryptoRng;
 use zeroize::{Zeroize, ZeroizeOnDrop};
@@ -16,6 +16,7 @@ use {
     spki::{DecodePublicKey, EncodePublicKey},
 };
 
+#[cfg(feature = "alloc")]
 use crate::algorithms::generate::generate_multi_prime_key_with_exp;
 use crate::algorithms::rsa::{
     compute_modulus, compute_private_exponent_carmicheal, compute_private_exponent_euler_totient,
@@ -309,13 +310,22 @@ impl RsaPrivateKey {
             return Err(Error::ModulusTooSmall);
         }
 
-        let components = generate_multi_prime_key_with_exp(rng, 2, bit_size, exp)?;
-        RsaPrivateKey::from_components(
-            components.n.get(),
-            components.e,
-            components.d,
-            components.primes,
-        )
+        #[cfg(feature = "alloc")]
+        {
+            let components = generate_multi_prime_key_with_exp(rng, 2, bit_size, exp)?;
+            RsaPrivateKey::from_components(
+                components.n.get(),
+                components.e,
+                components.d,
+                components.primes,
+            )
+        }
+
+        #[cfg(not(feature = "alloc"))]
+        {
+            let _ = (rng, bit_size, exp);
+            todo!("generate_multi_prime_key_with_exp is not implemented yet")
+        }
     }
 
     /// Generate a new RSA key pair of the given bit size and the public exponent
@@ -332,13 +342,21 @@ impl RsaPrivateKey {
         bit_size: usize,
         exp: BoxedUint,
     ) -> Result<RsaPrivateKey> {
-        let components = generate_multi_prime_key_with_exp(rng, 2, bit_size, exp)?;
-        RsaPrivateKey::from_components(
-            components.n.get(),
-            components.e,
-            components.d,
-            components.primes,
-        )
+        #[cfg(feature = "alloc")]
+        {
+            let components = generate_multi_prime_key_with_exp(rng, 2, bit_size, exp)?;
+            RsaPrivateKey::from_components(
+                components.n.get(),
+                components.e,
+                components.d,
+                components.primes,
+            )
+        }
+
+        #[cfg(not(feature = "alloc"))]
+        {
+            todo!("generate_multi_prime_key_with_exp is not implemented yet")
+        }
     }
 
     /// Private helper function that constructs an RSA key pair from components
@@ -904,6 +922,7 @@ mod tests {
 
     macro_rules! key_generation {
         ($name:ident, $multi:expr, $size:expr) => {
+            #[cfg(feature = "alloc")]
             #[test]
             fn $name() {
                 let mut rng = ChaCha8Rng::from_seed([42; 32]);
@@ -924,6 +943,11 @@ mod tests {
 
                     test_key_basics(&private_key);
                 }
+            }
+            #[cfg(not(feature = "alloc"))]
+            #[test]
+            fn $name() {
+                todo!("generate_multi_prime_key_with_exp is not implemented yet");
             }
         };
     }

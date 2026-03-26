@@ -21,6 +21,7 @@ pub struct Signature {
     pub(super) inner: BoxedUint,
 }
 
+#[cfg(feature = "alloc")]
 impl SignatureEncoding for Signature {
     type Repr = Box<[u8]>;
 }
@@ -42,12 +43,14 @@ impl TryFrom<&[u8]> for Signature {
     }
 }
 
+#[cfg(feature = "alloc")]
 impl From<Signature> for Box<[u8]> {
     fn from(signature: Signature) -> Box<[u8]> {
         signature.inner.to_be_bytes()
     }
 }
 
+#[cfg(feature = "alloc")]
 impl LowerHex for Signature {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         for byte in self.to_bytes().iter() {
@@ -57,6 +60,7 @@ impl LowerHex for Signature {
     }
 }
 
+#[cfg(feature = "alloc")]
 impl UpperHex for Signature {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         for byte in self.to_bytes().iter() {
@@ -66,6 +70,7 @@ impl UpperHex for Signature {
     }
 }
 
+#[cfg(feature = "alloc")]
 impl Display for Signature {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         write!(f, "{:X}", self)

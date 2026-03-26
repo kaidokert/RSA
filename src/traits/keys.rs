@@ -30,11 +30,13 @@ pub trait PublicKeyParts {
     }
 
     /// Returns the big endian serialization of the modulus of the key
+    #[cfg(feature = "alloc")]
     fn n_bytes(&self) -> Box<[u8]> {
         self.n().to_be_bytes_trimmed_vartime()
     }
 
     /// Returns the big endian serialization of the public exponent of the key
+    #[cfg(feature = "alloc")]
     fn e_bytes(&self) -> Box<[u8]> {
         self.e().to_be_bytes_trimmed_vartime()
     }

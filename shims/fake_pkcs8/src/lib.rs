@@ -6,7 +6,16 @@ pub use real_pkcs8::{
     SubjectPublicKeyInfoRef,
 };
 
+
 pub mod spki {
+    #[cfg(feature = "alloc")]
+    pub use ::spki::{
+        AlgorithmIdentifierOwned, AlgorithmIdentifierRef, AssociatedAlgorithmIdentifier,
+        DecodePublicKey, Document, DynSignatureAlgorithmIdentifier, EncodePublicKey, Error,
+        Result, SignatureAlgorithmIdentifier,
+    };
+
+    #[cfg(not(feature = "alloc"))]
     pub use ::spki::{
         AlgorithmIdentifierOwned, AlgorithmIdentifierRef, AssociatedAlgorithmIdentifier,
         DecodePublicKey, Document, EncodePublicKey, Error, Result, SignatureAlgorithmIdentifier,
@@ -15,14 +24,10 @@ pub mod spki {
     pub mod der {
         pub use ::spki::der::{Any, AnyRef, Result};
     }
-
-    pub trait DynSignatureAlgorithmIdentifier {
-        fn signature_algorithm_identifier(&self) -> Result<AlgorithmIdentifierOwned>;
-    }
 }
 
 pub mod der {
-    pub use real_pkcs8::der::Encode;
+    pub use real_pkcs8::der::{Encode, Decode};
 
     pub mod asn1 {
         pub use real_pkcs8::der::asn1::{BitStringRef, Null, OctetStringRef};
