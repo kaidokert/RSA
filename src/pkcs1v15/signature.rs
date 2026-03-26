@@ -26,6 +26,14 @@ impl SignatureEncoding for Signature {
     type Repr = Box<[u8]>;
 }
 
+#[cfg(not(feature = "alloc"))]
+type SigBytes = [u8; 1024];
+
+#[cfg(not(feature = "alloc"))]
+impl SignatureEncoding for Signature {
+    type Repr = SigBytes;
+}
+
 #[cfg(feature = "encoding")]
 impl SignatureBitStringEncoding for Signature {
     fn to_bitstring(&self) -> DerResult<BitString> {
@@ -50,7 +58,14 @@ impl From<Signature> for Box<[u8]> {
     }
 }
 
-#[cfg(feature = "alloc")]
+
+#[cfg(not(feature = "alloc"))]
+impl From<Signature> for SigBytes {
+    fn from(signature: Signature) -> SigBytes {
+        todo!()
+    }
+}
+
 impl LowerHex for Signature {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         for byte in self.to_bytes().iter() {
@@ -60,7 +75,6 @@ impl LowerHex for Signature {
     }
 }
 
-#[cfg(feature = "alloc")]
 impl UpperHex for Signature {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         for byte in self.to_bytes().iter() {
@@ -70,7 +84,6 @@ impl UpperHex for Signature {
     }
 }
 
-#[cfg(feature = "alloc")]
 impl Display for Signature {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         write!(f, "{:X}", self)
