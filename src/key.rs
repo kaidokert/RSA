@@ -5,8 +5,11 @@ use core::hash::{Hash, Hasher};
 
 use crypto_bigint::{
     modular::{BoxedMontyForm, BoxedMontyParams},
-    BitOps, BoxedUint, ConcatenatingMul, Integer, NonZero, Odd, Resize,
+    BoxedUint, ConcatenatingMul, Integer, NonZero, Odd, Resize,
 };
+#[cfg(not(feature = "alloc"))]
+use crypto_bigint::BitOps;
+
 use rand_core::CryptoRng;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 #[cfg(feature = "serde")]

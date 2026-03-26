@@ -241,7 +241,6 @@ pub use signature;
 
 mod algorithms;
 pub mod errors;
-#[cfg(feature = "alloc")]
 pub mod oaep;
 pub mod pkcs1v15;
 #[cfg(feature = "alloc")]
