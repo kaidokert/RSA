@@ -230,6 +230,7 @@
 #[cfg(doctest)]
 pub struct ReadmeDoctests;
 
+#[cfg(feature = "alloc")]
 #[macro_use]
 extern crate alloc;
 #[cfg(feature = "std")]
