@@ -1,0 +1,10 @@
+[package]
+name = "integrate_thumb"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+cortex-m = "0.7"
+cortex-m-rt = "0.7.5"
+panic-semihosting = "0.6.0"
+rsa = { path = "../", package = "rsa" , default-features = false}
