@@ -2,3 +2,9 @@
 **/*.rs.bk
 shims/fake_crypto_bigint/target/
 shims/fake_crypto_bigint/Cargo.lock
+integrate_thumb/target/
+integrate_thumb/Cargo.lock
+shims/fake_spki/target/
+shims/fake_spki/Cargo.lock
+shims/fake_pkcs8/target/
+shims/fake_pkcs8/Cargo.lock
