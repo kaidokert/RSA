@@ -57,7 +57,6 @@ use rand_core::TryCryptoRng;
 
 #[cfg(feature="alloc")]
 use crate::algorithms::pad::{uint_to_be_pad, uint_to_zeroizing_be_pad};
-#[cfg(not(feature="alloc"))]
 use crate::algorithms::pad::uint_to_be_pad_noalloc;
 use crate::algorithms::pkcs1v15::*;
 #[cfg(feature="full")]
@@ -284,16 +283,9 @@ fn sign<R: TryCryptoRng + ?Sized>(
 #[cfg(feature = "alloc")]
 #[inline]
 fn verify(pub_key: &RsaPublicKey, prefix: &[u8], hashed: &[u8], sig: &BoxedUint) -> Result<()> {
-    let n = pub_key.n();
-    if sig >= n.as_ref() || sig.bits_precision() != pub_key.n_bits_precision() {
-        return Err(Error::Verification);
-    }
-
-    let em = uint_to_be_pad(rsa_encrypt(pub_key, sig)?, pub_key.size())?;
-
-    pkcs1v15_sign_unpad(prefix, hashed, &em, pub_key.size())
+    let mut storage = vec![0u8; pub_key.size()];
+    verify_noalloc(pub_key, prefix, hashed, sig, &mut storage)
 }
-#[cfg(not(feature = "alloc"))]
 fn verify_noalloc(pub_key: &RsaPublicKey, prefix: &[u8], hashed: &[u8], sig: &BoxedUint, storage: &mut [u8]) -> Result<()> {
     let n = pub_key.n();
     if sig >= n.as_ref() || sig.bits_precision() != pub_key.n_bits_precision() {
