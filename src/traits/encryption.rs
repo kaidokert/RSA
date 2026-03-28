@@ -1,11 +1,13 @@
 //! Encryption-related traits.
 
+#[cfg(feature = "alloc")]
 use alloc::vec::Vec;
 use rand_core::CryptoRng;
 
 use crate::errors::Result;
 
 /// Encrypt the message using provided random source
+#[cfg(feature = "full")]
 pub trait RandomizedEncryptor {
     /// Encrypt the given message.
     fn encrypt_with_rng<R: CryptoRng + ?Sized>(&self, rng: &mut R, msg: &[u8]) -> Result<Vec<u8>>;
@@ -18,6 +20,7 @@ pub trait Decryptor {
 }
 
 /// Decrypt the given message using provided random source
+#[cfg(feature = "full")]
 pub trait RandomizedDecryptor {
     /// Decrypt the given message.
     fn decrypt_with_rng<R: CryptoRng + ?Sized>(

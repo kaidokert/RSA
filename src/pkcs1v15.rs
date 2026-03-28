@@ -37,6 +37,7 @@ pub use self::{
     signing_key::SigningKey, verifying_key::VerifyingKey,
 };
 
+#[cfg(feature = "alloc")]
 use alloc::{boxed::Box, vec::Vec};
 use const_oid::AssociatedOid;
 use core::fmt::Debug;
@@ -56,6 +57,7 @@ use crate::traits::{PaddingScheme, PublicKeyParts, SignatureScheme};
 pub struct Pkcs1v15Encrypt;
 
 impl PaddingScheme for Pkcs1v15Encrypt {
+    #[cfg(feature="full")]
     fn decrypt<Rng: TryCryptoRng + ?Sized>(
         self,
         rng: Option<&mut Rng>,
@@ -112,6 +114,7 @@ impl Pkcs1v15Sign {
 }
 
 impl SignatureScheme for Pkcs1v15Sign {
+    #[cfg(feature="full")]
     fn sign<Rng: TryCryptoRng + ?Sized>(
         self,
         rng: Option<&mut Rng>,

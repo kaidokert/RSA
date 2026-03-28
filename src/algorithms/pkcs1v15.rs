@@ -6,6 +6,7 @@
 //!
 //! [RFC8017 § 8.2]: https://datatracker.ietf.org/doc/html/rfc8017#section-8.2
 
+#[cfg(feature = "alloc")]
 use alloc::vec::Vec;
 use const_oid::AssociatedOid;
 use crypto_bigint::{Choice, CtAssign, CtEq, CtSelect};

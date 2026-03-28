@@ -242,14 +242,18 @@ pub use signature;
 
 mod algorithms;
 pub mod errors;
+#[cfg(feature = "full")]
 pub mod oaep;
+#[cfg(feature = "full")]
 pub mod pkcs1v15;
 #[cfg(feature = "alloc")]
 pub mod pss;
+#[cfg(not(feature = "hack"))]
 pub mod traits;
 
 mod dummy_rng;
 mod encoding;
+#[cfg(not(feature = "hack"))]
 mod key;
 
 #[cfg(feature = "encoding")]
@@ -269,11 +273,18 @@ pub use crate::{
     traits::keys::CrtValue,
 };
 
-#[cfg(not(feature = "alloc"))]
+#[cfg(all(not(feature = "alloc"), feature = "full"))]
 pub use crate::{
     errors::{Error, Result},
     key::{RsaPrivateKey, RsaPublicKey},
     pkcs1v15::{Pkcs1v15Encrypt, Pkcs1v15Sign},
+    traits::keys::CrtValue,
+};
+
+#[cfg(all(not(feature = "alloc"), not(feature = "full"), not(feature = "hack")))]
+pub use crate::{
+    errors::{Error, Result},
+    key::{RsaPublicKey},
     traits::keys::CrtValue,
 };
 

@@ -1,5 +1,6 @@
 //! `RSASSA-PKCS1-v1_5` signatures.
 
+#[cfg(feature = "alloc")]
 use alloc::boxed::Box;
 use core::fmt::{Debug, Display, Formatter, LowerHex, UpperHex};
 use crypto_bigint::BoxedUint;

@@ -1,5 +1,6 @@
 use super::{pkcs1v15_generate_prefix, sign, Signature, VerifyingKey};
 use crate::{dummy_rng::DummyRng, Result, RsaPrivateKey};
+#[cfg(feature = "alloc")]
 use alloc::vec::Vec;
 use const_oid::AssociatedOid;
 use core::marker::PhantomData;

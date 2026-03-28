@@ -146,6 +146,7 @@ where
     D: Digest + FixedOutputReset,
     MGD: Digest + FixedOutputReset,
 {
+    #[cfg(feature="full")]
     fn decrypt<Rng: TryCryptoRng + ?Sized>(
         mut self,
         rng: Option<&mut Rng>,

@@ -1,5 +1,6 @@
 //! Traits related to the key components
 
+#[cfg(feature = "alloc")]
 use alloc::boxed::Box;
 use crypto_bigint::{
     modular::{BoxedMontyForm, BoxedMontyParams},

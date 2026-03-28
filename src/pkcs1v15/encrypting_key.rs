@@ -1,5 +1,6 @@
 use super::encrypt;
 use crate::{traits::RandomizedEncryptor, Result, RsaPublicKey};
+#[cfg(feature = "alloc")]
 use alloc::vec::Vec;
 use rand_core::CryptoRng;
 #[cfg(feature = "serde")]

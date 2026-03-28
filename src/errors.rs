@@ -77,6 +77,9 @@ pub enum Error {
 
     /// Random number generator error.
     Rng,
+
+    /// Output buffer too small
+    OutputBufferTooSmall,
 }
 
 impl core::error::Error for Error {}
@@ -111,6 +114,7 @@ impl core::fmt::Display for Error {
             Error::InvalidArguments => write!(f, "invalid arguments"),
             Error::Decode(err) => write!(f, "{:?}", err),
             Error::Rng => write!(f, "rng error"),
+            Error::OutputBufferTooSmall => write!(f, "output buffer too small"),
         }
     }
 }

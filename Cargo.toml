@@ -52,7 +52,7 @@ rstest = "0.26.1"
 name = "key"
 
 [features]
-default = ["std", "encoding"]
+default = ["std", "encoding", "full" ]
 encoding = ["dep:pkcs1", "dep:pkcs8", "dep:spki"]
 hazmat = []
 getrandom = ["crypto-bigint/getrandom", "crypto-common"]
@@ -60,6 +60,8 @@ serde = ["encoding", "dep:serde", "dep:serdect", "crypto-bigint/serde"]
 pkcs5 = ["pkcs8/encryption"]
 std = ["alloc", "pkcs1?/std", "pkcs8?/std"]
 alloc = ["crypto-bigint/shalloc", "crypto-bigint/alloc", "pkcs8/alloc", "spki/alloc"]
+full = []
+hack = []
 
 [package.metadata.docs.rs]
 features = ["std", "serde", "hazmat", "sha2"]

@@ -104,6 +104,7 @@ impl<D> SignatureScheme for Pss<D>
 where
     D: Digest + FixedOutputReset,
 {
+    #[cfg(feature="full")]
     fn sign<Rng: TryCryptoRng + ?Sized>(
         mut self,
         rng: Option<&mut Rng>,
