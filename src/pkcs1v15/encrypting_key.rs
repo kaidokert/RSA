@@ -23,6 +23,7 @@ impl EncryptingKey {
 }
 
 impl RandomizedEncryptor for EncryptingKey {
+    #[cfg(feature = "alloc")]
     fn encrypt_with_rng<R: CryptoRng + ?Sized>(&self, rng: &mut R, msg: &[u8]) -> Result<Vec<u8>> {
         encrypt(rng, &self.inner, msg)
     }

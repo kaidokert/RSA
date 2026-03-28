@@ -22,6 +22,7 @@ use {
 
 #[cfg(feature = "alloc")]
 use crate::algorithms::generate::generate_multi_prime_key_with_exp;
+#[cfg(feature = "full")]
 use crate::algorithms::rsa::{
     compute_modulus, compute_private_exponent_carmicheal, compute_private_exponent_euler_totient,
     recover_primes,
@@ -206,6 +207,7 @@ impl PublicKeyParts for RsaPublicKey {
 
 impl RsaPublicKey {
     /// Encrypt the given message.
+    #[cfg(feature = "alloc")]
     pub fn encrypt<R: CryptoRng + ?Sized, P: PaddingScheme>(
         &self,
         rng: &mut R,

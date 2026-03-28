@@ -53,6 +53,12 @@ mod no_alloc {
         }
     }
 
+    impl AsMut<[u8]> for ByteBoxHolder<u8> {
+        fn as_mut(&mut self) -> &mut [u8] {
+            todo!()
+        }
+    }
+
     #[derive(Clone, Debug, PartialEq, Eq)]
     pub struct Wrapping<T>(pub T);
 

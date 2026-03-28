@@ -26,6 +26,7 @@ pub trait PaddingScheme {
     ) -> Result<Vec<u8>>;
 
     /// Encrypt the given message using the given public key.
+    #[cfg(feature="alloc")]
     fn encrypt<Rng: TryCryptoRng + ?Sized>(
         self,
         rng: &mut Rng,

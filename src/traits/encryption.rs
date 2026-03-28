@@ -7,15 +7,16 @@ use rand_core::CryptoRng;
 use crate::errors::Result;
 
 /// Encrypt the message using provided random source
-#[cfg(feature = "full")]
 pub trait RandomizedEncryptor {
     /// Encrypt the given message.
+    #[cfg(feature = "alloc")]
     fn encrypt_with_rng<R: CryptoRng + ?Sized>(&self, rng: &mut R, msg: &[u8]) -> Result<Vec<u8>>;
 }
 
 /// Decrypt the given message
 pub trait Decryptor {
     /// Decrypt the given message.
+    #[cfg(feature= "alloc")]
     fn decrypt(&self, ciphertext: &[u8]) -> Result<Vec<u8>>;
 }
 

@@ -7,6 +7,7 @@ use panic_semihosting as _;
 use rsa::rand_core::{TryCryptoRng, TryRng};
 use sha1::Sha1;
 use rsa::{
+    rsa_encrypt, BoxedUint, RsaPublicKey,
     pkcs1v15_encrypt_pad_noalloc, pkcs1v15_encrypt_unpad_noalloc,
     pkcs1v15_generate_prefix_noalloc, pkcs1v15_sign_pad_noalloc, uint_to_be_pad_noalloc,
     uint_to_zeroizing_be_pad_noalloc,
@@ -42,6 +43,8 @@ fn main() -> ! {
     let mut sig = [0u8; 32];
     let mut prefix = [0u8; 32];
     let mut rng = DummyRng;
+    let key = RsaPublicKey::new(BoxedUint::from(3233u64), BoxedUint::from(17u64)).unwrap();
+    let msg = BoxedUint::from(42u64);
     loop {
         let _ = uint_to_be_pad_noalloc::<u8>(1u8.into(), 4, &mut buf);
         let _ = uint_to_zeroizing_be_pad_noalloc::<u8>(1u8.into(), 4, &mut buf);
@@ -49,5 +52,6 @@ fn main() -> ! {
         let _ = pkcs1v15_encrypt_unpad_noalloc(&em, 16, &mut sig);
         let prefix = pkcs1v15_generate_prefix_noalloc::<Sha1>(&mut prefix).unwrap();
         let _ = pkcs1v15_sign_pad_noalloc(prefix, &[1u8; 20], 32, &mut sig);
+        let _ = rsa_encrypt(&key, &msg);
     }
 }

@@ -1,4 +1,7 @@
+#[cfg(feature = "alloc")]
 use super::{pkcs1v15_generate_prefix, verify, Signature};
+#[cfg(not(feature = "alloc"))]
+use super::{pkcs1v15_generate_prefix_noalloc, verify_noalloc, Signature};
 use crate::RsaPublicKey;
 #[cfg(feature = "alloc")]
 use alloc::vec::Vec;
@@ -6,6 +9,9 @@ use const_oid::AssociatedOid;
 use core::marker::PhantomData;
 use digest::{Digest, FixedOutput, HashMarker, Update};
 use signature::{hazmat::PrehashVerifier, DigestVerifier, Verifier};
+
+#[cfg(not(feature = "alloc"))]
+use super::{Prefix, pkcs1v15_generate_prefix_helper};
 
 #[cfg(feature = "encoding")]
 use {
@@ -20,6 +26,8 @@ use {
     serdect::serde::{de, ser, Deserialize, Serialize},
     spki::DecodePublicKey,
 };
+#[cfg(not(feature = "alloc"))]
+use crate::traits::PublicKeyParts;
 
 /// Verifying key for `RSASSA-PKCS1-v1_5` signatures as described in [RFC8017 § 8.2].
 ///
@@ -30,7 +38,10 @@ where
     D: Digest,
 {
     pub(super) inner: RsaPublicKey,
+    #[cfg(feature = "alloc")]
     pub(super) prefix: Vec<u8>,
+    #[cfg(not(feature = "alloc"))]
+    pub (super) prefix: Prefix,
     pub(super) phantom: PhantomData<D>,
 }
 
@@ -42,7 +53,10 @@ where
     pub fn new(key: RsaPublicKey) -> Self {
         Self {
             inner: key,
+            #[cfg(feature = "alloc")]
             prefix: pkcs1v15_generate_prefix::<D>(),
+            #[cfg(not(feature = "alloc"))]
+            prefix: pkcs1v15_generate_prefix_helper::<D>(),
             phantom: Default::default(),
         }
     }
@@ -60,7 +74,10 @@ where
     pub fn new_unprefixed(key: RsaPublicKey) -> Self {
         Self {
             inner: key,
+            #[cfg(feature = "alloc")]
             prefix: Vec::new(),
+            #[cfg(not(feature = "alloc"))]
+            prefix: Prefix::new(),
             phantom: Default::default(),
         }
     }
@@ -81,13 +98,26 @@ where
     ) -> signature::Result<()> {
         let mut digest = D::default();
         f(&mut digest)?;
-        verify(
-            &self.inner,
-            &self.prefix,
-            &digest.finalize_fixed(),
-            &signature.inner,
-        )
-        .map_err(|e| e.into())
+        #[cfg(feature = "alloc")]
+        let result = verify(
+                &self.inner,
+                &self.prefix,
+                &digest.finalize_fixed(),
+                &signature.inner,
+            );
+        #[cfg(not(feature = "alloc"))]
+        let result = {
+            let mut storage = self.inner.n().as_ref().to_be_bytes();
+            verify_noalloc(
+                &self.inner,
+                &self.prefix,
+                &digest.finalize_fixed(),
+                &signature.inner,
+                storage.as_mut(),
+            )
+        };
+
+        result.map_err(|e| e.into())
     }
 }
 
@@ -96,7 +126,14 @@ where
     D: Digest,
 {
     fn verify_prehash(&self, prehash: &[u8], signature: &Signature) -> signature::Result<()> {
-        verify(&self.inner, &self.prefix, prehash, &signature.inner).map_err(|e| e.into())
+        #[cfg(feature = "alloc")]
+        let result = verify(&self.inner, &self.prefix, prehash, &signature.inner);
+        #[cfg(not(feature = "alloc"))]
+        let result = {
+            let mut storage = self.inner.n().as_ref().to_be_bytes();
+            verify_noalloc(&self.inner, &self.prefix, prehash, &signature.inner, storage.as_mut())
+        };
+        result.map_err(|e| e.into())
     }
 }
 
@@ -105,13 +142,14 @@ where
     D: Digest,
 {
     fn verify(&self, msg: &[u8], signature: &Signature) -> signature::Result<()> {
-        verify(
-            &self.inner,
-            &self.prefix.clone(),
-            &D::digest(msg),
-            &signature.inner,
-        )
-        .map_err(|e| e.into())
+        #[cfg(feature = "alloc")]
+        let result = verify(&self.inner, &self.prefix, &D::digest(msg), &signature.inner);
+        #[cfg(not(feature = "alloc"))]         
+        let result = {
+            let mut storage = self.inner.n().as_ref().to_be_bytes();
+            verify_noalloc(&self.inner, &self.prefix, &D::digest(msg), &signature.inner, storage.as_mut())
+        };
+        result.map_err(|e| e.into())
     }
 }
 

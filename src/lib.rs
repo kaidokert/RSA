@@ -244,16 +244,13 @@ mod algorithms;
 pub mod errors;
 #[cfg(feature = "full")]
 pub mod oaep;
-#[cfg(feature = "full")]
 pub mod pkcs1v15;
 #[cfg(feature = "alloc")]
 pub mod pss;
-#[cfg(not(feature = "hack"))]
 pub mod traits;
 
 mod dummy_rng;
 mod encoding;
-#[cfg(not(feature = "hack"))]
 mod key;
 
 #[cfg(feature = "encoding")]
@@ -272,6 +269,10 @@ pub use crate::{
     pss::Pss,
     traits::keys::CrtValue,
 };
+#[cfg(not(feature = "alloc"))]
+pub use crate::{
+    errors::Result
+};
 
 #[cfg(all(not(feature = "alloc"), feature = "full"))]
 pub use crate::{
@@ -284,10 +285,9 @@ pub use crate::{
 #[cfg(all(not(feature = "alloc"), not(feature = "full"), not(feature = "hack")))]
 pub use crate::{
     errors::{Error, Result},
-    key::{RsaPublicKey},
+    key::RsaPublicKey,
     traits::keys::CrtValue,
 };
-
 
 #[cfg(all(feature = "hazmat", feature = "alloc"))]
 pub mod hazmat;
@@ -296,7 +296,13 @@ pub mod hazmat;
 #[cfg(feature = "hack")]
 pub use algorithms::pad::{uint_to_be_pad_noalloc, uint_to_zeroizing_be_pad_noalloc};
 #[cfg(feature = "hack")]
-pub use algorithms::pkcs1v15::{
-    pkcs1v15_encrypt_pad_noalloc, pkcs1v15_encrypt_unpad_noalloc,
-    pkcs1v15_generate_prefix_noalloc, pkcs1v15_sign_pad_noalloc,
+pub use {
+    algorithms::{
+        pkcs1v15::{
+            pkcs1v15_encrypt_pad_noalloc, pkcs1v15_encrypt_unpad_noalloc,
+            pkcs1v15_generate_prefix_noalloc, pkcs1v15_sign_pad_noalloc,
+        },
+        rsa::rsa_encrypt,
+    },
+    key::RsaPublicKey,
 };
