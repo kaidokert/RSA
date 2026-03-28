@@ -7,4 +7,5 @@ edition = "2024"
 cortex-m = "0.7"
 cortex-m-rt = "0.7.5"
 panic-semihosting = "0.6.0"
-rsa = { path = "../", package = "rsa" , default-features = false}
+rsa = { path = "../", package = "rsa" , default-features = false , features= ["hack"]}
+sha1 = { version = "0.11.0-rc.0", default-features = false, features = ["oid"] }

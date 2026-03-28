@@ -288,5 +288,15 @@ pub use crate::{
     traits::keys::CrtValue,
 };
 
+
 #[cfg(all(feature = "hazmat", feature = "alloc"))]
 pub mod hazmat;
+
+// export some alloc-compatible methods for testing
+#[cfg(feature = "hack")]
+pub use algorithms::pad::{uint_to_be_pad_noalloc, uint_to_zeroizing_be_pad_noalloc};
+#[cfg(feature = "hack")]
+pub use algorithms::pkcs1v15::{
+    pkcs1v15_encrypt_pad_noalloc, pkcs1v15_encrypt_unpad_noalloc,
+    pkcs1v15_generate_prefix_noalloc, pkcs1v15_sign_pad_noalloc,
+};

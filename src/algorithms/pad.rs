@@ -13,10 +13,22 @@ pub trait NumBytes : core::borrow::Borrow<[u8]>  + Zeroize + AsRef<[u8]>
 {
 }
 
+impl NumBytes for [u8; 1] {}
+
 pub trait UnsignedModularInt : Zeroize {
     type Bytes: NumBytes;
     fn leading_zeros(&self) -> u32;
     fn to_be_bytes(&self) -> Self::Bytes;
+}
+
+impl UnsignedModularInt for u8 {
+    type Bytes = [u8; 1];
+    fn leading_zeros(&self) -> u32 {
+        u8::leading_zeros(*self)
+    }
+    fn to_be_bytes(&self) -> Self::Bytes {
+        u8::to_be_bytes(*self)
+    }
 }
 
 #[cfg(feature = "alloc")]
@@ -40,6 +52,7 @@ impl UnsignedModularInt for BoxedUint {
 
 /// Returns a new vector of the given length, with 0s left padded.
 /// Returns a new vector of the given length, with 0s left padded.
+#[cfg(test)]
 #[cfg(feature = "alloc")]
 #[inline]
 fn left_pad(input: &[u8], padded_len: usize) -> Result<Vec<u8>> {
@@ -73,21 +86,20 @@ fn left_pad_noalloc<'a>(input: &[u8], padded_len: usize, storage: &'a mut [u8]) 
 #[cfg(feature = "alloc")]
 #[inline]
 pub(crate) fn uint_to_be_pad(input: BoxedUint, padded_len: usize) -> Result<Vec<u8>> {
-    let leading_zeros = input.leading_zeros() as usize / 8;
-    let bytes = input.to_be_bytes();
     let mut out = vec![0u8; padded_len];
-    left_pad_noalloc(&bytes[leading_zeros..], padded_len, &mut out)?;
+    uint_to_be_pad_noalloc(input, padded_len, &mut out)?;
     Ok(out)
 }
 
 #[inline]
-pub(crate) fn uint_to_be_pad_noalloc<T>(input: T, padded_len: usize, storage: &mut [u8]) -> Result<&[u8]>
+pub fn uint_to_be_pad_noalloc<T>(input: T, padded_len: usize, storage: &mut [u8]) -> Result<&[u8]>
 where
     T: UnsignedModularInt
 {
-    let be_bytes = input.to_be_bytes();
-    let borrow: &[u8] = be_bytes.borrow();
-    left_pad_noalloc(borrow, padded_len, storage)
+    let leading_zeros = input.leading_zeros() as usize / 8;
+    let bytes = input.to_be_bytes();
+    let borrow: &[u8] = bytes.borrow();
+    left_pad_noalloc(&borrow[leading_zeros..], padded_len, storage)
 }
 
 /// Converts input to the new vector of the given length, using BE and with 0s left padded.
@@ -102,7 +114,7 @@ pub(crate) fn uint_to_zeroizing_be_pad(input: BoxedUint, padded_len: usize) -> R
 }
 
 #[inline]
-pub(crate) fn uint_to_zeroizing_be_pad_noalloc<T>(
+pub fn uint_to_zeroizing_be_pad_noalloc<T>(
     input: T,
     padded_len: usize,
     storage: &mut [u8],

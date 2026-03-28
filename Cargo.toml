@@ -16,10 +16,10 @@ exclude = ["marvin_toolkit/", "thirdparty/"]
 [dependencies]
 const-oid = { version = "0.10", default-features = false }
 crypto-primes = { version = "0.7", default-features = false }
-digest = { version = "0.11", default-features = false, features = ["alloc", "oid"] }
+digest = { version = "0.11", default-features = false, features = ["oid"] }
 rand_core = { version = "0.10", default-features = false }
-signature = { version = "3.0.0-rc.10", default-features = false, features = ["alloc", "digest", "rand_core"] }
-zeroize = { version = "1.8", features = ["alloc"] }
+signature = { version = "3.0.0-rc.10", default-features = false, features = ["digest", "rand_core"] }
+zeroize = { version = "1.8", default-features = false }
 
 # optional dependencies
 crypto-common = { version = "0.2", optional = true, features = ["getrandom"] }
@@ -59,7 +59,7 @@ getrandom = ["crypto-bigint/getrandom", "crypto-common"]
 serde = ["encoding", "dep:serde", "dep:serdect", "crypto-bigint/serde"]
 pkcs5 = ["pkcs8/encryption"]
 std = ["alloc", "pkcs1?/std", "pkcs8?/std"]
-alloc = ["crypto-bigint/shalloc", "crypto-bigint/alloc", "pkcs8/alloc", "spki/alloc"]
+alloc = ["crypto-bigint/shalloc", "crypto-bigint/alloc", "pkcs8/alloc", "spki/alloc", "digest/alloc", "signature/alloc", "zeroize/alloc"]
 full = []
 hack = []
 
