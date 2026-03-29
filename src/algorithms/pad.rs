@@ -1,15 +1,14 @@
 //! Special handling for converting the BigUint to u8 vectors
 
-use core::borrow::Borrow;
+#[cfg(feature = "alloc")]
+use alloc::vec::Vec;
 use crypto_bigint::BoxedUint;
 use zeroize::Zeroizing;
 
 use crate::errors::{Error, Result};
-#[cfg(feature = "alloc")]
-use alloc::vec::Vec;
 use crate::traits::UnsignedModularInt;
+use core::borrow::Borrow;
 
-/// Returns a new vector of the given length, with 0s left padded.
 /// Returns a new vector of the given length, with 0s left padded.
 #[cfg(test)]
 #[cfg(feature = "alloc")]

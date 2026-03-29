@@ -925,7 +925,7 @@ mod tests {
 
     macro_rules! key_generation {
         ($name:ident, $multi:expr, $size:expr) => {
-            #[cfg(feature = "alloc")]
+            #[cfg(feature = "private-key")]
             #[test]
             fn $name() {
                 let mut rng = ChaCha8Rng::from_seed([42; 32]);
@@ -947,7 +947,7 @@ mod tests {
                     test_key_basics(&private_key);
                 }
             }
-            #[cfg(not(feature = "alloc"))]
+            #[cfg(not(feature = "private-key"))]
             #[test]
             fn $name() {
                 todo!("generate_multi_prime_key_with_exp is not implemented yet");
