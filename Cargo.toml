@@ -24,11 +24,11 @@ zeroize = { version = "1.8", default-features = false }
 # optional dependencies
 crypto-common = { version = "0.2", optional = true, features = ["getrandom"] }
 pkcs1 = { version = "0.8.0-rc.4", optional = true, default-features = false, features = ["alloc", "pem"] }
-pkcs8 = { version = "0.11.0-rc.10", optional= true, default-features = false, features = ["alloc","pem"] }
+pkcs8 = { version = "0.11.0-rc.10", optional = true, default-features = false, features = ["alloc", "pem"] }
 serdect = { version = "0.4", optional = true }
 sha1 = { version = "0.11.0-rc.5", optional = true, default-features = false, features = ["oid"] }
 sha2 = { version = "0.11.0-rc.5", optional = true, default-features = false, features = ["oid"] }
-spki = { version = "0.8.0-rc.4", optional=true, default-features = false, features = ["alloc"] }
+spki = { version = "0.8.0-rc.4", optional =true, default-features = false, features = ["alloc"] }
 serde = { version = "1.0.184", optional = true, default-features = false, features = ["derive"] }
 
 # Hacks for heapless build
@@ -62,8 +62,12 @@ serde = ["encoding", "dep:serde", "dep:serdect", "crypto-bigint/serde"]
 pkcs5 = ["pkcs8/encryption"]
 std = ["alloc", "pkcs1?/std", "pkcs8?/std"]
 alloc = ["crypto-bigint/shalloc", "crypto-bigint/alloc", "pkcs8/alloc", "spki/alloc", "digest/alloc", "signature/alloc", "zeroize/alloc"]
+
+# Full feature set has all padding formats, and private key generation
 full = ["private-key"]
+# Enable private key support, doesn't work with no-alloc
 private-key = []
+# Temporary hack for testing
 hack = ["dep:heapless"]
 
 [package.metadata.docs.rs]
