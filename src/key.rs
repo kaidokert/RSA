@@ -20,7 +20,7 @@ use {
     spki::{DecodePublicKey, EncodePublicKey},
 };
 
-#[cfg(feature = "alloc")]
+#[cfg(feature = "private-key")]
 use crate::algorithms::generate::generate_multi_prime_key_with_exp;
 #[cfg(feature = "private-key")]
 use crate::algorithms::rsa::{
@@ -328,22 +328,13 @@ impl RsaPrivateKey {
             return Err(Error::ModulusTooSmall);
         }
 
-        #[cfg(feature = "alloc")]
-        {
-            let components = generate_multi_prime_key_with_exp(rng, 2, bit_size, exp)?;
-            RsaPrivateKey::from_components(
-                components.n.get(),
-                components.e,
-                components.d,
-                components.primes,
-            )
-        }
-
-        #[cfg(not(feature = "alloc"))]
-        {
-            let _ = (rng, bit_size, exp);
-            todo!("generate_multi_prime_key_with_exp is not implemented yet")
-        }
+        let components = generate_multi_prime_key_with_exp(rng, 2, bit_size, exp)?;
+        RsaPrivateKey::from_components(
+            components.n.get(),
+            components.e,
+            components.d,
+            components.primes,
+        )
     }
 
     /// Generate a new RSA key pair of the given bit size and the public exponent
@@ -360,21 +351,13 @@ impl RsaPrivateKey {
         bit_size: usize,
         exp: BoxedUint,
     ) -> Result<RsaPrivateKey> {
-        #[cfg(feature = "alloc")]
-        {
-            let components = generate_multi_prime_key_with_exp(rng, 2, bit_size, exp)?;
-            RsaPrivateKey::from_components(
-                components.n.get(),
-                components.e,
-                components.d,
-                components.primes,
-            )
-        }
-
-        #[cfg(not(feature = "alloc"))]
-        {
-            todo!("generate_multi_prime_key_with_exp is not implemented yet")
-        }
+        let components = generate_multi_prime_key_with_exp(rng, 2, bit_size, exp)?;
+        RsaPrivateKey::from_components(
+            components.n.get(),
+            components.e,
+            components.d,
+            components.primes,
+        )
     }
 
     /// Private helper function that constructs an RSA key pair from components
