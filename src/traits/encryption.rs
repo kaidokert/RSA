@@ -21,9 +21,9 @@ pub trait Decryptor {
 }
 
 /// Decrypt the given message using provided random source
-#[cfg(feature = "full")]
 pub trait RandomizedDecryptor {
     /// Decrypt the given message.
+    #[cfg(feature= "alloc")]
     fn decrypt_with_rng<R: CryptoRng + ?Sized>(
         &self,
         rng: &mut R,

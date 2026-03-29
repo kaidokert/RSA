@@ -31,8 +31,8 @@ serde = { version = "1.0.184", optional = true, default-features = false, featur
 heapless = { version = "0.8", optional = true, default-features = false }
 
 crypto-bigint = { path = "shims/fake_crypto_bigint", package = "crypto-bigint", default-features = false, features = ["zeroize","rand_core"] }
-pkcs8 = { path = "shims/fake_pkcs8", package = "pkcs8", optional= true, default-features = false, features = ["pem"] }
-spki = { path = "shims/fake_spki", package = "spki", optional=true, default-features = false, features = [] }
+pkcs8 = { version = "0.11.0-rc.10", optional= true, default-features = false, features = ["pem"] }
+spki = { version = "0.8.0-rc.4", optional=true, default-features = false, features = [] }
 
 [dev-dependencies]
 base64ct = { version = "1", features = ["alloc"] }
