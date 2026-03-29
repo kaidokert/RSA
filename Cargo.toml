@@ -24,15 +24,16 @@ zeroize = { version = "1.8", default-features = false }
 # optional dependencies
 crypto-common = { version = "0.2", optional = true, features = ["getrandom"] }
 pkcs1 = { version = "0.8.0-rc.4", optional = true, default-features = false, features = ["alloc", "pem"] }
+pkcs8 = { version = "0.11.0-rc.10", optional= true, default-features = false, features = ["alloc","pem"] }
 serdect = { version = "0.4", optional = true }
 sha1 = { version = "0.11.0-rc.5", optional = true, default-features = false, features = ["oid"] }
 sha2 = { version = "0.11.0-rc.5", optional = true, default-features = false, features = ["oid"] }
+spki = { version = "0.8.0-rc.4", optional=true, default-features = false, features = ["alloc"] }
 serde = { version = "1.0.184", optional = true, default-features = false, features = ["derive"] }
-heapless = { version = "0.8", optional = true, default-features = false }
 
+# Hacks for heapless build
 crypto-bigint = { path = "shims/fake_crypto_bigint", package = "crypto-bigint", default-features = false, features = ["zeroize","rand_core"] }
-pkcs8 = { version = "0.11.0-rc.10", optional= true, default-features = false, features = ["pem"] }
-spki = { version = "0.8.0-rc.4", optional=true, default-features = false, features = [] }
+heapless = { version = "0.8", optional = true, default-features = false }
 
 [dev-dependencies]
 base64ct = { version = "1", features = ["alloc"] }
@@ -61,7 +62,8 @@ serde = ["encoding", "dep:serde", "dep:serdect", "crypto-bigint/serde"]
 pkcs5 = ["pkcs8/encryption"]
 std = ["alloc", "pkcs1?/std", "pkcs8?/std"]
 alloc = ["crypto-bigint/shalloc", "crypto-bigint/alloc", "pkcs8/alloc", "spki/alloc", "digest/alloc", "signature/alloc", "zeroize/alloc"]
-full = []
+full = ["private-key"]
+private-key = []
 hack = ["dep:heapless"]
 
 [package.metadata.docs.rs]

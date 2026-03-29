@@ -22,7 +22,7 @@ use {
 
 #[cfg(feature = "alloc")]
 use crate::algorithms::generate::generate_multi_prime_key_with_exp;
-#[cfg(feature = "full")]
+#[cfg(feature = "private-key")]
 use crate::algorithms::rsa::{
     compute_modulus, compute_private_exponent_carmicheal, compute_private_exponent_euler_totient,
     recover_primes,
@@ -67,7 +67,7 @@ impl Hash for RsaPublicKey {
 }
 
 /// Represents a whole RSA key, public and private parts.
-#[cfg(feature = "full")]
+#[cfg(feature = "private-key")]
 #[derive(Clone)]
 pub struct RsaPrivateKey {
     /// Public components of the private key.
@@ -80,7 +80,7 @@ pub struct RsaPrivateKey {
     pub(crate) precomputed: Option<PrecomputedValues>,
 }
 
-#[cfg(feature = "full")]
+#[cfg(feature = "private-key")]
 impl fmt::Debug for RsaPrivateKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let precomputed = if self.precomputed.is_some() {
@@ -97,9 +97,9 @@ impl fmt::Debug for RsaPrivateKey {
     }
 }
 
-#[cfg(feature = "full")]
+#[cfg(feature = "private-key")]
 impl Eq for RsaPrivateKey {}
-#[cfg(feature = "full")]
+#[cfg(feature = "private-key")]
 impl PartialEq for RsaPrivateKey {
     #[inline]
     fn eq(&self, other: &RsaPrivateKey) -> bool {
@@ -109,14 +109,14 @@ impl PartialEq for RsaPrivateKey {
     }
 }
 
-#[cfg(feature = "full")]
+#[cfg(feature = "private-key")]
 impl AsRef<RsaPublicKey> for RsaPrivateKey {
     fn as_ref(&self) -> &RsaPublicKey {
         &self.pubkey_components
     }
 }
 
-#[cfg(feature = "full")]
+#[cfg(feature = "private-key")]
 impl Hash for RsaPrivateKey {
     fn hash<H: Hasher>(&self, state: &mut H) {
         // Domain separator for RSA private keys
@@ -125,7 +125,7 @@ impl Hash for RsaPrivateKey {
     }
 }
 
-#[cfg(feature = "full")]
+#[cfg(feature = "private-key")]
 impl Drop for RsaPrivateKey {
     fn drop(&mut self) {
         self.d.zeroize();
@@ -134,7 +134,7 @@ impl Drop for RsaPrivateKey {
     }
 }
 
-#[cfg(feature = "full")]
+#[cfg(feature = "private-key")]
 impl ZeroizeOnDrop for RsaPrivateKey {}
 
 #[derive(Clone)]
@@ -170,14 +170,14 @@ impl Drop for PrecomputedValues {
     }
 }
 
-#[cfg(feature = "full")]
+#[cfg(feature = "private-key")]
 impl From<RsaPrivateKey> for RsaPublicKey {
     fn from(private_key: RsaPrivateKey) -> Self {
         (&private_key).into()
     }
 }
 
-#[cfg(feature = "full")]
+#[cfg(feature = "private-key")]
 impl From<&RsaPrivateKey> for RsaPublicKey {
     fn from(private_key: &RsaPrivateKey) -> Self {
         let n = PublicKeyParts::n(private_key);
@@ -274,7 +274,7 @@ impl RsaPublicKey {
     }
 }
 
-#[cfg(feature = "full")]
+#[cfg(feature = "private-key")]
 impl PublicKeyParts for RsaPrivateKey {
     fn n(&self) -> &NonZero<BoxedUint> {
         &self.pubkey_components.n
@@ -289,7 +289,7 @@ impl PublicKeyParts for RsaPrivateKey {
     }
 }
 
-#[cfg(feature = "full")]
+#[cfg(feature = "private-key")]
 impl RsaPrivateKey {
     /// Default exponent for RSA keys.
     const EXP: u64 = 65537;
@@ -705,7 +705,7 @@ impl RsaPrivateKey {
     }
 }
 
-#[cfg(feature = "full")]
+#[cfg(feature = "private-key")]
 impl PrivateKeyParts for RsaPrivateKey {
     fn d(&self) -> &BoxedUint {
         &self.d
@@ -789,7 +789,7 @@ fn check_public_skip_exponent_size(n: &BoxedUint, e: &BoxedUint) -> Result<()> {
 ///
 /// This performs the structural and mathematical validation checks that are common to both
 /// `validate()` and `validate_skip_exponent_size()`.
-#[cfg(feature = "full")]
+#[cfg(feature = "private-key")]
 fn validate_private_key_parts(key: &RsaPrivateKey) -> Result<()> {
     // Check that Πprimes == n.
     let mut m = BoxedUint::one_with_precision(key.pubkey_components.n.bits_precision());

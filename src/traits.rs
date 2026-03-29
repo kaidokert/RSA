@@ -5,8 +5,8 @@ pub(crate) mod keys;
 mod padding;
 
 pub use encryption::{Decryptor, EncryptingKeypair, RandomizedDecryptor, RandomizedEncryptor};
-#[cfg(feature = "full")]
+#[cfg(feature = "private-key")]
 pub use keys::{PrivateKeyParts, PublicKeyParts};
-#[cfg(not(feature = "full"))]
+#[cfg(not(feature = "private-key"))]
 pub use keys::{PublicKeyParts};
 pub use padding::{PaddingScheme, SignatureScheme};

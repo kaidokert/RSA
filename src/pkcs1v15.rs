@@ -26,20 +26,20 @@
 //!
 //! [RFC8017 § 8.2]: https://datatracker.ietf.org/doc/html/rfc8017#section-8.2
 
-#[cfg(feature="full")]
+#[cfg(feature="private-key")]
 mod decrypting_key;
 mod encrypting_key;
 mod signature;
-#[cfg(feature="full")]
+#[cfg(feature="private-key")]
 mod signing_key;
 mod verifying_key;
 
-#[cfg(feature="full")]
+#[cfg(feature="private-key")]
 pub use self::{
     decrypting_key::DecryptingKey, encrypting_key::EncryptingKey, signature::Signature,
     signing_key::SigningKey, verifying_key::VerifyingKey,
 };
-#[cfg(not(feature="full"))]
+#[cfg(not(feature="private-key"))]
 pub use self::{
     encrypting_key::EncryptingKey, signature::Signature,
     verifying_key::VerifyingKey,
@@ -59,14 +59,14 @@ use rand_core::TryCryptoRng;
 use crate::algorithms::pad::{uint_to_be_pad, uint_to_zeroizing_be_pad};
 use crate::algorithms::pad::uint_to_be_pad_noalloc;
 use crate::algorithms::pkcs1v15::*;
-#[cfg(feature="full")]
+#[cfg(feature="private-key")]
 use crate::algorithms::rsa::{rsa_decrypt_and_check, rsa_encrypt};
-#[cfg(not(feature="full"))]
+#[cfg(not(feature="private-key"))]
 use crate::algorithms::rsa::{rsa_encrypt};
 use crate::errors::{Error, Result};
-#[cfg(feature="full")]
+#[cfg(feature="private-key")]
 use crate::key::{self, RsaPrivateKey, RsaPublicKey};
-#[cfg(not(feature="full"))]
+#[cfg(not(feature="private-key"))]
 use crate::key::{self, RsaPublicKey};
 use crate::traits::{PaddingScheme, PublicKeyParts, SignatureScheme};
 
@@ -90,7 +90,7 @@ where
 
 
 impl PaddingScheme for Pkcs1v15Encrypt {
-    #[cfg(feature="full")]
+    #[cfg(feature="private-key")]
     fn decrypt<Rng: TryCryptoRng + ?Sized>(
         self,
         rng: Option<&mut Rng>,
@@ -157,7 +157,7 @@ impl Pkcs1v15Sign {
 }
 
 impl SignatureScheme for Pkcs1v15Sign {
-    #[cfg(feature="full")]
+    #[cfg(feature="private-key")]
     fn sign<Rng: TryCryptoRng + ?Sized>(
         self,
         rng: Option<&mut Rng>,
@@ -236,7 +236,7 @@ fn encrypt<R: TryCryptoRng + ?Sized>(
 /// learn whether each instance returned an error then they can decrypt and
 /// forge signatures as if they had the private key. See
 /// `decrypt_session_key` for a way of solving this problem.
-#[cfg(feature = "full")]
+#[cfg(feature = "private-key")]
 #[inline]
 fn decrypt<R: TryCryptoRng + ?Sized>(
     rng: Option<&mut R>,
@@ -265,7 +265,7 @@ fn decrypt<R: TryCryptoRng + ?Sized>(
 /// messages is small, an attacker may be able to build a map from
 /// messages to signatures and identify the signed messages. As ever,
 /// signatures provide authenticity, not confidentiality.
-#[cfg(feature = "full")]
+#[cfg(feature = "private-key")]
 #[inline]
 fn sign<R: TryCryptoRng + ?Sized>(
     rng: Option<&mut R>,

@@ -245,7 +245,7 @@ pub mod errors;
 #[cfg(feature = "full")]
 pub mod oaep;
 pub mod pkcs1v15;
-#[cfg(feature = "alloc")]
+#[cfg(feature = "full")]
 pub mod pss;
 pub mod traits;
 

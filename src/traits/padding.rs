@@ -6,9 +6,9 @@ use alloc::vec::Vec;
 use rand_core::TryCryptoRng;
 
 use crate::errors::Result;
-#[cfg(feature = "full")]
+#[cfg(feature = "private-key")]
 use crate::key::{RsaPrivateKey, RsaPublicKey};
-#[cfg(not(feature = "full"))]
+#[cfg(not(feature = "private-key"))]
 use crate::key::RsaPublicKey;
 
 /// Padding scheme used for encryption.
@@ -17,7 +17,7 @@ pub trait PaddingScheme {
     ///
     /// If an `rng` is passed, it uses RSA blinding to help mitigate timing
     /// side-channel attacks.
-    #[cfg(feature="full")]
+    #[cfg(feature="private-key")]
     fn decrypt<Rng: TryCryptoRng + ?Sized>(
         self,
         rng: Option<&mut Rng>,
@@ -38,7 +38,7 @@ pub trait PaddingScheme {
 /// Digital signature scheme.
 pub trait SignatureScheme {
     /// Sign the given digest.
-    #[cfg(feature="full")]
+    #[cfg(feature="private-key")]
     fn sign<Rng: TryCryptoRng + ?Sized>(
         self,
         rng: Option<&mut Rng>,

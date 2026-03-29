@@ -10,9 +10,9 @@ use rand_core::TryCryptoRng;
 use zeroize::Zeroize;
 
 use crate::errors::{Error, Result};
-#[cfg(feature = "full")]
+#[cfg(feature = "private-key")]
 use crate::traits::keys::{PrivateKeyParts, PublicKeyParts};
-#[cfg(not(feature = "full"))]
+#[cfg(not(feature = "private-key"))]
 use crate::traits::keys::{PublicKeyParts};
 
 /// ⚠️ Raw RSA encryption of m with the public key. No padding is performed.
@@ -36,7 +36,7 @@ pub fn rsa_encrypt<K: PublicKeyParts>(key: &K, m: &BoxedUint) -> Result<BoxedUin
 ///
 /// Use this function with great care! Raw RSA should never be used without an appropriate padding
 /// or signature scheme. See the [module-level documentation][crate::hazmat] for more information.
-#[cfg(feature = "full")]
+#[cfg(feature = "private-key")]
 #[inline]
 pub fn rsa_decrypt<R: TryCryptoRng + ?Sized>(
     rng: Option<&mut R>,
@@ -156,7 +156,7 @@ pub fn rsa_decrypt<R: TryCryptoRng + ?Sized>(
 ///
 /// Use this function with great care! Raw RSA should never be used without an appropriate padding
 /// or signature scheme. See the [module-level documentation][crate::hazmat] for more information.
-#[cfg(feature = "full")]
+#[cfg(feature = "private-key")]
 #[inline]
 pub fn rsa_decrypt_and_check<R: TryCryptoRng + ?Sized>(
     priv_key: &impl PrivateKeyParts,
@@ -177,7 +177,7 @@ pub fn rsa_decrypt_and_check<R: TryCryptoRng + ?Sized>(
 }
 
 /// Returns the blinded c, along with the unblinding factor.
-#[cfg(feature = "full")]
+#[cfg(feature = "private-key")]
 fn blind<R: TryCryptoRng + ?Sized, K: PublicKeyParts>(
     rng: &mut R,
     key: &K,
@@ -219,7 +219,7 @@ fn blind<R: TryCryptoRng + ?Sized, K: PublicKeyParts>(
 }
 
 /// Given an m and unblinding factor, unblind the m.
-#[cfg(feature = "full")]
+#[cfg(feature = "private-key")]
 fn unblind(m: &BoxedUint, unblinder: &BoxedUint, n_params: &BoxedMontyParams) -> BoxedUint {
     // m * r^-1 (mod n)
     debug_assert_eq!(
@@ -265,7 +265,7 @@ fn reduce_vartime(n: &BoxedUint, p: &BoxedMontyParams) -> BoxedMontyForm {
 /// The following (deterministic) algorithm also recovers the prime factors `p` and `q` of a modulus `n`, given the
 /// public exponent `e` and private exponent `d` using the method described in
 /// [NIST 800-56B Appendix C.2](https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-56Br2.pdf).
-#[cfg(feature = "full")]
+#[cfg(feature = "private-key")]
 pub fn recover_primes(
     n: &NonZero<BoxedUint>,
     e: &BoxedUint,
@@ -334,7 +334,7 @@ pub fn recover_primes(
 }
 
 /// Compute the modulus of a key from its primes.
-#[cfg(feature = "full")]
+#[cfg(feature = "private-key")]
 pub(crate) fn compute_modulus(primes: &[BoxedUint]) -> Odd<BoxedUint> {
     let mut primes = primes.iter();
     let mut out = primes.next().expect("must at least be one prime").clone();
@@ -346,7 +346,7 @@ pub(crate) fn compute_modulus(primes: &[BoxedUint]) -> Odd<BoxedUint> {
 
 /// Compute the private exponent from its primes (p and q) and public exponent
 /// This uses Euler's totient function
-#[cfg(feature = "full")]
+#[cfg(feature = "private-key")]
 #[inline]
 pub(crate) fn compute_private_exponent_euler_totient(
     primes: &[BoxedUint],
@@ -380,7 +380,7 @@ pub(crate) fn compute_private_exponent_euler_totient(
 ///
 /// FIPS 186-4 **requires** the private exponent to be less than λ(n), which would
 /// make Euler's totiem unreliable.
-#[cfg(feature = "full")]
+#[cfg(feature = "private-key")]
 #[inline]
 pub(crate) fn compute_private_exponent_carmicheal(
     p: &BoxedUint,
