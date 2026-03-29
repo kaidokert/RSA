@@ -1,2 +1,5 @@
+[target.thumbv6m-none-eabi]
+runner = "qemu-system-arm -cpu cortex-m0 -machine microbit -nographic -semihosting-config enable=on,target=native -kernel"
+
 [build]
 target = "thumbv6m-none-eabi"
