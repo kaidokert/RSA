@@ -1,26 +1,61 @@
 #![no_std]
 #![no_main]
 
+use cortex_m_semihosting::{debug, hprintln};
 use panic_semihosting as _;
-use rsa::pkcs1v15::{Signature, VerifyingKey};
-use rsa::signature::DigestVerifier;
-use rsa::{BoxedUint, RsaPublicKey};
+use rsa::modmath_support::{public_key_from_be_bytes, rsa_decrypt, verify_pkcs1v15_digest};
 use sha1::Sha1;
+
+const MODULUS: [u8; 64] = [
+    0x96, 0x9d, 0x03, 0xff, 0xa9, 0x8d, 0x88, 0x8f, 0x3a, 0xa4, 0xf2, 0xfe, 0xd2, 0x32, 0xe6,
+    0x1c, 0x4a, 0xcf, 0x06, 0x63, 0xa9, 0x2f, 0x99, 0x03, 0x4c, 0xf7, 0xb7, 0x24, 0x5a, 0x1a,
+    0x1e, 0x5e, 0xaf, 0xa5, 0x65, 0xaf, 0xb9, 0x0b, 0xab, 0x22, 0x85, 0x71, 0x2f, 0xaa, 0x50,
+    0x39, 0x39, 0xa0, 0x65, 0xfb, 0x60, 0xdd, 0x08, 0x28, 0xa3, 0x84, 0xf2, 0x6d, 0x8a, 0xfc,
+    0x28, 0x6d, 0xf6, 0xcf,
+];
+
+const SIGNATURE: [u8; 64] = [
+    0x45, 0x53, 0xf3, 0xaf, 0x16, 0xaf, 0x63, 0x97, 0xb0, 0xd3, 0x2f, 0x8a, 0xec, 0xd5, 0x4c,
+    0xf1, 0xf3, 0xd0, 0x0c, 0x9f, 0x42, 0xdc, 0x68, 0xcb, 0xd7, 0x05, 0xce, 0xa5, 0xa9, 0x70,
+    0x95, 0x3e, 0xc0, 0xbc, 0x4a, 0x18, 0xed, 0x91, 0xa3, 0x5d, 0x66, 0xec, 0xda, 0x4a, 0x83,
+    0x32, 0xcf, 0xc3, 0xa3, 0xab, 0x21, 0xad, 0x59, 0xb2, 0x2e, 0x87, 0xc2, 0x73, 0xff, 0x08,
+    0x88, 0xdd, 0x4d, 0xe0,
+];
 
 #[cortex_m_rt::entry]
 fn main() -> ! {
-    let key = RsaPublicKey::new(BoxedUint::from(3233u64), BoxedUint::from(17u64)).unwrap();
-    let verifying_key = VerifyingKey::<Sha1>::new(key);
-    let signature = Signature::try_from([0u8; 2].as_slice()).unwrap();
-
-    loop {
-        let _ = verifying_key.verify_digest(
-            |digest: &mut Sha1| {
-                use sha1::Digest;
-                digest.update(b"x");
-                Ok(())
-            },
-            &signature,
-        );
+    match run() {
+        Ok(()) => {
+            debug::exit(debug::EXIT_SUCCESS);
+            loop {}
+        }
+        Err(err) => {
+            hprintln!("rsa_digest_verify failed: {:?}", err);
+            debug::exit(debug::EXIT_FAILURE);
+            loop {}
+        }
     }
+}
+
+fn run() -> rsa::Result<()> {
+    let key = public_key_from_be_bytes(&MODULUS, 3)?;
+    let recovered = rsa_decrypt(&key, &SIGNATURE)?;
+
+    hprintln!("rsa_digest_verify");
+    hprintln!("recovered block:");
+    for byte in recovered {
+        hprintln!("{:02x}", byte);
+    }
+
+    verify_pkcs1v15_digest::<Sha1, _, 64>(
+        &key,
+        |digest: &mut Sha1| {
+            use sha1::Digest;
+            digest.update(b"hello world!");
+            Ok(())
+        },
+        &SIGNATURE,
+    )?;
+    hprintln!("verification: ok");
+    Ok(())
 }

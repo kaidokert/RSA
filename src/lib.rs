@@ -262,10 +262,9 @@ pub use pkcs8;
 #[cfg(feature = "sha2")]
 pub use sha2;
 #[cfg(feature = "modmath")]
-pub use crate::modmath_support::{
-    ModMathFixedUint, ModMathFixedUint32, ModMathForm, ModMathForm32, ModMathParams,
-    ModMathParams32,
-};
+pub use crate::modmath_support::{ModMathFixedUint, ModMathForm, ModMathParams};
+#[cfg(all(feature = "modmath", feature = "alloc"))]
+pub use crate::modmath_support::{ModMathFixedUint32, ModMathForm32, ModMathParams32};
 
 #[cfg(feature = "alloc")]
 pub use crate::{
@@ -312,5 +311,4 @@ pub use {
         rsa::rsa_encrypt,
     },
     key::RsaPublicKey,
-    traits::modular::WrapU8,
 };

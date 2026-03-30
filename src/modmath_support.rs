@@ -7,6 +7,7 @@ use alloc::vec;
 use core::ops::{Add, BitAnd, Mul, Rem, RemAssign, Shr, ShrAssign, Sub};
 
 use crypto_bigint::{Choice, CtAssign, CtEq, NonZero, Odd, One, Resize, Zero};
+use digest::{Digest, FixedOutput, HashMarker, Update};
 use fixed_bigint::FixedUInt;
 use fixed_bigint::num_traits;
 use fixed_bigint::num_traits::ops::overflowing::{OverflowingAdd, OverflowingMul, OverflowingSub};
@@ -17,10 +18,11 @@ use zeroize::Zeroize;
 
 use crate::{
     algorithms::rsa::rsa_encrypt,
+    errors::{Error, Result},
     key::RsaPublicKey,
-    traits::modular::{IntoMontyForm, MParam, Pow, PowBoundedExp, UnsignedModularInt},
-    Error, Result,
+    traits::modular::{IntoMontyForm, ModulusParams, Pow, PowBoundedExp, UnsignedModularInt},
 };
+use const_oid::AssociatedOid;
 
 /// A fixed-size integer wrapper that satisfies the current RSA abstraction layer
 /// while delegating modular exponentiation to `modmath`.
@@ -268,19 +270,75 @@ pub fn rsa_decrypt<const N: usize>(
 }
 
 /// Verify a PKCS#1 v1.5 SHA-1 signature using a precomputed SHA-1 digest.
+pub const PKCS1V15_SHA1_PREFIX: [u8; 15] = [
+    0x30, 0x21, 0x30, 0x09, 0x06, 0x05, 0x2b, 0x0e, 0x03, 0x02, 0x1a, 0x05, 0x00, 0x04, 0x14,
+];
+
+/// Verify a PKCS#1 v1.5 signature using an explicit ASN.1 digest prefix.
+pub fn verify_pkcs1v15_prehash_with_prefix<const N: usize>(
+    key: &RsaPublicKey<ModMathFixedUint<N>, ModMathParams<N>>,
+    prefix: &[u8],
+    prehash: &[u8],
+    signature: &[u8; N],
+) -> Result<()> {
+    let sig = ModMathFixedUint::<N>::from_be_slice(signature);
+    let mut em_storage = [0u8; N];
+
+    crate::pkcs1v15::verify_noalloc_generic(key, prefix, prehash, &sig, &mut em_storage)
+}
+
+/// Verify a PKCS#1 v1.5 signature for a digest type with an associated OID.
+pub fn verify_pkcs1v15_prehash<D, const N: usize>(
+    key: &RsaPublicKey<ModMathFixedUint<N>, ModMathParams<N>>,
+    prehash: &[u8],
+    signature: &[u8; N],
+) -> Result<()>
+where
+    D: Digest + AssociatedOid,
+{
+    let mut prefix_storage = [0u8; 64];
+    let prefix = crate::algorithms::pkcs1v15::pkcs1v15_generate_prefix_noalloc::<D>(
+        &mut prefix_storage,
+    )?;
+    verify_pkcs1v15_prehash_with_prefix(key, prefix, prehash, signature)
+}
+
+/// Verify a PKCS#1 v1.5 signature by hashing the message with `D`.
+pub fn verify_pkcs1v15_message<D, const N: usize>(
+    key: &RsaPublicKey<ModMathFixedUint<N>, ModMathParams<N>>,
+    msg: &[u8],
+    signature: &[u8; N],
+) -> Result<()>
+where
+    D: Digest + AssociatedOid,
+{
+    let digest = D::digest(msg);
+    verify_pkcs1v15_prehash::<D, N>(key, digest.as_ref(), signature)
+}
+
+/// Verify a PKCS#1 v1.5 signature by feeding bytes into a digest closure.
+pub fn verify_pkcs1v15_digest<D, F, const N: usize>(
+    key: &RsaPublicKey<ModMathFixedUint<N>, ModMathParams<N>>,
+    f: F,
+    signature: &[u8; N],
+) -> Result<()>
+where
+    D: Default + FixedOutput + HashMarker + Update + Digest + AssociatedOid,
+    F: Fn(&mut D) -> signature::Result<()>,
+{
+    let mut digest = D::default();
+    f(&mut digest).map_err(|_| Error::Verification)?;
+    let digest = digest.finalize_fixed();
+    verify_pkcs1v15_prehash::<D, N>(key, digest.as_ref(), signature)
+}
+
+/// Verify a PKCS#1 v1.5 SHA-1 signature using a precomputed SHA-1 digest.
 pub fn verify_pkcs1v15_sha1_prehash<const N: usize>(
     key: &RsaPublicKey<ModMathFixedUint<N>, ModMathParams<N>>,
     prehash: &[u8],
     signature: &[u8; N],
 ) -> Result<()> {
-    const SHA1_PREFIX: [u8; 15] = [
-        0x30, 0x21, 0x30, 0x09, 0x06, 0x05, 0x2b, 0x0e, 0x03, 0x02, 0x1a, 0x05, 0x00, 0x04,
-        0x14,
-    ];
-    let sig = ModMathFixedUint::<N>::from_be_slice(signature);
-    let mut em_storage = [0u8; N];
-
-    crate::pkcs1v15::verify_noalloc_generic(key, &SHA1_PREFIX, prehash, &sig, &mut em_storage)
+    verify_pkcs1v15_prehash_with_prefix(key, &PKCS1V15_SHA1_PREFIX, prehash, signature)
 }
 
 /// A `modmath` adapter backed by `fixed_bigint::FixedUInt<u32, N>`.
@@ -594,9 +652,9 @@ impl<const N: usize> PowBoundedExp<ModMathParams<N>> for ModMathForm<N> {
     }
 }
 
-impl<const N: usize> MParam for ModMathParams<N> {
+impl<const N: usize> ModulusParams for ModMathParams<N> {
     type Modulus = ModMathFixedUint<N>;
-    type Form = ModMathForm<N>;
+    type MontgomeryForm = ModMathForm<N>;
 
     fn modulus(&self) -> &Odd<Self::Modulus> {
         // Safety: `new` rejects zero and even values, matching `Odd<T>` invariants.
@@ -651,9 +709,9 @@ impl<const N: usize> PowBoundedExp<ModMathParams32<N>> for ModMathForm32<N> {
 }
 
 #[cfg(feature = "alloc")]
-impl<const N: usize> MParam for ModMathParams32<N> {
+impl<const N: usize> ModulusParams for ModMathParams32<N> {
     type Modulus = ModMathFixedUint32<N>;
-    type Form = ModMathForm32<N>;
+    type MontgomeryForm = ModMathForm32<N>;
 
     fn modulus(&self) -> &Odd<Self::Modulus> {
         unsafe { &*(&self.modulus as *const _ as *const Odd<Self::Modulus>) }
@@ -670,6 +728,9 @@ mod tests {
         public_key_from_be_bytes, public_key_from_be_bytes_u32, verify_pkcs1v15_sha1_prehash,
         verify_pkcs1v15_sha1_prehash_u32,
     };
+    use crate::{BoxedUint, Pkcs1v15Encrypt, RsaPublicKey};
+    use rand::rngs::ChaCha8Rng;
+    use rand_core::SeedableRng;
 
     #[test]
     fn verify_pkcs1v15_signature_with_modmath_fixed_uint() {
@@ -719,5 +780,36 @@ mod tests {
 
         let key = public_key_from_be_bytes_u32::<16>(&modulus, 3).unwrap();
         verify_pkcs1v15_sha1_prehash_u32(&key, &digest, &signature).unwrap();
+    }
+
+    #[test]
+    fn encrypt_pkcs1v15_with_modmath_fixed_uint_matches_boxeduint() {
+        let modulus: [u8; 64] = [
+            0x96, 0x9D, 0x03, 0xFF, 0xA9, 0x8D, 0x88, 0x8F, 0x3A, 0xA4, 0xF2, 0xFE, 0xD2, 0x32,
+            0xE6, 0x1C, 0x4A, 0xCF, 0x06, 0x63, 0xA9, 0x2F, 0x99, 0x03, 0x4C, 0xF7, 0xB7, 0x24,
+            0x5A, 0x1A, 0x1E, 0x5E, 0xAF, 0xA5, 0x65, 0xAF, 0xB9, 0x0B, 0xAB, 0x22, 0x85, 0x71,
+            0x2F, 0xAA, 0x50, 0x39, 0x39, 0xA0, 0x65, 0xFB, 0x60, 0xDD, 0x08, 0x28, 0xA3, 0x84,
+            0xF2, 0x6D, 0x8A, 0xFC, 0x28, 0x6D, 0xF6, 0xCF,
+        ];
+        let msg = b"hello world!";
+
+        let modmath_key = public_key_from_be_bytes(&modulus, 3).unwrap();
+        let boxed_key = RsaPublicKey::new(BoxedUint::from_be_slice(&modulus, 512).unwrap(), 3u64.into()).unwrap();
+
+        let mut modmath_rng = ChaCha8Rng::from_seed([42; 32]);
+        let mut boxed_rng = ChaCha8Rng::from_seed([42; 32]);
+        let mut storage = [0u8; 64];
+
+        let modmath_ciphertext = crate::pkcs1v15::encrypt_noalloc_generic(
+            &mut modmath_rng,
+            &modmath_key,
+            msg,
+            &mut storage,
+            |em, _| Ok(super::ModMathFixedUint::<64>::from_be_slice(em)),
+        )
+        .unwrap();
+        let boxed_ciphertext = boxed_key.encrypt(&mut boxed_rng, Pkcs1v15Encrypt, msg).unwrap();
+
+        assert_eq!(modmath_ciphertext, boxed_ciphertext.as_slice());
     }
 }

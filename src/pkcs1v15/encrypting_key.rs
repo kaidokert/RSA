@@ -1,3 +1,4 @@
+#[cfg(feature = "alloc")]
 use super::encrypt;
 use crate::{traits::RandomizedEncryptor, Result, RsaPublicKey};
 #[cfg(feature = "alloc")]

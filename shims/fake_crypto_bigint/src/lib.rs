@@ -36,7 +36,7 @@ mod no_alloc {
     };
 
     use real_crypto_bigint::{
-        AddMod, BitOps, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, Choice, CtOption,
+        AddMod, BitOps, CheckedAdd, CheckedDiv, CheckedMul, CheckedSub, Choice, CtEq, CtOption,
         DivRemLimb, Limb, MulMod, NegMod, PowBoundedExp, Reciprocal, RemLimb,
         ShlVartime, ShrVartime, Square, SquareAssign, SubMod, UintRef, WrappingAdd, WrappingMul,
         WrappingNeg, WrappingShl, WrappingShr, WrappingSub, Zero, zeroize::DefaultIsZeroes,
@@ -68,8 +68,12 @@ mod no_alloc {
     pub struct NonZero<T: ?Sized>(pub(crate) T);
 
     impl<T> NonZero<T> {
-        pub fn new(_n: T) -> CtOption<Self> {
-            todo!()
+        pub fn new(n: T) -> CtOption<Self>
+        where
+            T: CtEq + Zero,
+        {
+            let is_non_zero = !n.ct_eq(&T::zero());
+            CtOption::new(Self(n), is_non_zero)
         }
 
         pub fn get(self) -> T {

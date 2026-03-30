@@ -13,7 +13,7 @@ use crate::{
     errors::{Error, Result},
     traits::{
         UnsignedModularInt,
-        modular::{IntoMontyForm, MParam, Pow, PowBoundedExp},
+        modular::{IntoMontyForm, ModulusParams, Pow, PowBoundedExp},
     },
 };
 #[cfg(feature = "private-key")]
@@ -32,8 +32,8 @@ pub fn rsa_encrypt<T, K>(key: &K, m: &T) -> Result<T>
 where
     T: UnsignedModularInt + Resize<Output = T>,
     K: PublicKeyParts<T>,
-    K::MontyParams: MParam<Modulus = T>,
-    <K::MontyParams as MParam>::Form: IntoMontyForm<K::MontyParams> + PowBoundedExp<K::MontyParams>,
+    K::MontyParams: ModulusParams<Modulus = T>,
+    <K::MontyParams as ModulusParams>::MontgomeryForm: IntoMontyForm<K::MontyParams> + PowBoundedExp<K::MontyParams>,
 {
     let e = key.e();
     let res = pow_mod_params_vartime_exp_bits(m, e, e.bits(), key.n_params());
@@ -253,8 +253,8 @@ fn unblind(m: &BoxedUint, unblinder: &BoxedUint, n_params: &BoxedMontyParams) ->
 fn pow_mod_params<T, M>(base: &T, exp: &T, n_params: &M) -> T
 where
     T: UnsignedModularInt + Resize<Output = T>,
-    M: MParam<Modulus = T>,
-    M::Form: IntoMontyForm<M> + Pow<M>,
+    M: ModulusParams<Modulus = T>,
+    M::MontgomeryForm: IntoMontyForm<M> + Pow<M>,
 {
     let base = reduce_vartime(base, n_params);
     base.pow(exp).retrieve()
@@ -271,22 +271,22 @@ fn pow_mod_params_vartime_exp_bits<T, M>(
 ) -> T
 where
     T: UnsignedModularInt + Resize<Output = T>,
-    M: MParam<Modulus = T>,
-    M::Form: IntoMontyForm<M> + PowBoundedExp<M>,
+    M: ModulusParams<Modulus = T>,
+    M::MontgomeryForm: IntoMontyForm<M> + PowBoundedExp<M>,
 {
     let base = reduce_vartime(base, n_params);
     base.pow_bounded_exp(exp, exp_bits).retrieve()
 }
 
-fn reduce_vartime<T, M>(n: &T, p: &M) -> M::Form
+fn reduce_vartime<T, M>(n: &T, p: &M) -> M::MontgomeryForm
 where
     T: UnsignedModularInt + Resize<Output = T>,
-    M: MParam<Modulus = T>,
-    M::Form: IntoMontyForm<M>,
+    M: ModulusParams<Modulus = T>,
+    M::MontgomeryForm: IntoMontyForm<M>,
 {
     let modulus = p.modulus().as_nz_ref().clone();
     let n_reduced = n.rem_vartime(&modulus).resize_unchecked(p.bits_precision());
-    M::Form::from_reduced(n_reduced, p)
+    M::MontgomeryForm::from_reduced(n_reduced, p)
 }
 
 /// The following (deterministic) algorithm also recovers the prime factors `p` and `q` of a modulus `n`, given the

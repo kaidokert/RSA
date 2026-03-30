@@ -8,12 +8,12 @@ use crypto_bigint::{
 };
 use zeroize::Zeroize;
 
-use crate::traits::{UnsignedModularInt, modular::MParam};
+use crate::traits::{UnsignedModularInt, modular::ModulusParams};
 
 /// Components of an RSA public key.
 pub trait PublicKeyParts<T: UnsignedModularInt> {
     /// Montgomery parameter type matching this modulus type.
-    type MontyParams: MParam<Modulus = T>;
+    type MontyParams: ModulusParams<Modulus = T>;
 
     /// Returns the modulus of the key.
     fn n(&self) -> &NonZero<T>;

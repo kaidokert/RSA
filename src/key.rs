@@ -31,14 +31,14 @@ use crate::algorithms::rsa::{
 use crate::dummy_rng::DummyRng;
 use crate::errors::{Error, Result};
 use crate::traits::keys::{CrtValue, PrivateKeyParts, PublicKeyParts};
-use crate::traits::{PaddingScheme, SignatureScheme, UnsignedModularInt, modular::MParam};
+use crate::traits::{PaddingScheme, SignatureScheme, UnsignedModularInt, modular::ModulusParams};
 
 /// Represents the public part of an RSA key.
 #[derive(Debug, Clone)]
 pub struct RsaPublicKey<T = BoxedUint, M = BoxedMontyParams>
 where
     T: UnsignedModularInt,
-    M: MParam<Modulus = T>,
+    M: ModulusParams<Modulus = T>,
 {
     /// Modulus: product of prime numbers `p` and `q`
     n: NonZero<T>,
@@ -54,14 +54,14 @@ where
 impl<T, M> Eq for RsaPublicKey<T, M>
 where
     T: UnsignedModularInt + Eq,
-    M: MParam<Modulus = T>,
+    M: ModulusParams<Modulus = T>,
 {
 }
 
 impl<T, M> PartialEq for RsaPublicKey<T, M>
 where
     T: UnsignedModularInt + PartialEq,
-    M: MParam<Modulus = T>,
+    M: ModulusParams<Modulus = T>,
 {
     #[inline]
     fn eq(&self, other: &RsaPublicKey<T, M>) -> bool {
@@ -72,7 +72,7 @@ where
 impl<T, M> Hash for RsaPublicKey<T, M>
 where
     T: UnsignedModularInt,
-    M: MParam<Modulus = T>,
+    M: ModulusParams<Modulus = T>,
 {
     fn hash<H: Hasher>(&self, state: &mut H) {
         // Domain separator for RSA private keys
@@ -208,7 +208,7 @@ impl From<&RsaPrivateKey> for RsaPublicKey<BoxedUint, BoxedMontyParams> {
 impl<T, M> PublicKeyParts<T> for RsaPublicKey<T, M>
 where
     T: UnsignedModularInt,
-    M: MParam<Modulus = T>,
+    M: ModulusParams<Modulus = T>,
 {
     type MontyParams = M;
 
@@ -228,7 +228,7 @@ where
 impl<T, M> RsaPublicKey<T, M>
 where
     T: UnsignedModularInt + crypto_bigint::Zero + crypto_bigint::One + crypto_bigint::CtAssign,
-    M: MParam<Modulus = T>,
+    M: ModulusParams<Modulus = T>,
 {
     /// Create a public key from already-validated components and modulus parameters.
     ///

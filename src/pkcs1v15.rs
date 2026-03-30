@@ -69,7 +69,7 @@ use crate::key::{self, RsaPrivateKey, RsaPublicKey};
 #[cfg(not(feature="private-key"))]
 use crate::key::{self, RsaPublicKey};
 use crate::traits::{
-    modular::{IntoMontyForm, MParam, PowBoundedExp},
+    modular::{IntoMontyForm, ModulusParams, PowBoundedExp},
     PaddingScheme, PublicKeyParts, SignatureScheme, UnsignedModularInt,
 };
 
@@ -221,13 +221,28 @@ fn encrypt<R: TryCryptoRng + ?Sized>(
     let int = BoxedUint::from_be_slice(&em, pub_key.n_bits_precision())?;
     uint_to_be_pad(rsa_encrypt(pub_key, &int)?, pub_key.size())
 }
-#[cfg(not(feature = "alloc"))]
-fn encrypt<R: TryCryptoRng + ?Sized>(
+
+pub(crate) fn encrypt_noalloc_generic<'a, R, K, T, F>(
     rng: &mut R,
-    pub_key: &RsaPublicKey,
+    pub_key: &K,
     msg: &[u8],
-) -> Result<()> {
-    todo!("")
+    storage: &'a mut [u8],
+    from_be: F,
+) -> Result<&'a [u8]>
+where
+    R: TryCryptoRng + ?Sized,
+    T: UnsignedModularInt + Resize<Output = T>,
+    K: PublicKeyParts<T>,
+    K::MontyParams: ModulusParams<Modulus = T>,
+    <K::MontyParams as ModulusParams>::MontgomeryForm: IntoMontyForm<K::MontyParams> + PowBoundedExp<K::MontyParams>,
+    F: FnOnce(&[u8], u32) -> Result<T>,
+{
+    let padded_len = pub_key.size();
+    let em = pkcs1v15_encrypt_pad_noalloc(rng, msg, padded_len, storage)?;
+    let int = from_be(em, pub_key.n_bits_precision())?;
+
+    storage[..padded_len].fill(0);
+    uint_to_be_pad_noalloc(rsa_encrypt(pub_key, &int)?, padded_len, storage)
 }
 
 /// Decrypts a plaintext using RSA and the padding scheme from PKCS#1 v1.5.
@@ -304,8 +319,8 @@ pub(crate) fn verify_noalloc_generic<K, T>(
 where
     T: UnsignedModularInt + Resize<Output = T> + PartialOrd,
     K: PublicKeyParts<T>,
-    K::MontyParams: MParam<Modulus = T>,
-    <K::MontyParams as MParam>::Form: IntoMontyForm<K::MontyParams> + PowBoundedExp<K::MontyParams>,
+    K::MontyParams: ModulusParams<Modulus = T>,
+    <K::MontyParams as ModulusParams>::MontgomeryForm: IntoMontyForm<K::MontyParams> + PowBoundedExp<K::MontyParams>,
 {
     let n = pub_key.n();
     if sig >= n.as_ref() || sig.bits_precision() != pub_key.n_bits_precision() {
