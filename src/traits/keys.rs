@@ -8,13 +8,18 @@ use crypto_bigint::{
 };
 use zeroize::Zeroize;
 
+use crate::traits::{UnsignedModularInt, modular::MParam};
+
 /// Components of an RSA public key.
-pub trait PublicKeyParts {
+pub trait PublicKeyParts<T: UnsignedModularInt> {
+    /// Montgomery parameter type matching this modulus type.
+    type MontyParams: MParam<Modulus = T>;
+
     /// Returns the modulus of the key.
-    fn n(&self) -> &NonZero<BoxedUint>;
+    fn n(&self) -> &NonZero<T>;
 
     /// Returns the public exponent of the key.
-    fn e(&self) -> &BoxedUint;
+    fn e(&self) -> &T;
 
     /// Returns the modulus size in bytes. Raw signatures and ciphertexts for
     /// or by this public key will have the same size.
@@ -23,7 +28,7 @@ pub trait PublicKeyParts {
     }
 
     /// Returns the parameters for montgomery operations.
-    fn n_params(&self) -> &BoxedMontyParams;
+    fn n_params(&self) -> &Self::MontyParams;
 
     /// Returns precision (in bits) of `n`.
     fn n_bits_precision(&self) -> u32 {
@@ -33,7 +38,7 @@ pub trait PublicKeyParts {
     /// Returns the big endian serialization of the modulus of the key
     #[cfg(feature = "alloc")]
     fn n_bytes(&self) -> Box<[u8]> {
-        self.n().to_be_bytes_trimmed_vartime()
+        self.n().as_ref().to_be_bytes_trimmed_vartime()
     }
 
     /// Returns the big endian serialization of the public exponent of the key
@@ -44,7 +49,7 @@ pub trait PublicKeyParts {
 }
 
 /// Components of an RSA private key.
-pub trait PrivateKeyParts: PublicKeyParts {
+pub trait PrivateKeyParts: PublicKeyParts<BoxedUint> {
     /// Returns the private exponent of the key.
     fn d(&self) -> &BoxedUint;
 

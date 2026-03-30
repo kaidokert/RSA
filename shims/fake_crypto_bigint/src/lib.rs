@@ -4,9 +4,10 @@
 
 pub use real_crypto_bigint::{DecodeError, Gcd, Integer};
 
+
 pub use real_crypto_bigint::{
     BitOps, Choice, ConcatenatingMul, ConcatenatingSquare, CtAssign, CtEq, CtOption, CtSelect,
-    Resize,
+    One, Resize, Zero,
 };
 
 #[cfg(feature = "rand_core")]
@@ -1056,6 +1057,17 @@ mod no_alloc {
         }
     }
 
+    impl super::Resize for BoxedUint {
+        type Output = Self;
+
+        fn resize_unchecked(self, new_len: u32) -> Self {
+            todo!()
+        }
+        fn try_resize(self, at_least_bits_precision: u32) -> Option<Self::Output> {
+            todo!()
+        }
+    }
+    
     pub mod modular {
         use core::ops::{Mul, SubAssign};
 

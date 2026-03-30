@@ -305,4 +305,5 @@ pub use {
         rsa::rsa_encrypt,
     },
     key::RsaPublicKey,
+    traits::modular::WrapU8,
 };

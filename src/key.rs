@@ -180,18 +180,18 @@ impl From<RsaPrivateKey> for RsaPublicKey {
 #[cfg(feature = "private-key")]
 impl From<&RsaPrivateKey> for RsaPublicKey {
     fn from(private_key: &RsaPrivateKey) -> Self {
-        let n = PublicKeyParts::n(private_key);
-        let e = PublicKeyParts::e(private_key);
-        let n_params = PublicKeyParts::n_params(private_key);
+        let public_key: &dyn PublicKeyParts<BoxedUint, MontyParams = BoxedMontyParams> = private_key;
         RsaPublicKey {
-            n: n.clone(),
-            e: e.clone(),
-            n_params: n_params.clone(),
+            n: public_key.n().clone(),
+            e: public_key.e().clone(),
+            n_params: public_key.n_params().clone(),
         }
     }
 }
 
-impl PublicKeyParts for RsaPublicKey {
+impl PublicKeyParts<BoxedUint> for RsaPublicKey {
+    type MontyParams = BoxedMontyParams;
+
     fn n(&self) -> &NonZero<BoxedUint> {
         &self.n
     }
@@ -275,7 +275,9 @@ impl RsaPublicKey {
 }
 
 #[cfg(feature = "private-key")]
-impl PublicKeyParts for RsaPrivateKey {
+impl PublicKeyParts<BoxedUint> for RsaPrivateKey {
+    type MontyParams = BoxedMontyParams;
+
     fn n(&self) -> &NonZero<BoxedUint> {
         &self.pubkey_components.n
     }
@@ -725,7 +727,7 @@ impl PrivateKeyParts for RsaPrivateKey {
 
 /// Check that the public key is well formed and has an exponent within acceptable bounds.
 #[inline]
-pub fn check_public(public_key: &impl PublicKeyParts) -> Result<()> {
+pub fn check_public(public_key: &impl PublicKeyParts<BoxedUint>) -> Result<()>  {
     check_public_with_max_size(public_key.n(), public_key.e(), None)
 }
 

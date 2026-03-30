@@ -9,7 +9,13 @@ use crypto_bigint::{
 use rand_core::TryCryptoRng;
 use zeroize::Zeroize;
 
-use crate::errors::{Error, Result};
+use crate::{
+    errors::{Error, Result},
+    traits::{
+        UnsignedModularInt,
+        modular::{IntoMontyForm, MParam, Pow, PowBoundedExp},
+    },
+};
 #[cfg(feature = "private-key")]
 use crate::traits::keys::{PrivateKeyParts, PublicKeyParts};
 #[cfg(not(feature = "private-key"))]
@@ -22,7 +28,13 @@ use crate::traits::keys::{PublicKeyParts};
 /// Use this function with great care! Raw RSA should never be used without an appropriate padding
 /// or signature scheme. See the [module-level documentation][crate::hazmat] for more information.
 #[inline]
-pub fn rsa_encrypt<K: PublicKeyParts>(key: &K, m: &BoxedUint) -> Result<BoxedUint> {
+pub fn rsa_encrypt<T, K>(key: &K, m: &T) -> Result<T>
+where
+    T: UnsignedModularInt + Resize<Output = T>,
+    K: PublicKeyParts<T>,
+    K::MontyParams: MParam<Modulus = T>,
+    <K::MontyParams as MParam>::Form: IntoMontyForm<K::MontyParams> + PowBoundedExp<K::MontyParams>,
+{
     let e = key.e();
     let res = pow_mod_params_vartime_exp_bits(m, e, e.bits(), key.n_params());
     Ok(res)
@@ -40,7 +52,7 @@ pub fn rsa_encrypt<K: PublicKeyParts>(key: &K, m: &BoxedUint) -> Result<BoxedUin
 #[inline]
 pub fn rsa_decrypt<R: TryCryptoRng + ?Sized>(
     rng: Option<&mut R>,
-    priv_key: &impl PrivateKeyParts,
+    priv_key: &impl PrivateKeyParts<MontyParams = BoxedMontyParams>,
     c: &BoxedUint,
 ) -> Result<BoxedUint> {
     let n = priv_key.n();
@@ -159,7 +171,7 @@ pub fn rsa_decrypt<R: TryCryptoRng + ?Sized>(
 #[cfg(feature = "private-key")]
 #[inline]
 pub fn rsa_decrypt_and_check<R: TryCryptoRng + ?Sized>(
-    priv_key: &impl PrivateKeyParts,
+    priv_key: &impl PrivateKeyParts<MontyParams = BoxedMontyParams>,
     rng: Option<&mut R>,
     c: &BoxedUint,
 ) -> Result<BoxedUint> {
@@ -178,7 +190,7 @@ pub fn rsa_decrypt_and_check<R: TryCryptoRng + ?Sized>(
 
 /// Returns the blinded c, along with the unblinding factor.
 #[cfg(feature = "private-key")]
-fn blind<R: TryCryptoRng + ?Sized, K: PublicKeyParts>(
+fn blind<R: TryCryptoRng + ?Sized, K: PublicKeyParts<BoxedUint, MontyParams = BoxedMontyParams>>(
     rng: &mut R,
     key: &K,
     c: &BoxedUint,
@@ -238,7 +250,12 @@ fn unblind(m: &BoxedUint, unblinder: &BoxedUint, n_params: &BoxedMontyParams) ->
 }
 
 /// Computes `base.pow_mod(exp, n)` with precomputed `n_params`.
-fn pow_mod_params(base: &BoxedUint, exp: &BoxedUint, n_params: &BoxedMontyParams) -> BoxedUint {
+fn pow_mod_params<T, M>(base: &T, exp: &T, n_params: &M) -> T
+where
+    T: UnsignedModularInt + Resize<Output = T>,
+    M: MParam<Modulus = T>,
+    M::Form: IntoMontyForm<M> + Pow<M>,
+{
     let base = reduce_vartime(base, n_params);
     base.pow(exp).retrieve()
 }
@@ -246,20 +263,30 @@ fn pow_mod_params(base: &BoxedUint, exp: &BoxedUint, n_params: &BoxedMontyParams
 /// Computes `base.pow_mod(exp, n)` with a bounded exponent and precomputed `n_params`.
 ///
 /// The exponent bit length `exp_bits` may be leaked in the time pattern.
-fn pow_mod_params_vartime_exp_bits(
-    base: &BoxedUint,
-    exp: &BoxedUint,
+fn pow_mod_params_vartime_exp_bits<T, M>(
+    base: &T,
+    exp: &T,
     exp_bits: u32,
-    n_params: &BoxedMontyParams,
-) -> BoxedUint {
+    n_params: &M,
+) -> T
+where
+    T: UnsignedModularInt + Resize<Output = T>,
+    M: MParam<Modulus = T>,
+    M::Form: IntoMontyForm<M> + PowBoundedExp<M>,
+{
     let base = reduce_vartime(base, n_params);
     base.pow_bounded_exp(exp, exp_bits).retrieve()
 }
 
-fn reduce_vartime(n: &BoxedUint, p: &BoxedMontyParams) -> BoxedMontyForm {
+fn reduce_vartime<T, M>(n: &T, p: &M) -> M::Form
+where
+    T: UnsignedModularInt + Resize<Output = T>,
+    M: MParam<Modulus = T>,
+    M::Form: IntoMontyForm<M>,
+{
     let modulus = p.modulus().as_nz_ref().clone();
     let n_reduced = n.rem_vartime(&modulus).resize_unchecked(p.bits_precision());
-    BoxedMontyForm::new(n_reduced, p)
+    M::Form::from_reduced(n_reduced, p)
 }
 
 /// The following (deterministic) algorithm also recovers the prime factors `p` and `q` of a modulus `n`, given the

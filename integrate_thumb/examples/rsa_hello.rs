@@ -12,6 +12,7 @@ use rsa::{
     pkcs1v15_generate_prefix_noalloc, pkcs1v15_sign_pad_noalloc, uint_to_be_pad_noalloc,
     uint_to_zeroizing_be_pad_noalloc,
 };
+use rsa::WrapU8;
 
 struct DummyRng;
 
@@ -46,8 +47,8 @@ fn main() -> ! {
     let key = RsaPublicKey::new(BoxedUint::from(3233u64), BoxedUint::from(17u64)).unwrap();
     let msg = BoxedUint::from(42u64);
     loop {
-        let _ = uint_to_be_pad_noalloc::<u8>(1u8.into(), 4, &mut buf);
-        let _ = uint_to_zeroizing_be_pad_noalloc::<u8>(1u8.into(), 4, &mut buf);
+        let _ = uint_to_be_pad_noalloc::<WrapU8>(1u8.into(), 4, &mut buf);
+        let _ = uint_to_zeroizing_be_pad_noalloc::<WrapU8>(1u8.into(), 4, &mut buf);
         let _ = pkcs1v15_encrypt_pad_noalloc(&mut rng, &[1u8], 16, &mut em);
         let _ = pkcs1v15_encrypt_unpad_noalloc(&em, 16, &mut sig);
         let prefix = pkcs1v15_generate_prefix_noalloc::<Sha1>(&mut prefix).unwrap();
