@@ -17,13 +17,12 @@ pub trait UnsignedModularInt: Zeroize + Clone  + Resize {
     type Bytes: NumBytes;
     fn leading_zeros(&self) -> u32;
     fn to_be_bytes(&self) -> Self::Bytes;
-    #[cfg(feature = "alloc")]
-    fn to_be_bytes_trimmed_vartime(&self) -> Box<[u8]>;
     fn rem_vartime(&self, modulus: &NonZero<Self>) -> Self;
     fn as_nz_ref(&self) -> NonZero<Self>;
     fn bits(&self) -> u32;
     fn bits_precision(&self) -> u32;
-    //fn resize_unchecked(&self, new_len: usize) -> Self;
+    #[cfg(feature = "alloc")]
+    fn to_be_bytes_trimmed_vartime(&self) -> Box<[u8]>;
 }
 
 

@@ -20,7 +20,7 @@ fn left_pad(input: &[u8], padded_len: usize) -> Result<Vec<u8>> {
 }
 
 #[inline]
-fn left_pad_noalloc<'a>(input: &[u8], padded_len: usize, storage: &'a mut [u8]) -> Result<&'a [u8]> {
+pub fn left_pad_noalloc<'a>(input: &[u8], padded_len: usize, storage: &'a mut [u8]) -> Result<&'a [u8]> {
     if input.len() > padded_len {
         return Err(Error::InvalidPadLen);
     }

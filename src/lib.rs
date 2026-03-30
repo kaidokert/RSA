@@ -294,7 +294,7 @@ pub mod hazmat;
 
 // export some alloc-compatible methods for testing
 #[cfg(feature = "hack")]
-pub use algorithms::pad::{uint_to_be_pad_noalloc, uint_to_zeroizing_be_pad_noalloc};
+pub use algorithms::pad::{left_pad_noalloc, uint_to_be_pad_noalloc, uint_to_zeroizing_be_pad_noalloc};
 #[cfg(feature = "hack")]
 pub use {
     algorithms::{

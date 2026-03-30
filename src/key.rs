@@ -31,38 +31,54 @@ use crate::algorithms::rsa::{
 use crate::dummy_rng::DummyRng;
 use crate::errors::{Error, Result};
 use crate::traits::keys::{CrtValue, PrivateKeyParts, PublicKeyParts};
-use crate::traits::{PaddingScheme, SignatureScheme};
+use crate::traits::{PaddingScheme, SignatureScheme, UnsignedModularInt, modular::MParam};
 
 /// Represents the public part of an RSA key.
 #[derive(Debug, Clone)]
-pub struct RsaPublicKey {
+pub struct RsaPublicKey<T = BoxedUint, M = BoxedMontyParams>
+where
+    T: UnsignedModularInt,
+    M: MParam<Modulus = T>,
+{
     /// Modulus: product of prime numbers `p` and `q`
-    n: NonZero<BoxedUint>,
+    n: NonZero<T>,
     /// Public exponent: power to which a plaintext message is raised in
     /// order to encrypt it.
     ///
     /// Typically `0x10001` (`65537`)
-    e: BoxedUint,
+    e: T,
 
-    n_params: BoxedMontyParams,
+    n_params: M,
 }
 
-impl Eq for RsaPublicKey {}
+impl<T, M> Eq for RsaPublicKey<T, M>
+where
+    T: UnsignedModularInt + Eq,
+    M: MParam<Modulus = T>,
+{
+}
 
-impl PartialEq for RsaPublicKey {
+impl<T, M> PartialEq for RsaPublicKey<T, M>
+where
+    T: UnsignedModularInt + PartialEq,
+    M: MParam<Modulus = T>,
+{
     #[inline]
-    fn eq(&self, other: &RsaPublicKey) -> bool {
+    fn eq(&self, other: &RsaPublicKey<T, M>) -> bool {
         self.n == other.n && self.e == other.e
     }
 }
 
-impl Hash for RsaPublicKey {
+impl<T, M> Hash for RsaPublicKey<T, M>
+where
+    T: UnsignedModularInt,
+    M: MParam<Modulus = T>,
+{
     fn hash<H: Hasher>(&self, state: &mut H) {
         // Domain separator for RSA private keys
         state.write(b"RsaPublicKey");
-        // TODO(tarcieri): to match the `PartialEq` impl we should strip leading zeros
-        Hash::hash(&self.n.as_limbs(), state);
-        Hash::hash(&self.e.as_limbs(), state);
+        state.write(self.n.as_ref().to_be_bytes().as_ref());
+        state.write(self.e.to_be_bytes().as_ref());
     }
 }
 
@@ -171,14 +187,14 @@ impl Drop for PrecomputedValues {
 }
 
 #[cfg(feature = "private-key")]
-impl From<RsaPrivateKey> for RsaPublicKey {
+impl From<RsaPrivateKey> for RsaPublicKey<BoxedUint, BoxedMontyParams> {
     fn from(private_key: RsaPrivateKey) -> Self {
         (&private_key).into()
     }
 }
 
 #[cfg(feature = "private-key")]
-impl From<&RsaPrivateKey> for RsaPublicKey {
+impl From<&RsaPrivateKey> for RsaPublicKey<BoxedUint, BoxedMontyParams> {
     fn from(private_key: &RsaPrivateKey) -> Self {
         let public_key: &dyn PublicKeyParts<BoxedUint, MontyParams = BoxedMontyParams> = private_key;
         RsaPublicKey {
@@ -189,23 +205,27 @@ impl From<&RsaPrivateKey> for RsaPublicKey {
     }
 }
 
-impl PublicKeyParts<BoxedUint> for RsaPublicKey {
-    type MontyParams = BoxedMontyParams;
+impl<T, M> PublicKeyParts<T> for RsaPublicKey<T, M>
+where
+    T: UnsignedModularInt,
+    M: MParam<Modulus = T>,
+{
+    type MontyParams = M;
 
-    fn n(&self) -> &NonZero<BoxedUint> {
+    fn n(&self) -> &NonZero<T> {
         &self.n
     }
 
-    fn e(&self) -> &BoxedUint {
+    fn e(&self) -> &T {
         &self.e
     }
 
-    fn n_params(&self) -> &BoxedMontyParams {
+    fn n_params(&self) -> &M {
         &self.n_params
     }
 }
 
-impl RsaPublicKey {
+impl RsaPublicKey<BoxedUint, BoxedMontyParams> {
     /// Encrypt the given message.
     #[cfg(feature = "alloc")]
     pub fn encrypt<R: CryptoRng + ?Sized, P: PaddingScheme>(
@@ -228,7 +248,7 @@ impl RsaPublicKey {
     }
 }
 
-impl RsaPublicKey {
+impl RsaPublicKey<BoxedUint, BoxedMontyParams> {
     /// Minimum value of the public exponent `e`.
     pub const MIN_PUB_EXPONENT: u64 = 2;
 
