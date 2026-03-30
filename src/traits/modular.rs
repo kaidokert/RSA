@@ -11,7 +11,7 @@ use zeroize::Zeroize;
 
 pub trait NumBytes: Borrow<[u8]> + Zeroize + AsRef<[u8]> {}
 
-impl NumBytes for [u8; 1] {}
+impl<const N: usize> NumBytes for [u8; N] {}
 
 pub trait UnsignedModularInt: Zeroize + Clone  + Resize {
     type Bytes: NumBytes;

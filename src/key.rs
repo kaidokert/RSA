@@ -225,6 +225,21 @@ where
     }
 }
 
+impl<T, M> RsaPublicKey<T, M>
+where
+    T: UnsignedModularInt + crypto_bigint::Zero + crypto_bigint::One + crypto_bigint::CtAssign,
+    M: MParam<Modulus = T>,
+{
+    /// Create a public key from already-validated components and modulus parameters.
+    ///
+    /// This is intended for alternate bigint backends that prepare their own
+    /// modular arithmetic context outside the `BoxedUint` constructors.
+    pub fn from_components(n: T, e: T, n_params: M) -> Result<Self> {
+        let n = NonZero::new(n).into_option().ok_or(Error::InvalidModulus)?;
+        Ok(Self { n, e, n_params })
+    }
+}
+
 impl RsaPublicKey<BoxedUint, BoxedMontyParams> {
     /// Encrypt the given message.
     #[cfg(feature = "alloc")]

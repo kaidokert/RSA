@@ -252,6 +252,8 @@ pub mod traits;
 mod dummy_rng;
 mod encoding;
 mod key;
+#[cfg(feature = "modmath")]
+pub mod modmath_support;
 
 #[cfg(feature = "encoding")]
 pub use pkcs1;
@@ -259,6 +261,11 @@ pub use pkcs1;
 pub use pkcs8;
 #[cfg(feature = "sha2")]
 pub use sha2;
+#[cfg(feature = "modmath")]
+pub use crate::modmath_support::{
+    ModMathFixedUint, ModMathFixedUint32, ModMathForm, ModMathForm32, ModMathParams,
+    ModMathParams32,
+};
 
 #[cfg(feature = "alloc")]
 pub use crate::{

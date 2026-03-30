@@ -51,7 +51,7 @@ pub use self::{
 use alloc::{boxed::Box, vec::Vec};
 use const_oid::AssociatedOid;
 use core::fmt::Debug;
-use crypto_bigint::BoxedUint;
+use crypto_bigint::{BoxedUint, Resize};
 use digest::Digest;
 use rand_core::TryCryptoRng;
 
@@ -68,7 +68,10 @@ use crate::errors::{Error, Result};
 use crate::key::{self, RsaPrivateKey, RsaPublicKey};
 #[cfg(not(feature="private-key"))]
 use crate::key::{self, RsaPublicKey};
-use crate::traits::{PaddingScheme, PublicKeyParts, SignatureScheme};
+use crate::traits::{
+    modular::{IntoMontyForm, MParam, PowBoundedExp},
+    PaddingScheme, PublicKeyParts, SignatureScheme, UnsignedModularInt,
+};
 
 /// Encryption using PKCS#1 v1.5 padding.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -284,9 +287,26 @@ fn sign<R: TryCryptoRng + ?Sized>(
 #[inline]
 fn verify(pub_key: &RsaPublicKey, prefix: &[u8], hashed: &[u8], sig: &BoxedUint) -> Result<()> {
     let mut storage = vec![0u8; pub_key.size()];
-    verify_noalloc(pub_key, prefix, hashed, sig, &mut storage)
+    verify_noalloc_generic(pub_key, prefix, hashed, sig, &mut storage)
 }
+#[cfg(not(feature = "alloc"))]
 fn verify_noalloc(pub_key: &RsaPublicKey, prefix: &[u8], hashed: &[u8], sig: &BoxedUint, storage: &mut [u8]) -> Result<()> {
+    verify_noalloc_generic(pub_key, prefix, hashed, sig, storage)
+}
+
+pub(crate) fn verify_noalloc_generic<K, T>(
+    pub_key: &K,
+    prefix: &[u8],
+    hashed: &[u8],
+    sig: &T,
+    storage: &mut [u8],
+) -> Result<()>
+where
+    T: UnsignedModularInt + Resize<Output = T> + PartialOrd,
+    K: PublicKeyParts<T>,
+    K::MontyParams: MParam<Modulus = T>,
+    <K::MontyParams as MParam>::Form: IntoMontyForm<K::MontyParams> + PowBoundedExp<K::MontyParams>,
+{
     let n = pub_key.n();
     if sig >= n.as_ref() || sig.bits_precision() != pub_key.n_bits_precision() {
         return Err(Error::Verification);

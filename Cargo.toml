@@ -34,6 +34,8 @@ serde = { version = "1.0.184", optional = true, default-features = false, featur
 # Hacks for heapless build
 crypto-bigint = { path = "shims/fake_crypto_bigint", package = "crypto-bigint", default-features = false, features = ["zeroize","rand_core"] }
 heapless = { version = "0.8", optional = true, default-features = false }
+fixed-bigint = { version = "0.2.5", optional = true, default-features = false, features = ["zeroize"] }
+modmath = { version = "0.1.5", optional = true, default-features = false }
 
 [dev-dependencies]
 base64ct = { version = "1", features = ["alloc"] }
@@ -54,7 +56,7 @@ rstest = "0.26.1"
 name = "key"
 
 [features]
-default = ["std", "encoding", "full" ]
+default = ["std", "encoding", "full", "modmath" ]
 encoding = ["dep:pkcs1", "dep:pkcs8", "dep:spki"]
 hazmat = []
 getrandom = ["crypto-bigint/getrandom", "crypto-common"]
@@ -69,6 +71,7 @@ full = ["private-key"]
 private-key = []
 # Temporary hack for testing
 hack = ["dep:heapless"]
+modmath = ["dep:fixed-bigint", "dep:modmath"]
 
 [package.metadata.docs.rs]
 features = ["std", "serde", "hazmat", "sha2"]
