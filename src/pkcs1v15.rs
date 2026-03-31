@@ -84,6 +84,34 @@ use crate::traits::{
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Pkcs1v15Encrypt;
 
+impl Pkcs1v15Encrypt {
+    /// Encrypts the given message with RSA and PKCS#1 v1.5 padding into caller-provided storage.
+    ///
+    /// The message must be no longer than the length of the public modulus minus 11 bytes.
+    pub fn encrypt_into<'a, R, K, T>(
+        self,
+        rng: &mut R,
+        pub_key: &K,
+        msg: &[u8],
+        storage: &'a mut [u8],
+    ) -> Result<&'a [u8]>
+    where
+        R: TryCryptoRng + ?Sized,
+        T: UnsignedModularInt + FromBeBytes + Resize<Output = T>,
+        K: PublicKeyParts<T>,
+        K::MontyParams: ModulusParams<Modulus = T>,
+        <K::MontyParams as ModulusParams>::MontgomeryForm:
+            IntoMontyForm<K::MontyParams> + PowBoundedExp<K::MontyParams>,
+    {
+        let padded_len = pub_key.size();
+        let em = pkcs1v15_encrypt_pad_noalloc(rng, msg, padded_len, storage)?;
+        let int = T::from_be_bytes_vartime(em);
+
+        storage[..padded_len].fill(0);
+        uint_to_be_pad_noalloc(rsa_encrypt(pub_key, &int)?, padded_len, storage)
+    }
+}
+
 /// Encrypts the given message with RSA and the padding
 /// scheme from PKCS#1 v1.5. The message must be no longer than the
 /// length of the public modulus minus 11 bytes.
@@ -101,7 +129,7 @@ where
     <K::MontyParams as ModulusParams>::MontgomeryForm: IntoMontyForm<K::MontyParams> + PowBoundedExp<K::MontyParams>,
 {
     let mut storage = vec![0u8; pub_key.size()];
-    let ciphertext = encrypt_noalloc_generic(rng, pub_key, msg, &mut storage)?;
+    let ciphertext = Pkcs1v15Encrypt.encrypt_into(rng, pub_key, msg, &mut storage)?;
     Ok(ciphertext.to_vec())
 }
 
@@ -178,7 +206,7 @@ impl PaddingScheme for Pkcs1v15Encrypt {
         <K::MontyParams as ModulusParams>::MontgomeryForm: IntoMontyForm<K::MontyParams> + PowBoundedExp<K::MontyParams>,
     {
         let mut storage = vec![0u8; pub_key.size()];
-        let ciphertext = encrypt_noalloc_generic(rng, pub_key, msg, &mut storage)?;
+        let ciphertext = self.encrypt_into(rng, pub_key, msg, &mut storage)?;
         Ok(ciphertext.to_vec())
     }
 }
@@ -265,7 +293,10 @@ impl SignatureScheme for Pkcs1v15Sign {
     }
 }
 
-pub(crate) fn encrypt_noalloc_generic<'a, R, K, T>(
+/// Encrypts the given message with RSA and PKCS#1 v1.5 padding into caller-provided storage.
+///
+/// The message must be no longer than the length of the public modulus minus 11 bytes.
+pub fn encrypt_noalloc<'a, R, K, T>(
     rng: &mut R,
     pub_key: &K,
     msg: &[u8],
@@ -278,12 +309,7 @@ where
     K::MontyParams: ModulusParams<Modulus = T>,
     <K::MontyParams as ModulusParams>::MontgomeryForm: IntoMontyForm<K::MontyParams> + PowBoundedExp<K::MontyParams>,
 {
-    let padded_len = pub_key.size();
-    let em = pkcs1v15_encrypt_pad_noalloc(rng, msg, padded_len, storage)?;
-    let int = T::from_be_bytes_vartime(em);
-
-    storage[..padded_len].fill(0);
-    uint_to_be_pad_noalloc(rsa_encrypt(pub_key, &int)?, padded_len, storage)
+    Pkcs1v15Encrypt.encrypt_into(rng, pub_key, msg, storage)
 }
 
 /// Decrypts a plaintext using RSA and the padding scheme from PKCS#1 v1.5.

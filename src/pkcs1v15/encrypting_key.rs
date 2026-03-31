@@ -1,5 +1,5 @@
 #[cfg(feature = "alloc")]
-use super::encrypt_noalloc_generic;
+use super::encrypt_noalloc;
 use crate::{
     key::GenericRsaPublicKey,
     traits::{
@@ -55,7 +55,7 @@ where
 {
     fn encrypt_with_rng<R: CryptoRng + ?Sized>(&self, rng: &mut R, msg: &[u8]) -> Result<Vec<u8>> {
         let mut storage = vec![0u8; self.inner.size()];
-        let ciphertext = encrypt_noalloc_generic(rng, &self.inner, msg, &mut storage)?;
+        let ciphertext = encrypt_noalloc(rng, &self.inner, msg, &mut storage)?;
         Ok(ciphertext.to_vec())
     }
 }

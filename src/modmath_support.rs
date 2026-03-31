@@ -813,13 +813,9 @@ mod tests {
         let mut boxed_rng = ChaCha8Rng::from_seed([42; 32]);
         let mut storage = [0u8; 64];
 
-        let modmath_ciphertext = crate::pkcs1v15::encrypt_noalloc_generic(
-            &mut modmath_rng,
-            &modmath_key,
-            msg,
-            &mut storage,
-        )
-        .unwrap();
+        let modmath_ciphertext = crate::pkcs1v15::Pkcs1v15Encrypt
+            .encrypt_into(&mut modmath_rng, &modmath_key, msg, &mut storage)
+            .unwrap();
         let boxed_ciphertext = boxed_key.encrypt(&mut boxed_rng, Pkcs1v15Encrypt, msg).unwrap();
 
         assert_eq!(modmath_ciphertext, boxed_ciphertext.as_slice());
