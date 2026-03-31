@@ -36,27 +36,36 @@ mod verifying_key;
 
 #[cfg(feature="private-key")]
 pub use self::{
-    decrypting_key::DecryptingKey, encrypting_key::EncryptingKey, signature::Signature,
-    signing_key::SigningKey, verifying_key::VerifyingKey,
+    decrypting_key::DecryptingKey, encrypting_key::GenericEncryptingKey,
+    signature::{GenericSignature, GenericSignatureBytes}, signing_key::SigningKey,
+    verifying_key::GenericVerifyingKey,
 };
 #[cfg(not(feature="private-key"))]
 pub use self::{
-    encrypting_key::EncryptingKey, signature::Signature,
+    encrypting_key::GenericEncryptingKey, signature::{GenericSignature, GenericSignatureBytes},
+    verifying_key::GenericVerifyingKey,
+};
+
+#[cfg(feature = "alloc")]
+pub use self::{
+    encrypting_key::EncryptingKey,
+    signature::{Signature, SignatureBytes},
     verifying_key::VerifyingKey,
 };
 
-
-
 #[cfg(feature = "alloc")]
-use alloc::{boxed::Box, vec::Vec};
+use alloc::{boxed::Box, vec, vec::Vec};
 use const_oid::AssociatedOid;
 use core::fmt::Debug;
+#[cfg(feature = "alloc")]
 use crypto_bigint::{BoxedUint, Resize};
+#[cfg(not(feature = "alloc"))]
+use crypto_bigint::Resize;
 use digest::Digest;
 use rand_core::TryCryptoRng;
 
 #[cfg(feature="alloc")]
-use crate::algorithms::pad::{uint_to_be_pad, uint_to_zeroizing_be_pad};
+use crate::algorithms::pad::uint_to_zeroizing_be_pad;
 use crate::algorithms::pad::uint_to_be_pad_noalloc;
 use crate::algorithms::pkcs1v15::*;
 #[cfg(feature="private-key")]
@@ -65,17 +74,36 @@ use crate::algorithms::rsa::{rsa_decrypt_and_check, rsa_encrypt};
 use crate::algorithms::rsa::{rsa_encrypt};
 use crate::errors::{Error, Result};
 #[cfg(feature="private-key")]
-use crate::key::{self, RsaPrivateKey, RsaPublicKey};
-#[cfg(not(feature="private-key"))]
-use crate::key::{self, RsaPublicKey};
+use crate::key::{self, RsaPrivateKey};
 use crate::traits::{
-    modular::{IntoMontyForm, ModulusParams, PowBoundedExp},
+    modular::{FromBeBytes, IntoMontyForm, ModulusParams, PowBoundedExp},
     PaddingScheme, PublicKeyParts, SignatureScheme, UnsignedModularInt,
 };
 
 /// Encryption using PKCS#1 v1.5 padding.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Pkcs1v15Encrypt;
+
+/// Encrypts the given message with RSA and the padding
+/// scheme from PKCS#1 v1.5. The message must be no longer than the
+/// length of the public modulus minus 11 bytes.
+#[cfg(feature = "alloc")]
+#[inline]
+fn encrypt<R: TryCryptoRng + ?Sized, K, T>(
+    rng: &mut R,
+    pub_key: &K,
+    msg: &[u8],
+) -> Result<Vec<u8>>
+where
+    T: UnsignedModularInt + FromBeBytes + Resize<Output = T> + PartialOrd,
+    K: PublicKeyParts<T>,
+    K::MontyParams: ModulusParams<Modulus = T>,
+    <K::MontyParams as ModulusParams>::MontgomeryForm: IntoMontyForm<K::MontyParams> + PowBoundedExp<K::MontyParams>,
+{
+    let mut storage = vec![0u8; pub_key.size()];
+    let ciphertext = encrypt_noalloc_generic(rng, pub_key, msg, &mut storage)?;
+    Ok(ciphertext.to_vec())
+}
 
 #[cfg(not(feature = "alloc"))]
 type Prefix = heapless::Vec<u8, 32>;
@@ -104,13 +132,22 @@ impl PaddingScheme for Pkcs1v15Encrypt {
     }
 
     #[cfg(feature="alloc")]
-    fn encrypt<Rng: TryCryptoRng + ?Sized>(
+    fn encrypt<Rng, K, T>(
         self,
         rng: &mut Rng,
-        pub_key: &RsaPublicKey,
+        pub_key: &K,
         msg: &[u8],
-    ) -> Result<Vec<u8>> {
-        encrypt(rng, pub_key, msg)
+    ) -> Result<Vec<u8>>
+    where
+        Rng: TryCryptoRng + ?Sized,
+        T: UnsignedModularInt + FromBeBytes + Resize<Output = T> + PartialOrd,
+        K: PublicKeyParts<T>,
+        K::MontyParams: ModulusParams<Modulus = T>,
+        <K::MontyParams as ModulusParams>::MontgomeryForm: IntoMontyForm<K::MontyParams> + PowBoundedExp<K::MontyParams>,
+    {
+        let mut storage = vec![0u8; pub_key.size()];
+        let ciphertext = encrypt_noalloc_generic(rng, pub_key, msg, &mut storage)?;
+        Ok(ciphertext.to_vec())
     }
 }
 
@@ -176,70 +213,42 @@ impl SignatureScheme for Pkcs1v15Sign {
         sign(rng, priv_key, &self.prefix, hashed)
     }
 
-    fn verify(self, pub_key: &RsaPublicKey, hashed: &[u8], sig: &[u8]) -> Result<()> {
+    fn verify<K, T>(self, pub_key: &K, hashed: &[u8], sig: &[u8]) -> Result<()>
+    where
+        T: UnsignedModularInt + FromBeBytes + Resize<Output = T> + PartialOrd,
+        T::Bytes: AsMut<[u8]>,
+        K: PublicKeyParts<T>,
+        K::MontyParams: ModulusParams<Modulus = T>,
+        <K::MontyParams as ModulusParams>::MontgomeryForm: IntoMontyForm<K::MontyParams> + PowBoundedExp<K::MontyParams>,
+    {
         if let Some(hash_len) = self.hash_len {
             if hashed.len() != hash_len {
                 return Err(Error::InputNotHashed);
             }
         }
 
-        #[cfg(feature = "alloc")]
-         let result =   verify(
-            pub_key,
-            self.prefix.as_ref(),
-            hashed,
-            &BoxedUint::from_be_slice_vartime(sig),
-        );
-        #[cfg(not(feature = "alloc"))]
-        let result = {
-            let mut storage = pub_key.n().as_ref().to_be_bytes();
-            verify_noalloc(
-                pub_key,
-                self.prefix.as_ref(),
-                hashed,
-                &BoxedUint::from_be_slice_vartime(sig),
-                storage.as_mut(),
-            )
-        };
-        result
+        let mut storage = pub_key.n().as_ref().to_be_bytes();
+        let sig = T::from_be_bytes_vartime(sig);
+        verify_noalloc_generic(pub_key, self.prefix.as_ref(), hashed, &sig, storage.as_mut())
     }
 }
 
-/// Encrypts the given message with RSA and the padding
-/// scheme from PKCS#1 v1.5.  The message must be no longer than the
-/// length of the public modulus minus 11 bytes.
-#[cfg(feature = "alloc")]
-#[inline]
-fn encrypt<R: TryCryptoRng + ?Sized>(
-    rng: &mut R,
-    pub_key: &RsaPublicKey,
-    msg: &[u8],
-) -> Result<Vec<u8>> {
-    key::check_public(pub_key)?;
-
-    let em = pkcs1v15_encrypt_pad(rng, msg, pub_key.size())?;
-    let int = BoxedUint::from_be_slice(&em, pub_key.n_bits_precision())?;
-    uint_to_be_pad(rsa_encrypt(pub_key, &int)?, pub_key.size())
-}
-
-pub(crate) fn encrypt_noalloc_generic<'a, R, K, T, F>(
+pub(crate) fn encrypt_noalloc_generic<'a, R, K, T>(
     rng: &mut R,
     pub_key: &K,
     msg: &[u8],
     storage: &'a mut [u8],
-    from_be: F,
 ) -> Result<&'a [u8]>
 where
     R: TryCryptoRng + ?Sized,
-    T: UnsignedModularInt + Resize<Output = T>,
+    T: UnsignedModularInt + FromBeBytes + Resize<Output = T>,
     K: PublicKeyParts<T>,
     K::MontyParams: ModulusParams<Modulus = T>,
     <K::MontyParams as ModulusParams>::MontgomeryForm: IntoMontyForm<K::MontyParams> + PowBoundedExp<K::MontyParams>,
-    F: FnOnce(&[u8], u32) -> Result<T>,
 {
     let padded_len = pub_key.size();
     let em = pkcs1v15_encrypt_pad_noalloc(rng, msg, padded_len, storage)?;
-    let int = from_be(em, pub_key.n_bits_precision())?;
+    let int = T::from_be_bytes_vartime(em);
 
     storage[..padded_len].fill(0);
     uint_to_be_pad_noalloc(rsa_encrypt(pub_key, &int)?, padded_len, storage)
@@ -295,18 +304,6 @@ fn sign<R: TryCryptoRng + ?Sized>(
 
     let em = BoxedUint::from_be_slice(&em, priv_key.n_bits_precision())?;
     uint_to_zeroizing_be_pad(rsa_decrypt_and_check(priv_key, rng, &em)?, priv_key.size())
-}
-
-/// Verifies an RSA PKCS#1 v1.5 signature.
-#[cfg(feature = "alloc")]
-#[inline]
-fn verify(pub_key: &RsaPublicKey, prefix: &[u8], hashed: &[u8], sig: &BoxedUint) -> Result<()> {
-    let mut storage = vec![0u8; pub_key.size()];
-    verify_noalloc_generic(pub_key, prefix, hashed, sig, &mut storage)
-}
-#[cfg(not(feature = "alloc"))]
-fn verify_noalloc(pub_key: &RsaPublicKey, prefix: &[u8], hashed: &[u8], sig: &BoxedUint, storage: &mut [u8]) -> Result<()> {
-    verify_noalloc_generic(pub_key, prefix, hashed, sig, storage)
 }
 
 pub(crate) fn verify_noalloc_generic<K, T>(

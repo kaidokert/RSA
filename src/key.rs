@@ -4,12 +4,12 @@ use core::cmp::Ordering;
 use core::fmt;
 use core::hash::{Hash, Hasher};
 
+use crypto_bigint::{NonZero, Odd, Resize};
+#[cfg(feature = "alloc")]
 use crypto_bigint::{
     modular::{BoxedMontyForm, BoxedMontyParams},
-    BoxedUint, ConcatenatingMul, Integer, NonZero, Odd, Resize,
+    BoxedUint, ConcatenatingMul, Integer,
 };
-#[cfg(not(feature = "alloc"))]
-use crypto_bigint::BitOps;
 
 use rand_core::CryptoRng;
 use zeroize::{Zeroize, ZeroizeOnDrop};
@@ -28,14 +28,20 @@ use crate::algorithms::rsa::{
     recover_primes,
 };
 
+#[cfg(feature = "private-key")]
 use crate::dummy_rng::DummyRng;
 use crate::errors::{Error, Result};
-use crate::traits::keys::{CrtValue, PrivateKeyParts, PublicKeyParts};
-use crate::traits::{PaddingScheme, SignatureScheme, UnsignedModularInt, modular::ModulusParams};
+#[cfg(feature = "private-key")]
+use crate::traits::keys::{CrtValue, PrivateKeyParts};
+use crate::traits::keys::PublicKeyParts;
+use crate::traits::{
+    PaddingScheme, SignatureScheme, UnsignedModularInt,
+    modular::{FromBeBytes, IntoMontyForm, ModulusParams, PowBoundedExp},
+};
 
 /// Represents the public part of an RSA key.
 #[derive(Debug, Clone)]
-pub struct RsaPublicKey<T = BoxedUint, M = BoxedMontyParams>
+pub struct GenericRsaPublicKey<T, M>
 where
     T: UnsignedModularInt,
     M: ModulusParams<Modulus = T>,
@@ -51,25 +57,28 @@ where
     n_params: M,
 }
 
-impl<T, M> Eq for RsaPublicKey<T, M>
+#[cfg(feature = "alloc")]
+pub type RsaPublicKey = GenericRsaPublicKey<BoxedUint, BoxedMontyParams>;
+
+impl<T, M> Eq for GenericRsaPublicKey<T, M>
 where
     T: UnsignedModularInt + Eq,
     M: ModulusParams<Modulus = T>,
 {
 }
 
-impl<T, M> PartialEq for RsaPublicKey<T, M>
+impl<T, M> PartialEq for GenericRsaPublicKey<T, M>
 where
     T: UnsignedModularInt + PartialEq,
     M: ModulusParams<Modulus = T>,
 {
     #[inline]
-    fn eq(&self, other: &RsaPublicKey<T, M>) -> bool {
+    fn eq(&self, other: &GenericRsaPublicKey<T, M>) -> bool {
         self.n == other.n && self.e == other.e
     }
 }
 
-impl<T, M> Hash for RsaPublicKey<T, M>
+impl<T, M> Hash for GenericRsaPublicKey<T, M>
 where
     T: UnsignedModularInt,
     M: ModulusParams<Modulus = T>,
@@ -153,6 +162,7 @@ impl Drop for RsaPrivateKey {
 #[cfg(feature = "private-key")]
 impl ZeroizeOnDrop for RsaPrivateKey {}
 
+#[cfg(feature = "private-key")]
 #[derive(Clone)]
 pub(crate) struct PrecomputedValues {
     /// D mod (P-1)
@@ -168,8 +178,10 @@ pub(crate) struct PrecomputedValues {
     pub(crate) q_params: BoxedMontyParams,
 }
 
+#[cfg(feature = "private-key")]
 impl ZeroizeOnDrop for PrecomputedValues {}
 
+#[cfg(feature = "private-key")]
 impl Zeroize for PrecomputedValues {
     fn zeroize(&mut self) {
         self.dp.zeroize();
@@ -180,6 +192,7 @@ impl Zeroize for PrecomputedValues {
     }
 }
 
+#[cfg(feature = "private-key")]
 impl Drop for PrecomputedValues {
     fn drop(&mut self) {
         self.zeroize();
@@ -187,17 +200,17 @@ impl Drop for PrecomputedValues {
 }
 
 #[cfg(feature = "private-key")]
-impl From<RsaPrivateKey> for RsaPublicKey<BoxedUint, BoxedMontyParams> {
+impl From<RsaPrivateKey> for GenericRsaPublicKey<BoxedUint, BoxedMontyParams> {
     fn from(private_key: RsaPrivateKey) -> Self {
         (&private_key).into()
     }
 }
 
 #[cfg(feature = "private-key")]
-impl From<&RsaPrivateKey> for RsaPublicKey<BoxedUint, BoxedMontyParams> {
+impl From<&RsaPrivateKey> for GenericRsaPublicKey<BoxedUint, BoxedMontyParams> {
     fn from(private_key: &RsaPrivateKey) -> Self {
         let public_key: &dyn PublicKeyParts<BoxedUint, MontyParams = BoxedMontyParams> = private_key;
-        RsaPublicKey {
+        GenericRsaPublicKey {
             n: public_key.n().clone(),
             e: public_key.e().clone(),
             n_params: public_key.n_params().clone(),
@@ -205,7 +218,7 @@ impl From<&RsaPrivateKey> for RsaPublicKey<BoxedUint, BoxedMontyParams> {
     }
 }
 
-impl<T, M> PublicKeyParts<T> for RsaPublicKey<T, M>
+impl<T, M> PublicKeyParts<T> for GenericRsaPublicKey<T, M>
 where
     T: UnsignedModularInt,
     M: ModulusParams<Modulus = T>,
@@ -225,7 +238,7 @@ where
     }
 }
 
-impl<T, M> RsaPublicKey<T, M>
+impl<T, M> GenericRsaPublicKey<T, M>
 where
     T: UnsignedModularInt + crypto_bigint::Zero + crypto_bigint::One + crypto_bigint::CtAssign,
     M: ModulusParams<Modulus = T>,
@@ -240,7 +253,12 @@ where
     }
 }
 
-impl RsaPublicKey<BoxedUint, BoxedMontyParams> {
+impl<T, M> GenericRsaPublicKey<T, M>
+where
+    T: UnsignedModularInt + FromBeBytes + Resize<Output = T> + PartialOrd,
+    M: ModulusParams<Modulus = T>,
+    M::MontgomeryForm: IntoMontyForm<M> + PowBoundedExp<M>,
+{
     /// Encrypt the given message.
     #[cfg(feature = "alloc")]
     pub fn encrypt<R: CryptoRng + ?Sized, P: PaddingScheme>(
@@ -258,12 +276,16 @@ impl RsaPublicKey<BoxedUint, BoxedMontyParams> {
     /// passed in through `hash`.
     ///
     /// If the message is valid `Ok(())` is returned, otherwise an `Err` indicating failure.
-    pub fn verify<S: SignatureScheme>(&self, scheme: S, hashed: &[u8], sig: &[u8]) -> Result<()> {
+    pub fn verify<S: SignatureScheme>(&self, scheme: S, hashed: &[u8], sig: &[u8]) -> Result<()>
+    where
+        T::Bytes: AsMut<[u8]>,
+    {
         scheme.verify(self, hashed, sig)
     }
 }
 
-impl RsaPublicKey<BoxedUint, BoxedMontyParams> {
+#[cfg(feature = "alloc")]
+impl GenericRsaPublicKey<BoxedUint, BoxedMontyParams> {
     /// Minimum value of the public exponent `e`.
     pub const MIN_PUB_EXPONENT: u64 = 2;
 
@@ -762,12 +784,14 @@ impl PrivateKeyParts for RsaPrivateKey {
 
 /// Check that the public key is well formed and has an exponent within acceptable bounds.
 #[inline]
+#[cfg(feature = "alloc")]
 pub fn check_public(public_key: &impl PublicKeyParts<BoxedUint>) -> Result<()>  {
     check_public_with_max_size(public_key.n(), public_key.e(), None)
 }
 
 /// Check that the public key is well formed and has an exponent within acceptable bounds.
 #[inline]
+#[cfg(feature = "alloc")]
 fn check_public_with_max_size(n: &BoxedUint, e: &BoxedUint, max_size: Option<usize>) -> Result<()> {
     if let Some(max_size) = max_size {
         if n.bits_vartime() as usize > max_size {
@@ -792,6 +816,7 @@ fn check_public_with_max_size(n: &BoxedUint, e: &BoxedUint, max_size: Option<usi
 ///
 /// This is used internally by both public validation functions and hazmat APIs.
 #[inline]
+#[cfg(feature = "alloc")]
 fn check_public_skip_exponent_size(n: &BoxedUint, e: &BoxedUint) -> Result<()> {
     if e >= n || n.is_even().into() || n.is_zero().into() {
         return Err(Error::InvalidModulus);

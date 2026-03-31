@@ -1,4 +1,4 @@
-use super::{pkcs1v15_generate_prefix, sign, Signature, VerifyingKey};
+use super::{GenericVerifyingKey, pkcs1v15_generate_prefix, sign, Signature, VerifyingKey};
 use crate::{dummy_rng::DummyRng, Result, RsaPrivateKey};
 #[cfg(feature = "alloc")]
 use alloc::vec::Vec;
@@ -256,7 +256,7 @@ where
     type VerifyingKey = VerifyingKey<D>;
 
     fn verifying_key(&self) -> Self::VerifyingKey {
-        VerifyingKey {
+        GenericVerifyingKey {
             inner: self.inner.to_public_key(),
             prefix: self.prefix.clone(),
             phantom: Default::default(),

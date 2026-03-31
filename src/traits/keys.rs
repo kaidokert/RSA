@@ -2,9 +2,11 @@
 
 #[cfg(feature = "alloc")]
 use alloc::boxed::Box;
+use crypto_bigint::NonZero;
+#[cfg(feature = "private-key")]
 use crypto_bigint::{
+    BoxedUint,
     modular::{BoxedMontyForm, BoxedMontyParams},
-    BoxedUint, NonZero,
 };
 use zeroize::Zeroize;
 
@@ -49,6 +51,7 @@ pub trait PublicKeyParts<T: UnsignedModularInt> {
 }
 
 /// Components of an RSA private key.
+#[cfg(feature = "private-key")]
 pub trait PrivateKeyParts: PublicKeyParts<BoxedUint> {
     /// Returns the private exponent of the key.
     fn d(&self) -> &BoxedUint;
@@ -76,6 +79,7 @@ pub trait PrivateKeyParts: PublicKeyParts<BoxedUint> {
 }
 
 /// Contains the precomputed Chinese remainder theorem values.
+#[cfg(feature = "private-key")]
 #[derive(Debug, Clone)]
 pub struct CrtValue {
     /// D mod (prime - 1)
@@ -86,6 +90,7 @@ pub struct CrtValue {
     pub(crate) r: BoxedUint,
 }
 
+#[cfg(feature = "private-key")]
 impl Zeroize for CrtValue {
     fn zeroize(&mut self) {
         self.exp.zeroize();
@@ -94,6 +99,7 @@ impl Zeroize for CrtValue {
     }
 }
 
+#[cfg(feature = "private-key")]
 impl Drop for CrtValue {
     fn drop(&mut self) {
         self.zeroize();

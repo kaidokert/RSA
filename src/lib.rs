@@ -236,6 +236,7 @@ extern crate alloc;
 #[cfg(feature = "std")]
 extern crate std;
 
+#[cfg(feature = "alloc")]
 pub use crypto_bigint::BoxedUint;
 pub use rand_core;
 pub use signature;
@@ -269,12 +270,13 @@ pub use crate::modmath_support::{ModMathFixedUint32, ModMathForm32, ModMathParam
 #[cfg(feature = "alloc")]
 pub use crate::{
     errors::{Error, Result},
-    key::{RsaPrivateKey, RsaPublicKey},
+    key::{GenericRsaPublicKey, RsaPrivateKey, RsaPublicKey},
     oaep::Oaep,
     pkcs1v15::{Pkcs1v15Encrypt, Pkcs1v15Sign},
     pss::Pss,
-    traits::keys::CrtValue,
 };
+#[cfg(all(feature = "alloc", feature = "private-key"))]
+pub use crate::traits::keys::CrtValue;
 #[cfg(not(feature = "alloc"))]
 pub use crate::{
     errors::Result
@@ -283,16 +285,14 @@ pub use crate::{
 #[cfg(all(not(feature = "alloc"), feature = "full"))]
 pub use crate::{
     errors::{Error, Result},
-    key::{RsaPrivateKey, RsaPublicKey},
+    key::{GenericRsaPublicKey, RsaPrivateKey},
     pkcs1v15::{Pkcs1v15Encrypt, Pkcs1v15Sign},
-    traits::keys::CrtValue,
 };
 
 #[cfg(all(not(feature = "alloc"), not(feature = "full"), not(feature = "hack")))]
 pub use crate::{
     errors::{Error, Result},
-    key::RsaPublicKey,
-    traits::keys::CrtValue,
+    key::GenericRsaPublicKey,
 };
 
 #[cfg(all(feature = "hazmat", feature = "alloc"))]
@@ -310,5 +310,5 @@ pub use {
         },
         rsa::rsa_encrypt,
     },
-    key::RsaPublicKey,
+    key::GenericRsaPublicKey,
 };

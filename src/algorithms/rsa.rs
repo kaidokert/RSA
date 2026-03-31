@@ -1,10 +1,13 @@
 //! Generic RSA implementation
 
+#[cfg(feature = "private-key")]
 use core::cmp::Ordering;
 
+use crypto_bigint::{NonZero, Odd, Resize};
+#[cfg(feature = "private-key")]
 use crypto_bigint::{
     modular::{BoxedMontyForm, BoxedMontyParams},
-    BoxedUint, ConcatenatingMul, ConcatenatingSquare, Gcd, NonZero, Odd, RandomMod, Resize,
+    BoxedUint, ConcatenatingMul, ConcatenatingSquare, Gcd, RandomMod,
 };
 use rand_core::TryCryptoRng;
 use zeroize::Zeroize;

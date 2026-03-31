@@ -2,6 +2,7 @@
 
 #[cfg(feature = "alloc")]
 use alloc::vec::Vec;
+#[cfg(feature = "alloc")]
 use crypto_bigint::BoxedUint;
 use zeroize::Zeroizing;
 

@@ -19,19 +19,21 @@ pub use self::{
     verifying_key::VerifyingKey,
 };
 
-use alloc::vec::Vec;
+use alloc::{vec, vec::Vec};
 use core::fmt::{self, Debug};
-use crypto_bigint::BoxedUint;
+use crypto_bigint::{BoxedUint, Resize};
 
 use digest::{Digest, FixedOutputReset};
 use rand_core::TryCryptoRng;
 
-use crate::algorithms::pad::{uint_to_be_pad, uint_to_zeroizing_be_pad};
+use crate::algorithms::pad::{uint_to_be_pad, uint_to_be_pad_noalloc, uint_to_zeroizing_be_pad};
 use crate::algorithms::pss::*;
 use crate::algorithms::rsa::{rsa_decrypt_and_check, rsa_encrypt};
 use crate::errors::{Error, Result};
-use crate::traits::PublicKeyParts;
-use crate::traits::SignatureScheme;
+use crate::traits::{
+    PublicKeyParts, SignatureScheme, UnsignedModularInt,
+    modular::{FromBeBytes, IntoMontyForm, ModulusParams, PowBoundedExp},
+};
 use crate::{RsaPrivateKey, RsaPublicKey};
 
 #[cfg(feature = "encoding")]
@@ -121,15 +123,23 @@ where
         )
     }
 
-    fn verify(mut self, pub_key: &RsaPublicKey, hashed: &[u8], sig: &[u8]) -> Result<()> {
-        verify(
-            pub_key,
-            hashed,
-            &BoxedUint::from_be_slice_vartime(sig),
-            sig.len(),
-            &mut self.digest,
-            self.salt_len,
-        )
+    fn verify<K, T>(mut self, pub_key: &K, hashed: &[u8], sig: &[u8]) -> Result<()>
+    where
+        T: UnsignedModularInt + FromBeBytes + Resize<Output = T> + PartialOrd,
+        K: PublicKeyParts<T>,
+        K::MontyParams: ModulusParams<Modulus = T>,
+        <K::MontyParams as ModulusParams>::MontgomeryForm: IntoMontyForm<K::MontyParams> + PowBoundedExp<K::MontyParams>,
+    {
+        let sig = T::from_be_bytes_vartime(sig);
+        if sig >= *pub_key.n().as_ref() || sig.bits_precision() != pub_key.n_bits_precision() {
+            return Err(Error::Verification);
+        }
+
+        let mut em = vec![0u8; pub_key.size()];
+        let em = uint_to_be_pad_noalloc(rsa_encrypt(pub_key, &sig)?, pub_key.size(), &mut em)?;
+        let mut em = em.to_vec();
+
+        emsa_pss_verify(hashed, &mut em, self.salt_len, &mut self.digest, pub_key.n().bits() as _)
     }
 }
 

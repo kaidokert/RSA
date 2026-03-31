@@ -1,17 +1,24 @@
+use super::{verify_noalloc_generic, GenericSignature};
 #[cfg(feature = "alloc")]
-use super::{pkcs1v15_generate_prefix, verify, Signature};
+use super::pkcs1v15_generate_prefix;
 #[cfg(not(feature = "alloc"))]
-use super::{pkcs1v15_generate_prefix_noalloc, verify_noalloc, Signature};
-use crate::RsaPublicKey;
+use super::{pkcs1v15_generate_prefix_helper, Prefix};
+use crate::{
+    key::GenericRsaPublicKey,
+    traits::{
+        PublicKeyParts, UnsignedModularInt,
+        modular::{IntoMontyForm, ModulusParams, PowBoundedExp},
+    },
+};
 #[cfg(feature = "alloc")]
 use alloc::vec::Vec;
 use const_oid::AssociatedOid;
 use core::marker::PhantomData;
+#[cfg(feature = "alloc")]
+use crypto_bigint::{BoxedUint, modular::BoxedMontyParams};
 use digest::{Digest, FixedOutput, HashMarker, Update};
+use crypto_bigint::Resize;
 use signature::{hazmat::PrehashVerifier, DigestVerifier, Verifier};
-
-#[cfg(not(feature = "alloc"))]
-use super::{Prefix, pkcs1v15_generate_prefix_helper};
 
 #[cfg(feature = "encoding")]
 use {
@@ -26,31 +33,40 @@ use {
     serdect::serde::{de, ser, Deserialize, Serialize},
     spki::DecodePublicKey,
 };
-#[cfg(not(feature = "alloc"))]
-use crate::traits::PublicKeyParts;
+#[cfg(feature = "alloc")]
+use crate::key::RsaPublicKey;
 
 /// Verifying key for `RSASSA-PKCS1-v1_5` signatures as described in [RFC8017 § 8.2].
 ///
 /// [RFC8017 § 8.2]: https://datatracker.ietf.org/doc/html/rfc8017#section-8.2
 #[derive(Debug)]
-pub struct VerifyingKey<D>
+pub struct GenericVerifyingKey<D, T, M>
 where
     D: Digest,
+    T: UnsignedModularInt + Resize<Output = T> + PartialOrd,
+    M: ModulusParams<Modulus = T>,
 {
-    pub(super) inner: RsaPublicKey,
+    pub(super) inner: GenericRsaPublicKey<T, M>,
     #[cfg(feature = "alloc")]
     pub(super) prefix: Vec<u8>,
     #[cfg(not(feature = "alloc"))]
-    pub (super) prefix: Prefix,
+    pub(super) prefix: Prefix,
     pub(super) phantom: PhantomData<D>,
 }
 
-impl<D> VerifyingKey<D>
+/// Boxed PKCS#1 v1.5 verifying key alias.
+#[cfg(feature = "alloc")]
+pub type VerifyingKey<D> = GenericVerifyingKey<D, BoxedUint, BoxedMontyParams>;
+
+impl<D, T, M> GenericVerifyingKey<D, T, M>
 where
     D: Digest + AssociatedOid,
+    T: UnsignedModularInt + Resize<Output = T> + PartialOrd,
+    M: ModulusParams<Modulus = T>,
+    M::MontgomeryForm: IntoMontyForm<M> + PowBoundedExp<M>,
 {
     /// Create a new verifying key with a prefix for the digest `D`.
-    pub fn new(key: RsaPublicKey) -> Self {
+    pub fn new(key: GenericRsaPublicKey<T, M>) -> Self {
         Self {
             inner: key,
             #[cfg(feature = "alloc")]
@@ -62,16 +78,19 @@ where
     }
 }
 
-impl<D> VerifyingKey<D>
+impl<D, T, M> GenericVerifyingKey<D, T, M>
 where
     D: Digest,
+    T: UnsignedModularInt + Resize<Output = T> + PartialOrd,
+    M: ModulusParams<Modulus = T>,
+    M::MontgomeryForm: IntoMontyForm<M> + PowBoundedExp<M>,
 {
     /// Create a new verifying key from an RSA public key with an empty prefix.
     ///
     /// ## Note: unprefixed signatures are uncommon
     ///
-    /// In most cases you'll want to use [`VerifyingKey::new`] instead.
-    pub fn new_unprefixed(key: RsaPublicKey) -> Self {
+    /// In most cases you'll want to use [`GenericVerifyingKey::new`] instead.
+    pub fn new_unprefixed(key: GenericRsaPublicKey<T, M>) -> Self {
         Self {
             inner: key,
             #[cfg(feature = "alloc")]
@@ -81,92 +100,89 @@ where
             phantom: Default::default(),
         }
     }
+
+    fn verify_prehash_signature(
+        &self,
+        prehash: &[u8],
+        signature: &GenericSignature<T>,
+    ) -> signature::Result<()>
+    where
+        T::Bytes: AsMut<[u8]>,
+    {
+        let mut storage = self.inner.n().as_ref().to_be_bytes();
+        verify_noalloc_generic(
+            &self.inner,
+            self.prefix.as_ref(),
+            prehash,
+            signature.inner(),
+            storage.as_mut(),
+        )
+        .map_err(Into::into)
+    }
 }
 
-//
-// `*Verifier` trait impls
-//
-
-impl<D> DigestVerifier<D, Signature> for VerifyingKey<D>
+impl<D, T, M> DigestVerifier<D, GenericSignature<T>> for GenericVerifyingKey<D, T, M>
 where
     D: Default + FixedOutput + HashMarker + Update,
+    T: UnsignedModularInt + Resize<Output = T> + PartialOrd,
+    M: ModulusParams<Modulus = T>,
+    M::MontgomeryForm: IntoMontyForm<M> + PowBoundedExp<M>,
+    T::Bytes: AsMut<[u8]>,
 {
     fn verify_digest<F: Fn(&mut D) -> signature::Result<()>>(
         &self,
         f: F,
-        signature: &Signature,
+        signature: &GenericSignature<T>,
     ) -> signature::Result<()> {
         let mut digest = D::default();
         f(&mut digest)?;
-        #[cfg(feature = "alloc")]
-        let result = verify(
-                &self.inner,
-                &self.prefix,
-                &digest.finalize_fixed(),
-                &signature.inner,
-            );
-        #[cfg(not(feature = "alloc"))]
-        let result = {
-            let mut storage = self.inner.n().as_ref().to_be_bytes();
-            verify_noalloc(
-                &self.inner,
-                &self.prefix,
-                &digest.finalize_fixed(),
-                &signature.inner,
-                storage.as_mut(),
-            )
-        };
-
-        result.map_err(|e| e.into())
+        self.verify_prehash_signature(&digest.finalize_fixed(), signature)
     }
 }
 
-impl<D> PrehashVerifier<Signature> for VerifyingKey<D>
+impl<D, T, M> PrehashVerifier<GenericSignature<T>> for GenericVerifyingKey<D, T, M>
 where
     D: Digest,
+    T: UnsignedModularInt + Resize<Output = T> + PartialOrd,
+    M: ModulusParams<Modulus = T>,
+    M::MontgomeryForm: IntoMontyForm<M> + PowBoundedExp<M>,
+    T::Bytes: AsMut<[u8]>,
 {
-    fn verify_prehash(&self, prehash: &[u8], signature: &Signature) -> signature::Result<()> {
-        #[cfg(feature = "alloc")]
-        let result = verify(&self.inner, &self.prefix, prehash, &signature.inner);
-        #[cfg(not(feature = "alloc"))]
-        let result = {
-            let mut storage = self.inner.n().as_ref().to_be_bytes();
-            verify_noalloc(&self.inner, &self.prefix, prehash, &signature.inner, storage.as_mut())
-        };
-        result.map_err(|e| e.into())
+    fn verify_prehash(
+        &self,
+        prehash: &[u8],
+        signature: &GenericSignature<T>,
+    ) -> signature::Result<()> {
+        self.verify_prehash_signature(prehash, signature)
     }
 }
 
-impl<D> Verifier<Signature> for VerifyingKey<D>
+impl<D, T, M> Verifier<GenericSignature<T>> for GenericVerifyingKey<D, T, M>
 where
     D: Digest,
+    T: UnsignedModularInt + Resize<Output = T> + PartialOrd,
+    M: ModulusParams<Modulus = T>,
+    M::MontgomeryForm: IntoMontyForm<M> + PowBoundedExp<M>,
+    T::Bytes: AsMut<[u8]>,
 {
-    fn verify(&self, msg: &[u8], signature: &Signature) -> signature::Result<()> {
-        #[cfg(feature = "alloc")]
-        let result = verify(&self.inner, &self.prefix, &D::digest(msg), &signature.inner);
-        #[cfg(not(feature = "alloc"))]         
-        let result = {
-            let mut storage = self.inner.n().as_ref().to_be_bytes();
-            verify_noalloc(&self.inner, &self.prefix, &D::digest(msg), &signature.inner, storage.as_mut())
-        };
-        result.map_err(|e| e.into())
+    fn verify(&self, msg: &[u8], signature: &GenericSignature<T>) -> signature::Result<()> {
+        self.verify_prehash_signature(&D::digest(msg), signature)
     }
 }
 
-//
-// Other trait impls
-//
-
-impl<D> AsRef<RsaPublicKey> for VerifyingKey<D>
+impl<D, T, M> AsRef<GenericRsaPublicKey<T, M>> for GenericVerifyingKey<D, T, M>
 where
     D: Digest,
+    T: UnsignedModularInt + Resize<Output = T> + PartialOrd,
+    M: ModulusParams<Modulus = T>,
 {
-    fn as_ref(&self) -> &RsaPublicKey {
+    fn as_ref(&self) -> &GenericRsaPublicKey<T, M> {
         &self.inner
     }
 }
 
 #[cfg(feature = "encoding")]
+#[cfg(feature = "alloc")]
 impl<D> AssociatedAlgorithmIdentifier for VerifyingKey<D>
 where
     D: Digest,
@@ -176,10 +192,11 @@ where
     const ALGORITHM_IDENTIFIER: AlgorithmIdentifierRef<'static> = pkcs1::ALGORITHM_ID;
 }
 
-// Implemented manually so we don't have to bind D with Clone
-impl<D> Clone for VerifyingKey<D>
+impl<D, T, M> Clone for GenericVerifyingKey<D, T, M>
 where
     D: Digest,
+    T: UnsignedModularInt + Resize<Output = T> + PartialOrd,
+    M: ModulusParams<Modulus = T> + Clone,
 {
     fn clone(&self) -> Self {
         Self {
@@ -191,6 +208,7 @@ where
 }
 
 #[cfg(feature = "encoding")]
+#[cfg(feature = "alloc")]
 impl<D> EncodePublicKey for VerifyingKey<D>
 where
     D: Digest,
@@ -200,25 +218,31 @@ where
     }
 }
 
-impl<D> From<RsaPublicKey> for VerifyingKey<D>
+impl<D, T, M> From<GenericRsaPublicKey<T, M>> for GenericVerifyingKey<D, T, M>
 where
     D: Digest + AssociatedOid,
+    T: UnsignedModularInt + Resize<Output = T> + PartialOrd,
+    M: ModulusParams<Modulus = T>,
+    M::MontgomeryForm: IntoMontyForm<M> + PowBoundedExp<M>,
 {
-    fn from(key: RsaPublicKey) -> Self {
+    fn from(key: GenericRsaPublicKey<T, M>) -> Self {
         Self::new(key)
     }
 }
 
-impl<D> From<VerifyingKey<D>> for RsaPublicKey
+impl<D, T, M> From<GenericVerifyingKey<D, T, M>> for GenericRsaPublicKey<T, M>
 where
     D: Digest,
+    T: UnsignedModularInt + Resize<Output = T> + PartialOrd,
+    M: ModulusParams<Modulus = T>,
 {
-    fn from(key: VerifyingKey<D>) -> Self {
+    fn from(key: GenericVerifyingKey<D, T, M>) -> Self {
         key.inner
     }
 }
 
 #[cfg(feature = "encoding")]
+#[cfg(feature = "alloc")]
 impl<D> SignatureAlgorithmIdentifier for VerifyingKey<D>
 where
     D: Digest + oid::RsaSignatureAssociatedOid,
@@ -233,6 +257,7 @@ where
 }
 
 #[cfg(feature = "encoding")]
+#[cfg(feature = "alloc")]
 impl<D> TryFrom<pkcs8::SubjectPublicKeyInfoRef<'_>> for VerifyingKey<D>
 where
     D: Digest + AssociatedOid,
@@ -246,9 +271,11 @@ where
     }
 }
 
-impl<D> PartialEq for VerifyingKey<D>
+impl<D, T, M> PartialEq for GenericVerifyingKey<D, T, M>
 where
     D: Digest,
+    T: UnsignedModularInt + Resize<Output = T> + PartialEq + PartialOrd,
+    M: ModulusParams<Modulus = T>,
 {
     fn eq(&self, other: &Self) -> bool {
         self.inner == other.inner && self.prefix == other.prefix
@@ -256,6 +283,7 @@ where
 }
 
 #[cfg(feature = "serde")]
+#[cfg(feature = "alloc")]
 impl<D> Serialize for VerifyingKey<D>
 where
     D: Digest,
@@ -270,6 +298,7 @@ where
 }
 
 #[cfg(feature = "serde")]
+#[cfg(feature = "alloc")]
 impl<'de, D> Deserialize<'de> for VerifyingKey<D>
 where
     D: Digest + AssociatedOid,
@@ -298,7 +327,7 @@ mod tests {
         let mut rng = ChaCha8Rng::from_seed([42; 32]);
         let priv_key = RsaPrivateKey::new_unchecked(&mut rng, 64).expect("failed to generate key");
         let pub_key = priv_key.to_public_key();
-        let verifying_key = VerifyingKey::<Sha256>::new(pub_key);
+        let verifying_key = GenericVerifyingKey::<Sha256, _, _>::new(pub_key);
 
         let tokens = [Token::Str(
             "3024300d06092a864886f70d01010105000313003010020900ab240c3361d02e370203010001",

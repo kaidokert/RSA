@@ -19,8 +19,8 @@ use zeroize::Zeroize;
 use crate::{
     algorithms::rsa::rsa_encrypt,
     errors::{Error, Result},
-    key::RsaPublicKey,
-    traits::modular::{IntoMontyForm, ModulusParams, Pow, PowBoundedExp, UnsignedModularInt},
+    key::GenericRsaPublicKey,
+    traits::modular::{FromBeBytes, IntoMontyForm, ModulusParams, Pow, PowBoundedExp, UnsignedModularInt},
 };
 use const_oid::AssociatedOid;
 
@@ -226,6 +226,12 @@ impl<const N: usize> UnsignedModularInt for ModMathFixedUint<N> {
     }
 }
 
+impl<const N: usize> FromBeBytes for ModMathFixedUint<N> {
+    fn from_be_bytes_vartime(bytes: &[u8]) -> Self {
+        Self::from_be_slice(bytes)
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct ModMathParams<const N: usize> {
     modulus: ModMathFixedUint<N>,
@@ -251,10 +257,10 @@ impl<const N: usize> ModMathParams<N> {
 pub fn public_key_from_be_bytes<const N: usize>(
     modulus: &[u8; N],
     exponent: u8,
-) -> Result<RsaPublicKey<ModMathFixedUint<N>, ModMathParams<N>>> {
+) -> Result<GenericRsaPublicKey<ModMathFixedUint<N>, ModMathParams<N>>> {
     let n = ModMathFixedUint::<N>::from_be_slice(modulus);
     let e = ModMathFixedUint::<N>::from(exponent);
-    RsaPublicKey::from_components(n, e, ModMathParams::new(n)?)
+    GenericRsaPublicKey::from_components(n, e, ModMathParams::new(n)?)
 }
 
 /// Apply the raw RSA public operation to a fixed-width block.
@@ -262,7 +268,7 @@ pub fn public_key_from_be_bytes<const N: usize>(
 /// For signature use-cases this effectively "decrypts" the signature into its
 /// encoded message representative.
 pub fn rsa_decrypt<const N: usize>(
-    key: &RsaPublicKey<ModMathFixedUint<N>, ModMathParams<N>>,
+    key: &GenericRsaPublicKey<ModMathFixedUint<N>, ModMathParams<N>>,
     input: &[u8; N],
 ) -> Result<[u8; N]> {
     let block = ModMathFixedUint::<N>::from_be_slice(input);
@@ -276,7 +282,7 @@ pub const PKCS1V15_SHA1_PREFIX: [u8; 15] = [
 
 /// Verify a PKCS#1 v1.5 signature using an explicit ASN.1 digest prefix.
 pub fn verify_pkcs1v15_prehash_with_prefix<const N: usize>(
-    key: &RsaPublicKey<ModMathFixedUint<N>, ModMathParams<N>>,
+    key: &GenericRsaPublicKey<ModMathFixedUint<N>, ModMathParams<N>>,
     prefix: &[u8],
     prehash: &[u8],
     signature: &[u8; N],
@@ -289,7 +295,7 @@ pub fn verify_pkcs1v15_prehash_with_prefix<const N: usize>(
 
 /// Verify a PKCS#1 v1.5 signature for a digest type with an associated OID.
 pub fn verify_pkcs1v15_prehash<D, const N: usize>(
-    key: &RsaPublicKey<ModMathFixedUint<N>, ModMathParams<N>>,
+    key: &GenericRsaPublicKey<ModMathFixedUint<N>, ModMathParams<N>>,
     prehash: &[u8],
     signature: &[u8; N],
 ) -> Result<()>
@@ -305,7 +311,7 @@ where
 
 /// Verify a PKCS#1 v1.5 signature by hashing the message with `D`.
 pub fn verify_pkcs1v15_message<D, const N: usize>(
-    key: &RsaPublicKey<ModMathFixedUint<N>, ModMathParams<N>>,
+    key: &GenericRsaPublicKey<ModMathFixedUint<N>, ModMathParams<N>>,
     msg: &[u8],
     signature: &[u8; N],
 ) -> Result<()>
@@ -318,7 +324,7 @@ where
 
 /// Verify a PKCS#1 v1.5 signature by feeding bytes into a digest closure.
 pub fn verify_pkcs1v15_digest<D, F, const N: usize>(
-    key: &RsaPublicKey<ModMathFixedUint<N>, ModMathParams<N>>,
+    key: &GenericRsaPublicKey<ModMathFixedUint<N>, ModMathParams<N>>,
     f: F,
     signature: &[u8; N],
 ) -> Result<()>
@@ -334,7 +340,7 @@ where
 
 /// Verify a PKCS#1 v1.5 SHA-1 signature using a precomputed SHA-1 digest.
 pub fn verify_pkcs1v15_sha1_prehash<const N: usize>(
-    key: &RsaPublicKey<ModMathFixedUint<N>, ModMathParams<N>>,
+    key: &GenericRsaPublicKey<ModMathFixedUint<N>, ModMathParams<N>>,
     prehash: &[u8],
     signature: &[u8; N],
 ) -> Result<()> {
@@ -564,6 +570,13 @@ impl<const N: usize> UnsignedModularInt for ModMathFixedUint32<N> {
 }
 
 #[cfg(feature = "alloc")]
+impl<const N: usize> FromBeBytes for ModMathFixedUint32<N> {
+    fn from_be_bytes_vartime(bytes: &[u8]) -> Self {
+        Self::from_be_slice(bytes)
+    }
+}
+
+#[cfg(feature = "alloc")]
 #[derive(Clone, Debug)]
 pub struct ModMathParams32<const N: usize> {
     modulus: ModMathFixedUint32<N>,
@@ -591,16 +604,16 @@ impl<const N: usize> ModMathParams32<N> {
 pub fn public_key_from_be_bytes_u32<const N: usize>(
     modulus: &[u8],
     exponent: u8,
-) -> Result<RsaPublicKey<ModMathFixedUint32<N>, ModMathParams32<N>>> {
+) -> Result<GenericRsaPublicKey<ModMathFixedUint32<N>, ModMathParams32<N>>> {
     let n = ModMathFixedUint32::<N>::from_be_slice(modulus);
     let e = ModMathFixedUint32::<N>::from(exponent);
-    RsaPublicKey::from_components(n, e, ModMathParams32::new(n)?)
+    GenericRsaPublicKey::from_components(n, e, ModMathParams32::new(n)?)
 }
 
 /// Verify a PKCS#1 v1.5 SHA-1 signature using a `FixedUInt<u32, N>` backend.
 #[cfg(feature = "alloc")]
 pub fn verify_pkcs1v15_sha1_prehash_u32<const N: usize>(
-    key: &RsaPublicKey<ModMathFixedUint32<N>, ModMathParams32<N>>,
+    key: &GenericRsaPublicKey<ModMathFixedUint32<N>, ModMathParams32<N>>,
     prehash: &[u8],
     signature: &[u8],
 ) -> Result<()> {
@@ -805,7 +818,6 @@ mod tests {
             &modmath_key,
             msg,
             &mut storage,
-            |em, _| Ok(super::ModMathFixedUint::<64>::from_be_slice(em)),
         )
         .unwrap();
         let boxed_ciphertext = boxed_key.encrypt(&mut boxed_rng, Pkcs1v15Encrypt, msg).unwrap();

@@ -10,19 +10,22 @@ mod encrypting_key;
 pub use self::{decrypting_key::DecryptingKey, encrypting_key::EncryptingKey};
 
 use alloc::boxed::Box;
-use alloc::vec::Vec;
+use alloc::{vec, vec::Vec};
 use core::fmt;
-use crypto_bigint::BoxedUint;
+use crypto_bigint::{BoxedUint, Resize};
 
 use digest::{Digest, FixedOutputReset};
 use rand_core::TryCryptoRng;
 
 use crate::algorithms::oaep::*;
-use crate::algorithms::pad::{uint_to_be_pad, uint_to_zeroizing_be_pad};
+use crate::algorithms::pad::{uint_to_be_pad, uint_to_be_pad_noalloc, uint_to_zeroizing_be_pad};
 use crate::algorithms::rsa::{rsa_decrypt_and_check, rsa_encrypt};
 use crate::errors::{Error, Result};
 use crate::key::{self, RsaPrivateKey, RsaPublicKey};
-use crate::traits::{PaddingScheme, PublicKeyParts};
+use crate::traits::{
+    PaddingScheme, PublicKeyParts, UnsignedModularInt,
+    modular::{FromBeBytes, IntoMontyForm, ModulusParams, PowBoundedExp},
+};
 
 /// Encryption and Decryption using [OAEP padding](https://datatracker.ietf.org/doc/html/rfc8017#section-7.1).
 ///
@@ -163,20 +166,32 @@ where
         )
     }
 
-    fn encrypt<Rng: TryCryptoRng + ?Sized>(
+    fn encrypt<Rng, K, T>(
         mut self,
         rng: &mut Rng,
-        pub_key: &RsaPublicKey,
+        pub_key: &K,
         msg: &[u8],
-    ) -> Result<Vec<u8>> {
-        encrypt(
+    ) -> Result<Vec<u8>>
+    where
+        Rng: TryCryptoRng + ?Sized,
+        T: UnsignedModularInt + FromBeBytes + Resize<Output = T> + PartialOrd,
+        K: PublicKeyParts<T>,
+        K::MontyParams: ModulusParams<Modulus = T>,
+        <K::MontyParams as ModulusParams>::MontgomeryForm: IntoMontyForm<K::MontyParams> + PowBoundedExp<K::MontyParams>,
+    {
+        let em = oaep_encrypt(
             rng,
-            pub_key,
             msg,
             &mut self.digest,
             &mut self.mgf_digest,
             self.label,
-        )
+            pub_key.size(),
+        )?;
+        let int = T::from_be_bytes_vartime(&em);
+        let mut storage = vec![0u8; pub_key.size()];
+        let ciphertext =
+            uint_to_be_pad_noalloc(rsa_encrypt(pub_key, &int)?, pub_key.size(), &mut storage)?;
+        Ok(ciphertext.to_vec())
     }
 }
 

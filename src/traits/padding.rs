@@ -7,9 +7,12 @@ use rand_core::TryCryptoRng;
 
 use crate::errors::Result;
 #[cfg(feature = "private-key")]
-use crate::key::{RsaPrivateKey, RsaPublicKey};
-#[cfg(not(feature = "private-key"))]
-use crate::key::RsaPublicKey;
+use crate::key::RsaPrivateKey;
+use crate::traits::{
+    PublicKeyParts, UnsignedModularInt,
+    modular::{FromBeBytes, IntoMontyForm, ModulusParams, PowBoundedExp},
+};
+use crypto_bigint::Resize;
 
 /// Padding scheme used for encryption.
 pub trait PaddingScheme {
@@ -27,12 +30,19 @@ pub trait PaddingScheme {
 
     /// Encrypt the given message using the given public key.
     #[cfg(feature="alloc")]
-    fn encrypt<Rng: TryCryptoRng + ?Sized>(
+    fn encrypt<Rng, K, T>(
         self,
         rng: &mut Rng,
-        pub_key: &RsaPublicKey,
+        pub_key: &K,
         msg: &[u8],
-    ) -> Result<Vec<u8>>;
+    ) -> Result<Vec<u8>>
+    where
+        Rng: TryCryptoRng + ?Sized,
+        T: UnsignedModularInt + FromBeBytes + Resize<Output = T> + PartialOrd,
+        K: PublicKeyParts<T>,
+        K::MontyParams: ModulusParams<Modulus = T>,
+        <K::MontyParams as ModulusParams>::MontgomeryForm:
+            IntoMontyForm<K::MontyParams> + PowBoundedExp<K::MontyParams>;
 }
 
 /// Digital signature scheme.
@@ -52,5 +62,12 @@ pub trait SignatureScheme {
     /// passed in through `hash`.
     ///
     /// If the message is valid `Ok(())` is returned, otherwise an `Err` indicating failure.
-    fn verify(self, pub_key: &RsaPublicKey, hashed: &[u8], sig: &[u8]) -> Result<()>;
+    fn verify<K, T>(self, pub_key: &K, hashed: &[u8], sig: &[u8]) -> Result<()>
+    where
+        T: UnsignedModularInt + FromBeBytes + Resize<Output = T> + PartialOrd,
+        T::Bytes: AsMut<[u8]>,
+        K: PublicKeyParts<T>,
+        K::MontyParams: ModulusParams<Modulus = T>,
+        <K::MontyParams as ModulusParams>::MontgomeryForm:
+            IntoMontyForm<K::MontyParams> + PowBoundedExp<K::MontyParams>;
 }

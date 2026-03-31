@@ -3,15 +3,16 @@
 
 use core::convert::Infallible;
 
+use cortex_m_semihosting::{debug, hprintln};
 use panic_semihosting as _;
+use rsa::modmath_support::public_key_from_be_bytes;
 use rsa::rand_core::{TryCryptoRng, TryRng};
-use sha1::Sha1;
 use rsa::{
-    rsa_encrypt, BoxedUint, ModMathFixedUint, RsaPublicKey,
     pkcs1v15_encrypt_pad_noalloc, pkcs1v15_encrypt_unpad_noalloc,
-    pkcs1v15_generate_prefix_noalloc, pkcs1v15_sign_pad_noalloc, uint_to_be_pad_noalloc,
-    uint_to_zeroizing_be_pad_noalloc,
+    pkcs1v15_generate_prefix_noalloc, pkcs1v15_sign_pad_noalloc, rsa_encrypt, ModMathFixedUint,
+    uint_to_be_pad_noalloc, uint_to_zeroizing_be_pad_noalloc,
 };
+use sha1::Sha1;
 
 struct DummyRng;
 
@@ -38,20 +39,39 @@ impl TryCryptoRng for DummyRng {}
 
 #[cortex_m_rt::entry]
 fn main() -> ! {
+    run().unwrap();
+    debug::exit(debug::EXIT_SUCCESS);
+    loop {}
+}
+
+fn run() -> rsa::Result<()> {
     let mut buf = [0u8; 4];
     let mut em = [0u8; 16];
-    let mut sig = [0u8; 32];
-    let mut prefix = [0u8; 32];
+    let mut unpadded = [0u8; 16];
+    let mut sig = [0u8; 64];
+    let mut prefix_storage = [0u8; 32];
     let mut rng = DummyRng;
-    let key = RsaPublicKey::new(BoxedUint::from(3233u64), BoxedUint::from(17u64)).unwrap();
-    let msg = BoxedUint::from(42u64);
-    loop {
-        let _ = uint_to_be_pad_noalloc::<ModMathFixedUint<1>>(1u8.into(), 4, &mut buf);
-        let _ = uint_to_zeroizing_be_pad_noalloc::<ModMathFixedUint<1>>(1u8.into(), 4, &mut buf);
-        let _ = pkcs1v15_encrypt_pad_noalloc(&mut rng, &[1u8], 16, &mut em);
-        let _ = pkcs1v15_encrypt_unpad_noalloc(&em, 16, &mut sig);
-        let prefix = pkcs1v15_generate_prefix_noalloc::<Sha1>(&mut prefix).unwrap();
-        let _ = pkcs1v15_sign_pad_noalloc(prefix, &[1u8; 20], 32, &mut sig);
-        let _ = rsa_encrypt(&key, &msg);
-    }
+
+    let out = uint_to_be_pad_noalloc::<ModMathFixedUint<1>>(1u8.into(), 4, &mut buf)?;
+    assert_eq!(out, &[0, 0, 0, 1]);
+
+    let out = uint_to_zeroizing_be_pad_noalloc::<ModMathFixedUint<1>>(1u8.into(), 4, &mut buf)?;
+    assert_eq!(out, &[0, 0, 0, 1]);
+
+    let padded = pkcs1v15_encrypt_pad_noalloc(&mut rng, &[0xAA], 16, &mut em)?;
+    let msg = pkcs1v15_encrypt_unpad_noalloc(padded, 16, &mut unpadded)?;
+    assert_eq!(msg, &[0xAA]);
+
+    let prefix = pkcs1v15_generate_prefix_noalloc::<Sha1>(&mut prefix_storage)?;
+    let em = pkcs1v15_sign_pad_noalloc(prefix, &[1u8; 20], 64, &mut sig)?;
+    assert_eq!(em[0], 0x00);
+    assert_eq!(em[1], 0x01);
+
+    let key = public_key_from_be_bytes(&[0x0c, 0xa1], 17)?;
+    let msg = ModMathFixedUint::<2>::from_be_slice(&[0x00, 0x2a]);
+    let out = rsa_encrypt(&key, &msg)?;
+    assert_eq!(out, ModMathFixedUint::<2>::from_be_slice(&[0x09, 0xfd]));
+
+    hprintln!("rsa_hello ok");
+    Ok(())
 }
