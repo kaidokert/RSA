@@ -107,7 +107,7 @@ where
 
 #[cfg(not(feature = "alloc"))]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Prefix<const N: usize = 32> {
+pub(super) struct Prefix<const N: usize = 32> {
     data: [u8; N],
     len: usize,
 }
@@ -141,7 +141,7 @@ impl<const N: usize> AsRef<[u8]> for Prefix<N> {
 }
 
 #[cfg(not(feature = "alloc"))]
-pub fn pkcs1v15_generate_prefix_helper<D: Digest>() -> Prefix 
+pub(super) fn pkcs1v15_generate_prefix_helper<D: Digest>() -> Prefix
 where
     D: Digest + AssociatedOid,
 {
@@ -191,9 +191,9 @@ pub struct Pkcs1v15Sign {
 
     /// Prefix.
     #[cfg(feature = "alloc")]
-    pub prefix: Box<[u8]>,
+    prefix: Box<[u8]>,
     #[cfg(not(feature = "alloc"))]
-    pub prefix: Prefix,
+    prefix: Prefix,
 }
 
 impl Pkcs1v15Sign {
