@@ -290,7 +290,7 @@ pub fn verify_pkcs1v15_prehash_with_prefix<const N: usize>(
     let sig = ModMathFixedUint::<N>::from_be_slice(signature);
     let mut em_storage = [0u8; N];
 
-    crate::pkcs1v15::verify_noalloc_generic(key, prefix, prehash, &sig, &mut em_storage)
+    crate::pkcs1v15::verify_generic(key, prefix, prehash, &sig, &mut em_storage)
 }
 
 /// Verify a PKCS#1 v1.5 signature for a digest type with an associated OID.
@@ -303,7 +303,7 @@ where
     D: Digest + AssociatedOid,
 {
     let mut prefix_storage = [0u8; 64];
-    let prefix = crate::algorithms::pkcs1v15::pkcs1v15_generate_prefix_noalloc::<D>(
+    let prefix = crate::algorithms::pkcs1v15::pkcs1v15_generate_prefix_into::<D>(
         &mut prefix_storage,
     )?;
     verify_pkcs1v15_prehash_with_prefix(key, prefix, prehash, signature)
@@ -624,7 +624,7 @@ pub fn verify_pkcs1v15_sha1_prehash_u32<const N: usize>(
     let sig = ModMathFixedUint32::<N>::from_be_slice(signature);
     let mut em_storage = vec![0u8; signature.len()];
 
-    crate::pkcs1v15::verify_noalloc_generic(key, &SHA1_PREFIX, prehash, &sig, &mut em_storage)
+    crate::pkcs1v15::verify_generic(key, &SHA1_PREFIX, prehash, &sig, &mut em_storage)
 }
 
 #[derive(Clone, Debug)]
@@ -741,7 +741,7 @@ mod tests {
         public_key_from_be_bytes, public_key_from_be_bytes_u32, verify_pkcs1v15_sha1_prehash,
         verify_pkcs1v15_sha1_prehash_u32,
     };
-    use crate::{BoxedUint, Pkcs1v15Encrypt, RsaPublicKey};
+    use crate::{BoxedUint, Pkcs1v15Encrypt, RsaPublicKey, traits::RandomizedEncryptor};
     use rand::rngs::ChaCha8Rng;
     use rand_core::SeedableRng;
 
@@ -813,8 +813,8 @@ mod tests {
         let mut boxed_rng = ChaCha8Rng::from_seed([42; 32]);
         let mut storage = [0u8; 64];
 
-        let modmath_ciphertext = crate::pkcs1v15::Pkcs1v15Encrypt
-            .encrypt_into(&mut modmath_rng, &modmath_key, msg, &mut storage)
+        let modmath_ciphertext = crate::pkcs1v15::GenericEncryptingKey::new(modmath_key)
+            .encrypt_with_rng_into(&mut modmath_rng, msg, &mut storage)
             .unwrap();
         let boxed_ciphertext = boxed_key.encrypt(&mut boxed_rng, Pkcs1v15Encrypt, msg).unwrap();
 

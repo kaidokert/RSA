@@ -26,7 +26,7 @@ use crypto_bigint::{BoxedUint, Resize};
 use digest::{Digest, FixedOutputReset};
 use rand_core::TryCryptoRng;
 
-use crate::algorithms::pad::{uint_to_be_pad, uint_to_be_pad_noalloc, uint_to_zeroizing_be_pad};
+use crate::algorithms::pad::{uint_to_be_pad, uint_to_be_pad_into, uint_to_zeroizing_be_pad};
 use crate::algorithms::pss::*;
 use crate::algorithms::rsa::{rsa_decrypt_and_check, rsa_encrypt};
 use crate::errors::{Error, Result};
@@ -136,7 +136,7 @@ where
         }
 
         let mut em = vec![0u8; pub_key.size()];
-        let em = uint_to_be_pad_noalloc(rsa_encrypt(pub_key, &sig)?, pub_key.size(), &mut em)?;
+        let em = uint_to_be_pad_into(rsa_encrypt(pub_key, &sig)?, pub_key.size(), &mut em)?;
         let mut em = em.to_vec();
 
         emsa_pss_verify(hashed, &mut em, self.salt_len, &mut self.digest, pub_key.n().bits() as _)

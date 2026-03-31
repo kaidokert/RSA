@@ -1,5 +1,4 @@
-#[cfg(feature = "alloc")]
-use super::encrypt_noalloc;
+use super::encrypt_into;
 use crate::{
     key::GenericRsaPublicKey,
     traits::{
@@ -45,17 +44,25 @@ where
     }
 }
 
-#[cfg(feature = "alloc")]
 impl<T, M> RandomizedEncryptor for GenericEncryptingKey<T, M>
 where
     T: UnsignedModularInt + FromBeBytes + Resize<Output = T> + PartialOrd,
     M: ModulusParams<Modulus = T>,
     M::MontgomeryForm: IntoMontyForm<M> + PowBoundedExp<M>,
-    T::Bytes: AsMut<[u8]>,
 {
+    fn encrypt_with_rng_into<'a, R: rand_core::TryCryptoRng + ?Sized>(
+        &self,
+        rng: &mut R,
+        msg: &[u8],
+        storage: &'a mut [u8],
+    ) -> Result<&'a [u8]> {
+        encrypt_into(rng, &self.inner, msg, storage)
+    }
+
+    #[cfg(feature = "alloc")]
     fn encrypt_with_rng<R: CryptoRng + ?Sized>(&self, rng: &mut R, msg: &[u8]) -> Result<Vec<u8>> {
         let mut storage = vec![0u8; self.inner.size()];
-        let ciphertext = encrypt_noalloc(rng, &self.inner, msg, &mut storage)?;
+        let ciphertext = encrypt_into(rng, &self.inner, msg, &mut storage)?;
         Ok(ciphertext.to_vec())
     }
 }

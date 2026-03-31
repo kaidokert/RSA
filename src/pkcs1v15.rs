@@ -66,7 +66,7 @@ use rand_core::TryCryptoRng;
 
 #[cfg(feature="alloc")]
 use crate::algorithms::pad::uint_to_zeroizing_be_pad;
-use crate::algorithms::pad::uint_to_be_pad_noalloc;
+use crate::algorithms::pad::uint_to_be_pad_into;
 use crate::algorithms::pkcs1v15::*;
 #[cfg(feature="private-key")]
 use crate::algorithms::rsa::{rsa_decrypt_and_check, rsa_encrypt};
@@ -104,11 +104,11 @@ impl Pkcs1v15Encrypt {
             IntoMontyForm<K::MontyParams> + PowBoundedExp<K::MontyParams>,
     {
         let padded_len = pub_key.size();
-        let em = pkcs1v15_encrypt_pad_noalloc(rng, msg, padded_len, storage)?;
+        let em = pkcs1v15_encrypt_pad_into(rng, msg, padded_len, storage)?;
         let int = T::from_be_bytes_vartime(em);
 
         storage[..padded_len].fill(0);
-        uint_to_be_pad_noalloc(rsa_encrypt(pub_key, &int)?, padded_len, storage)
+        uint_to_be_pad_into(rsa_encrypt(pub_key, &int)?, padded_len, storage)
     }
 }
 
@@ -175,7 +175,7 @@ where
 {
     let mut tmp_prefix = [0u8; 64];
     let prefix =
-        pkcs1v15_generate_prefix_noalloc::<D>(&mut tmp_prefix).expect("prefix buffer is too small");
+        pkcs1v15_generate_prefix_into::<D>(&mut tmp_prefix).expect("prefix buffer is too small");
     Prefix::from_slice(prefix).expect("prefix buffer is too small")
 }
 
@@ -289,14 +289,14 @@ impl SignatureScheme for Pkcs1v15Sign {
 
         let mut storage = pub_key.n().as_ref().to_be_bytes();
         let sig = T::from_be_bytes_vartime(sig);
-        verify_noalloc_generic(pub_key, self.prefix.as_ref(), hashed, &sig, storage.as_mut())
+        verify_generic(pub_key, self.prefix.as_ref(), hashed, &sig, storage.as_mut())
     }
 }
 
 /// Encrypts the given message with RSA and PKCS#1 v1.5 padding into caller-provided storage.
 ///
 /// The message must be no longer than the length of the public modulus minus 11 bytes.
-pub fn encrypt_noalloc<'a, R, K, T>(
+pub fn encrypt_into<'a, R, K, T>(
     rng: &mut R,
     pub_key: &K,
     msg: &[u8],
@@ -364,7 +364,7 @@ fn sign<R: TryCryptoRng + ?Sized>(
     uint_to_zeroizing_be_pad(rsa_decrypt_and_check(priv_key, rng, &em)?, priv_key.size())
 }
 
-pub(crate) fn verify_noalloc_generic<K, T>(
+pub(crate) fn verify_generic<K, T>(
     pub_key: &K,
     prefix: &[u8],
     hashed: &[u8],
@@ -382,7 +382,7 @@ where
         return Err(Error::Verification);
     }
 
-    let em = uint_to_be_pad_noalloc(rsa_encrypt(pub_key, sig)?, pub_key.size(), storage)?;
+    let em = uint_to_be_pad_into(rsa_encrypt(pub_key, sig)?, pub_key.size(), storage)?;
 
     pkcs1v15_sign_unpad(prefix, hashed, em, pub_key.size())
 }

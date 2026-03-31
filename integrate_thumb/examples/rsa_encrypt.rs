@@ -6,9 +6,10 @@ use core::convert::Infallible;
 use cortex_m_semihosting::{debug, hprintln};
 use panic_semihosting as _;
 use rsa::{
-    pkcs1v15::Pkcs1v15Encrypt,
+    pkcs1v15::GenericEncryptingKey,
     modmath_support::public_key_from_be_bytes,
     rand_core::{TryCryptoRng, TryRng},
+    traits::RandomizedEncryptor,
 };
 
 const MODULUS: [u8; 64] = [
@@ -87,10 +88,10 @@ fn main() -> ! {
 }
 
 fn run() -> rsa::Result<()> {
-    let key = public_key_from_be_bytes(&MODULUS, 3)?;
+    let key = GenericEncryptingKey::new(public_key_from_be_bytes(&MODULUS, 3)?);
     let mut rng = CounterRng::new();
     let mut storage = [0u8; 64];
-    let ciphertext = Pkcs1v15Encrypt.encrypt_into(&mut rng, &key, b"hello world!", &mut storage)?;
+    let ciphertext = key.encrypt_with_rng_into(&mut rng, b"hello world!", &mut storage)?;
     if ciphertext != EXPECTED_CIPHERTEXT {
         return Err(rsa::Error::Verification);
     }

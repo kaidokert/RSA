@@ -49,11 +49,11 @@ where
     R: TryCryptoRng + ?Sized,
 {
     let mut em = Zeroizing::new(vec![0u8; k]);
-    pkcs1v15_encrypt_pad_noalloc(rng, msg, k, &mut em)?;
+    pkcs1v15_encrypt_pad_into(rng, msg, k, &mut em)?;
     Ok(em)
 }
 
-pub fn pkcs1v15_encrypt_pad_noalloc<'a, R>(
+pub fn pkcs1v15_encrypt_pad_into<'a, R>(
     rng: &mut R,
     msg: &[u8],
     k: usize,
@@ -85,12 +85,12 @@ where
 #[inline]
 pub(crate) fn pkcs1v15_encrypt_unpad(em: Vec<u8>, k: usize) -> Result<Vec<u8>> {
     let mut out = vec![0u8; k];
-    let out = pkcs1v15_encrypt_unpad_noalloc(&em, k, &mut out)?;
+    let out = pkcs1v15_encrypt_unpad_into(&em, k, &mut out)?;
     Ok(out.to_vec())
 }
 
 #[inline]
-pub fn pkcs1v15_encrypt_unpad_noalloc<'a>(
+pub fn pkcs1v15_encrypt_unpad_into<'a>(
     em: &[u8],
     k: usize,
     storage: &'a mut [u8],
@@ -149,12 +149,12 @@ fn decrypt_inner(em: &[u8], k: usize) -> Result<(u8, u32)> {
 #[inline]
 pub(crate) fn pkcs1v15_sign_pad(prefix: &[u8], hashed: &[u8], k: usize) -> Result<Vec<u8>> {
     let mut em = vec![0xff; k];
-    pkcs1v15_sign_pad_noalloc(prefix, hashed, k, &mut em)?;
+    pkcs1v15_sign_pad_into(prefix, hashed, k, &mut em)?;
     Ok(em)
 }
 
 #[inline]
-pub fn pkcs1v15_sign_pad_noalloc<'a>(
+pub fn pkcs1v15_sign_pad_into<'a>(
     prefix: &[u8],
     hashed: &[u8],
     k: usize,
@@ -214,13 +214,13 @@ where
 {
     let oid = D::OID.as_bytes();
     let mut v = vec![0u8; oid.len() + 10];
-    let out = pkcs1v15_generate_prefix_noalloc::<D>(&mut v)
+    let out = pkcs1v15_generate_prefix_into::<D>(&mut v)
         .expect("pkcs1v15 prefix buffer should fit exact size");
     out.to_vec()
 }
 
 #[inline]
-pub fn pkcs1v15_generate_prefix_noalloc<D>(storage: &mut [u8]) -> Result<&[u8]>
+pub fn pkcs1v15_generate_prefix_into<D>(storage: &mut [u8]) -> Result<&[u8]>
 where
     D: Digest + AssociatedOid,
 {

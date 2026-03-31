@@ -18,7 +18,7 @@ use digest::{Digest, FixedOutputReset};
 use rand_core::TryCryptoRng;
 
 use crate::algorithms::oaep::*;
-use crate::algorithms::pad::{uint_to_be_pad, uint_to_be_pad_noalloc, uint_to_zeroizing_be_pad};
+use crate::algorithms::pad::{uint_to_be_pad, uint_to_be_pad_into, uint_to_zeroizing_be_pad};
 use crate::algorithms::rsa::{rsa_decrypt_and_check, rsa_encrypt};
 use crate::errors::{Error, Result};
 use crate::key::{self, RsaPrivateKey, RsaPublicKey};
@@ -190,7 +190,7 @@ where
         let int = T::from_be_bytes_vartime(&em);
         let mut storage = vec![0u8; pub_key.size()];
         let ciphertext =
-            uint_to_be_pad_noalloc(rsa_encrypt(pub_key, &int)?, pub_key.size(), &mut storage)?;
+            uint_to_be_pad_into(rsa_encrypt(pub_key, &int)?, pub_key.size(), &mut storage)?;
         Ok(ciphertext.to_vec())
     }
 }

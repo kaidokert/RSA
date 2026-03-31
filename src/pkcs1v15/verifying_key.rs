@@ -1,4 +1,4 @@
-use super::{verify_noalloc_generic, GenericSignature};
+use super::{verify_generic, GenericSignature};
 #[cfg(feature = "alloc")]
 use super::pkcs1v15_generate_prefix;
 #[cfg(not(feature = "alloc"))]
@@ -110,7 +110,7 @@ where
         T::Bytes: AsMut<[u8]>,
     {
         let mut storage = self.inner.n().as_ref().to_be_bytes();
-        verify_noalloc_generic(
+        verify_generic(
             &self.inner,
             self.prefix.as_ref(),
             prehash,

@@ -2,12 +2,20 @@
 
 #[cfg(feature = "alloc")]
 use alloc::vec::Vec;
-use rand_core::CryptoRng;
+use rand_core::{CryptoRng, TryCryptoRng};
 
 use crate::errors::Result;
 
 /// Encrypt the message using provided random source
 pub trait RandomizedEncryptor {
+    /// Encrypt the given message into caller-provided storage.
+    fn encrypt_with_rng_into<'a, R: TryCryptoRng + ?Sized>(
+        &self,
+        rng: &mut R,
+        msg: &[u8],
+        storage: &'a mut [u8],
+    ) -> Result<&'a [u8]>;
+
     /// Encrypt the given message.
     #[cfg(feature = "alloc")]
     fn encrypt_with_rng<R: CryptoRng + ?Sized>(&self, rng: &mut R, msg: &[u8]) -> Result<Vec<u8>>;
