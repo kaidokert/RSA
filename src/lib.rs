@@ -277,11 +277,6 @@ pub use crate::{
 };
 #[cfg(all(feature = "alloc", feature = "private-key"))]
 pub use crate::traits::keys::CrtValue;
-#[cfg(not(feature = "alloc"))]
-pub use crate::{
-    errors::Result
-};
-
 #[cfg(all(not(feature = "alloc"), feature = "full"))]
 pub use crate::{
     errors::{Error, Result},
@@ -289,7 +284,7 @@ pub use crate::{
     pkcs1v15::{Pkcs1v15Encrypt, Pkcs1v15Sign},
 };
 
-#[cfg(all(not(feature = "alloc"), not(feature = "full"), not(feature = "hack")))]
+#[cfg(all(not(feature = "alloc"), not(feature = "full")))]
 pub use crate::{
     errors::{Error, Result},
     key::GenericRsaPublicKey,
@@ -299,16 +294,3 @@ pub use crate::{
 pub mod hazmat;
 
 // export some alloc-compatible methods for testing
-#[cfg(feature = "hack")]
-pub use algorithms::pad::{left_pad_noalloc, uint_to_be_pad_noalloc, uint_to_zeroizing_be_pad_noalloc};
-#[cfg(feature = "hack")]
-pub use {
-    algorithms::{
-        pkcs1v15::{
-            pkcs1v15_encrypt_pad_noalloc, pkcs1v15_encrypt_unpad_noalloc,
-            pkcs1v15_generate_prefix_noalloc, pkcs1v15_sign_pad_noalloc,
-        },
-        rsa::rsa_encrypt,
-    },
-    key::GenericRsaPublicKey,
-};

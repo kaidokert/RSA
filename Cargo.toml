@@ -33,7 +33,6 @@ serde = { version = "1.0.184", optional = true, default-features = false, featur
 
 # Big integer backend
 crypto-bigint = { version = "0.7.1", default-features = false, features = ["zeroize","rand_core"] }
-heapless = { version = "0.8", optional = true, default-features = false }
 fixed-bigint = { version = "0.2.5", optional = true, default-features = false, features = ["zeroize"] }
 modmath = { version = "0.1.5", optional = true, default-features = false }
 
@@ -69,8 +68,6 @@ alloc = ["crypto-bigint/alloc", "pkcs8/alloc", "spki/alloc", "digest/alloc", "si
 full = ["private-key"]
 # Enable private key support, doesn't work with no-alloc
 private-key = ["alloc"]
-# Temporary hack for testing
-hack = ["dep:heapless"]
 modmath = ["dep:fixed-bigint", "dep:modmath"]
 
 [package.metadata.docs.rs]

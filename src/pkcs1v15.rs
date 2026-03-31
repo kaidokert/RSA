@@ -106,7 +106,39 @@ where
 }
 
 #[cfg(not(feature = "alloc"))]
-type Prefix = heapless::Vec<u8, 32>;
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Prefix<const N: usize = 32> {
+    data: [u8; N],
+    len: usize,
+}
+
+#[cfg(not(feature = "alloc"))]
+impl<const N: usize> Prefix<N> {
+    pub const fn new() -> Self {
+        Self {
+            data: [0u8; N],
+            len: 0,
+        }
+    }
+
+    pub fn from_slice(input: &[u8]) -> Result<Self> {
+        if input.len() > N {
+            return Err(Error::OutputBufferTooSmall);
+        }
+
+        let mut out = Self::new();
+        out.data[..input.len()].copy_from_slice(input);
+        out.len = input.len();
+        Ok(out)
+    }
+}
+
+#[cfg(not(feature = "alloc"))]
+impl<const N: usize> AsRef<[u8]> for Prefix<N> {
+    fn as_ref(&self) -> &[u8] {
+        &self.data[..self.len]
+    }
+}
 
 #[cfg(not(feature = "alloc"))]
 pub fn pkcs1v15_generate_prefix_helper<D: Digest>() -> Prefix 
