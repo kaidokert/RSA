@@ -37,19 +37,19 @@ mod verifying_key;
 #[cfg(feature="private-key")]
 pub use self::{
     decrypting_key::DecryptingKey, encrypting_key::GenericEncryptingKey,
-    signature::{GenericSignature, GenericSignatureBytes}, signing_key::SigningKey,
+    signature::{GenericSignature, SignatureBytes}, signing_key::SigningKey,
     verifying_key::GenericVerifyingKey,
 };
 #[cfg(not(feature="private-key"))]
 pub use self::{
-    encrypting_key::GenericEncryptingKey, signature::{GenericSignature, GenericSignatureBytes},
+    encrypting_key::GenericEncryptingKey, signature::{GenericSignature, SignatureBytes},
     verifying_key::GenericVerifyingKey,
 };
 
 #[cfg(feature = "alloc")]
 pub use self::{
     encrypting_key::EncryptingKey,
-    signature::{Signature, SignatureBytes},
+    signature::Signature,
     verifying_key::VerifyingKey,
 };
 

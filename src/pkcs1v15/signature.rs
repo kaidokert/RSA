@@ -29,7 +29,7 @@ where
 }
 
 #[derive(Clone)]
-pub struct GenericSignatureBytes<T>(
+pub struct SignatureBytes<T>(
     T::Bytes,
 )
 where
@@ -37,8 +37,6 @@ where
 
 #[cfg(feature = "alloc")]
 pub type Signature = GenericSignature<BoxedUint>;
-#[cfg(feature = "alloc")]
-pub type SignatureBytes = GenericSignatureBytes<BoxedUint>;
 
 impl<T> GenericSignature<T>
 where
@@ -64,7 +62,7 @@ where
     }
 }
 
-impl<T> GenericSignatureBytes<T>
+impl<T> SignatureBytes<T>
 where
     T: UnsignedModularInt,
 {
@@ -73,7 +71,7 @@ where
     }
 }
 
-impl<T> AsRef<[u8]> for GenericSignatureBytes<T>
+impl<T> AsRef<[u8]> for SignatureBytes<T>
 where
     T: UnsignedModularInt,
 {
@@ -82,7 +80,7 @@ where
     }
 }
 
-impl<T> From<GenericSignature<T>> for GenericSignatureBytes<T>
+impl<T> From<GenericSignature<T>> for SignatureBytes<T>
 where
     T: UnsignedModularInt,
 {
@@ -109,7 +107,7 @@ where
     T: FromBeBytes + 'static,
     T::Bytes: Clone + Send + Sync + 'static,
 {
-    type Repr = GenericSignatureBytes<T>;
+    type Repr = SignatureBytes<T>;
 }
 
 #[cfg(feature = "encoding")]
@@ -126,7 +124,7 @@ where
 #[cfg(feature = "alloc")]
 impl From<GenericSignature<BoxedUint>> for Box<[u8]> {
     fn from(signature: GenericSignature<BoxedUint>) -> Box<[u8]> {
-        GenericSignatureBytes::<BoxedUint>::from(signature).0
+        SignatureBytes::<BoxedUint>::from(signature).0
     }
 }
 
