@@ -15,8 +15,9 @@ exclude = ["marvin_toolkit/", "thirdparty/"]
 
 [dependencies]
 const-oid = { version = "0.10", default-features = false }
-crypto-primes = { version = "0.7", default-features = false }
+crypto-primes = { version = "0.7", optional = true, default-features = false }
 digest = { version = "0.11", default-features = false, features = ["oid"] }
+ctutils = { version = "0.4", default-features = false }
 rand_core = { version = "0.10", default-features = false }
 signature = { version = "3.0.0-rc.10", default-features = false, features = ["digest", "rand_core"] }
 zeroize = { version = "1.8", default-features = false }
@@ -32,7 +33,7 @@ spki = { version = "0.8.0-rc.4", optional = true, default-features = false, feat
 serde = { version = "1.0.184", optional = true, default-features = false, features = ["derive"] }
 
 # Big integer backend
-crypto-bigint = { version = "0.7.1", default-features = false, features = ["zeroize","rand_core"] }
+crypto-bigint = { version = "0.7.1", optional = true, default-features = false, features = ["zeroize","rand_core"] }
 fixed-bigint = { version = "0.2.5", optional = true, default-features = false, features = ["zeroize"] }
 modmath = { version = "0.1.5", optional = true, default-features = false }
 
@@ -58,16 +59,16 @@ name = "key"
 default = ["std", "encoding", "full", "modmath" ]
 encoding = ["alloc", "dep:pkcs1", "dep:pkcs8", "dep:spki"]
 hazmat = []
-getrandom = ["crypto-bigint/getrandom", "crypto-common"]
-serde = ["encoding", "dep:serde", "dep:serdect", "crypto-bigint/serde"]
+getrandom = ["dep:crypto-bigint", "crypto-bigint/getrandom", "crypto-common"]
+serde = ["encoding", "dep:serde", "dep:serdect", "dep:crypto-bigint", "crypto-bigint/serde"]
 pkcs5 = ["pkcs8/encryption"]
 std = ["alloc", "pkcs1?/std", "pkcs8?/std"]
-alloc = ["crypto-bigint/alloc", "pkcs8/alloc", "spki/alloc", "digest/alloc", "signature/alloc", "zeroize/alloc"]
+alloc = ["dep:crypto-bigint", "crypto-bigint/alloc", "pkcs8/alloc", "spki/alloc", "digest/alloc", "signature/alloc", "zeroize/alloc"]
 
 # Full feature set has all padding formats, and private key generation
 full = ["private-key"]
 # Enable private key support, doesn't work with no-alloc
-private-key = ["alloc"]
+private-key = ["alloc", "dep:crypto-primes"]
 modmath = ["dep:fixed-bigint", "dep:modmath"]
 
 [package.metadata.docs.rs]

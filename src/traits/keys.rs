@@ -2,7 +2,6 @@
 
 #[cfg(feature = "alloc")]
 use alloc::boxed::Box;
-use crypto_bigint::NonZero;
 #[cfg(feature = "private-key")]
 use crypto_bigint::{
     BoxedUint,
@@ -10,7 +9,7 @@ use crypto_bigint::{
 };
 use zeroize::Zeroize;
 
-use crate::traits::{UnsignedModularInt, modular::ModulusParams};
+use crate::traits::{NonZero, UnsignedModularInt, modular::ModulusParams};
 
 /// Components of an RSA public key.
 pub trait PublicKeyParts<T: UnsignedModularInt> {

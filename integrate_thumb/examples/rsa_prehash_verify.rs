@@ -3,7 +3,10 @@
 
 use cortex_m_semihosting::{debug, hprintln};
 use panic_semihosting as _;
-use rsa::modmath_support::{public_key_from_be_bytes, verify_pkcs1v15_sha1_prehash};
+use rsa::modmath_support::{public_key_from_be_bytes, ModMathFixedUint};
+use rsa::pkcs1v15::{GenericSignature, GenericVerifyingKey};
+use sha1::Sha1;
+use rsa::signature::hazmat::PrehashVerifier;
 
 const MODULUS: [u8; 64] = [
     0x96, 0x9d, 0x03, 0xff, 0xa9, 0x8d, 0x88, 0x8f, 0x3a, 0xa4, 0xf2, 0xfe, 0xd2, 0x32, 0xe6,
@@ -43,7 +46,11 @@ fn main() -> ! {
 
 fn run() -> rsa::Result<()> {
     let key = public_key_from_be_bytes(&MODULUS, 3)?;
-    verify_pkcs1v15_sha1_prehash(&key, &DIGEST, &SIGNATURE)?;
+    let verifying_key = GenericVerifyingKey::<Sha1, _, _>::new(key);
+    let signature = GenericSignature::from(ModMathFixedUint::<64>::from_be_slice(&SIGNATURE));
+    verifying_key
+        .verify_prehash(&DIGEST, &signature)
+        .map_err(|_| rsa::Error::Verification)?;
     hprintln!("rsa_prehash_verify: ok");
     Ok(())
 }

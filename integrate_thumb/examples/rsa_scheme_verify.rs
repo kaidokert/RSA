@@ -3,9 +3,8 @@
 
 use cortex_m_semihosting::{debug, hprintln};
 use panic_semihosting as _;
-use rsa::modmath_support::{
-    PKCS1V15_SHA1_PREFIX, public_key_from_be_bytes, verify_pkcs1v15_prehash_with_prefix,
-};
+use rsa::modmath_support::public_key_from_be_bytes;
+use rsa::pkcs1v15::Pkcs1v15Sign;
 
 const MODULUS: [u8; 64] = [
     0x96, 0x9d, 0x03, 0xff, 0xa9, 0x8d, 0x88, 0x8f, 0x3a, 0xa4, 0xf2, 0xfe, 0xd2, 0x32, 0xe6,
@@ -45,7 +44,7 @@ fn main() -> ! {
 
 fn run() -> rsa::Result<()> {
     let key = public_key_from_be_bytes(&MODULUS, 3)?;
-    verify_pkcs1v15_prehash_with_prefix(&key, &PKCS1V15_SHA1_PREFIX, &DIGEST, &SIGNATURE)?;
+    key.verify(Pkcs1v15Sign::new::<sha1::Sha1>(), &DIGEST, &SIGNATURE)?;
     hprintln!("rsa_scheme_verify: ok");
     Ok(())
 }

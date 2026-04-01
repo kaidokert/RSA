@@ -9,7 +9,7 @@
 #[cfg(feature = "alloc")]
 use alloc::vec::Vec;
 use const_oid::AssociatedOid;
-use crypto_bigint::{Choice, CtAssign, CtEq, CtSelect};
+use ctutils::{Choice, CtAssign, CtEq, CtSelect};
 use digest::Digest;
 use rand_core::TryCryptoRng;
 use zeroize::Zeroizing;

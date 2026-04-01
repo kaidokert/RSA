@@ -3,7 +3,10 @@
 #[cfg(feature = "private-key")]
 use core::cmp::Ordering;
 
-use crypto_bigint::{NonZero, Odd, Resize};
+#[cfg(feature = "private-key")]
+use crypto_bigint::{NonZero as CryptoNonZero, Odd as CryptoOdd};
+#[cfg(feature = "private-key")]
+use crypto_bigint::Resize as _;
 #[cfg(feature = "private-key")]
 use crypto_bigint::{
     modular::{BoxedMontyForm, BoxedMontyParams},
@@ -15,7 +18,7 @@ use zeroize::Zeroize;
 use crate::{
     errors::{Error, Result},
     traits::{
-        UnsignedModularInt,
+        IntegerResize, NonZero, UnsignedModularInt,
         modular::{IntoMontyForm, ModulusParams, Pow, PowBoundedExp},
     },
 };
@@ -33,7 +36,7 @@ use crate::traits::keys::{PublicKeyParts};
 #[inline]
 pub fn rsa_encrypt<T, K>(key: &K, m: &T) -> Result<T>
 where
-    T: UnsignedModularInt + Resize<Output = T>,
+    T: UnsignedModularInt + IntegerResize<Output = T>,
     K: PublicKeyParts<T>,
     K::MontyParams: ModulusParams<Modulus = T>,
     <K::MontyParams as ModulusParams>::MontgomeryForm: IntoMontyForm<K::MontyParams> + PowBoundedExp<K::MontyParams>,
@@ -77,7 +80,7 @@ pub fn rsa_decrypt<R: TryCryptoRng + ?Sized>(
     let c = if let Some(rng) = rng {
         let (blinded, unblinder) = blind(rng, priv_key, c, n_params)?;
         ir = Some(unblinder);
-        blinded.try_resize(bits).ok_or(Error::Internal)?
+        crypto_bigint::Resize::try_resize(blinded, bits).ok_or(Error::Internal)?
     } else {
         c.try_resize(bits).ok_or(Error::Internal)?
     };
@@ -105,12 +108,18 @@ pub fn rsa_decrypt<R: TryCryptoRng + ?Sized>(
 
             // m1 = c^dP mod p
             let p_wide = p_params.modulus().resize_unchecked(c.bits_precision());
-            let c_mod_dp = (&c % p_wide.as_nz_ref()).resize_unchecked(dp.bits_precision());
+            let c_mod_dp = crypto_bigint::Resize::resize_unchecked(
+                &c % p_wide.as_nz_ref(),
+                dp.bits_precision(),
+            );
             let cp = BoxedMontyForm::new(c_mod_dp, p_params);
             let mut m1 = cp.pow(dp);
             // m2 = c^dQ mod q
             let q_wide = q_params.modulus().resize_unchecked(c.bits_precision());
-            let c_mod_dq = (&c % q_wide.as_nz_ref()).resize_unchecked(dq.bits_precision());
+            let c_mod_dq = crypto_bigint::Resize::resize_unchecked(
+                &c % q_wide.as_nz_ref(),
+                dq.bits_precision(),
+            );
             let cq = BoxedMontyForm::new(c_mod_dq, q_params);
             let m2 = cq.pow(dq).retrieve();
 
@@ -120,10 +129,14 @@ pub fn rsa_decrypt<R: TryCryptoRng + ?Sized>(
             // (m1 - m2) mod p = (m1 mod p) - (m2 mod p) mod p
             let m2_mod_p = match p_params.bits_precision().cmp(&q_params.bits_precision()) {
                 Ordering::Less => {
-                    let p_wide = NonZero::new(p.clone())
-                        .expect("`p` is non-zero")
-                        .resize_unchecked(q_params.bits_precision());
-                    (&m2 % p_wide).resize_unchecked(p_params.bits_precision())
+                    let p_wide = crypto_bigint::Resize::resize_unchecked(
+                        CryptoNonZero::new(p.clone()).expect("`p` is non-zero"),
+                        q_params.bits_precision(),
+                    );
+                    crypto_bigint::Resize::resize_unchecked(
+                        &m2 % p_wide,
+                        p_params.bits_precision(),
+                    )
                 }
                 Ordering::Greater => (&m2).resize_unchecked(p_params.bits_precision()),
                 Ordering::Equal => m2.clone(),
@@ -137,11 +150,13 @@ pub fn rsa_decrypt<R: TryCryptoRng + ?Sized>(
             let h = (qinv * m1).retrieve();
 
             // m = m2 + h.q
-            let m2 = m2.try_resize(n.bits_precision()).ok_or(Error::Internal)?;
-            let hq = h
-                .concatenating_mul(&q)
-                .try_resize(n.bits_precision())
-                .ok_or(Error::Internal)?;
+            let m2 =
+                crypto_bigint::Resize::try_resize(m2, n.bits_precision()).ok_or(Error::Internal)?;
+            let hq = crypto_bigint::Resize::try_resize(
+                h.concatenating_mul(&q),
+                n.bits_precision(),
+            )
+            .ok_or(Error::Internal)?;
             m2.wrapping_add(&hq)
         }
         _ => {
@@ -209,10 +224,11 @@ fn blind<R: TryCryptoRng + ?Sized, K: PublicKeyParts<BoxedUint, MontyParams = Bo
     let mut r: BoxedUint = BoxedUint::zero_with_precision(bits);
     let mut ir: Option<BoxedUint> = None;
     while ir.is_none() {
-        r = BoxedUint::try_random_mod_vartime(rng, key.n()).map_err(|_| Error::Rng)?;
+        let modulus = CryptoNonZero::new(key.n().as_ref().clone()).expect("modulus is non-zero");
+        r = BoxedUint::try_random_mod_vartime(rng, &modulus).map_err(|_| Error::Rng)?;
 
         // r^-1 (mod n)
-        ir = r.invert_mod(key.n()).into();
+        ir = r.invert_mod(&modulus).into();
     }
 
     let blinded = {
@@ -255,7 +271,7 @@ fn unblind(m: &BoxedUint, unblinder: &BoxedUint, n_params: &BoxedMontyParams) ->
 /// Computes `base.pow_mod(exp, n)` with precomputed `n_params`.
 fn pow_mod_params<T, M>(base: &T, exp: &T, n_params: &M) -> T
 where
-    T: UnsignedModularInt + Resize<Output = T>,
+    T: UnsignedModularInt + IntegerResize<Output = T>,
     M: ModulusParams<Modulus = T>,
     M::MontgomeryForm: IntoMontyForm<M> + Pow<M>,
 {
@@ -273,7 +289,7 @@ fn pow_mod_params_vartime_exp_bits<T, M>(
     n_params: &M,
 ) -> T
 where
-    T: UnsignedModularInt + Resize<Output = T>,
+    T: UnsignedModularInt + IntegerResize<Output = T>,
     M: ModulusParams<Modulus = T>,
     M::MontgomeryForm: IntoMontyForm<M> + PowBoundedExp<M>,
 {
@@ -283,11 +299,11 @@ where
 
 fn reduce_vartime<T, M>(n: &T, p: &M) -> M::MontgomeryForm
 where
-    T: UnsignedModularInt + Resize<Output = T>,
+    T: UnsignedModularInt + IntegerResize<Output = T>,
     M: ModulusParams<Modulus = T>,
     M::MontgomeryForm: IntoMontyForm<M>,
 {
-    let modulus = p.modulus().as_nz_ref().clone();
+    let modulus = NonZero::new(p.modulus().as_ref().clone()).expect("modulus is non-zero");
     let n_reduced = n.rem_vartime(&modulus).resize_unchecked(p.bits_precision());
     M::MontgomeryForm::from_reduced(n_reduced, p)
 }
@@ -297,7 +313,7 @@ where
 /// [NIST 800-56B Appendix C.2](https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-56Br2.pdf).
 #[cfg(feature = "private-key")]
 pub fn recover_primes(
-    n: &NonZero<BoxedUint>,
+    n: &CryptoNonZero<BoxedUint>,
     e: &BoxedUint,
     d: &BoxedUint,
 ) -> Result<(BoxedUint, BoxedUint)> {
@@ -328,11 +344,11 @@ pub fn recover_primes(
 
     // 3. Let b = ( (n – r)/(m + 1) ) + 1; if b is not an integer or b^2 ≤ 4n, then output an error indicator,
     //    and exit without further processing.
-    let modulus_check = (&n - &r) % NonZero::new(&m + &one).expect("adding 1");
+    let modulus_check = (&n - &r) % CryptoNonZero::new(&m + &one).expect("adding 1");
     if (!modulus_check.is_zero()).into() {
         return Err(Error::InvalidArguments);
     }
-    let b = ((&n - &r) / NonZero::new(&m + &one).expect("adding one")) + one;
+    let b = ((&n - &r) / CryptoNonZero::new(&m + &one).expect("adding one")) + one;
 
     let four = BoxedUint::from(4u32);
     let four_n = n.concatenating_mul(&four);
@@ -354,7 +370,7 @@ pub fn recover_primes(
     }
 
     let bits = core::cmp::max(b.bits_precision(), y.bits_precision());
-    let two = NonZero::new(BoxedUint::from(2u64))
+    let two = CryptoNonZero::new(BoxedUint::from(2u64))
         .expect("2 is non zero")
         .resize_unchecked(bits);
     let p = (&b + &y) / &two;
@@ -365,13 +381,13 @@ pub fn recover_primes(
 
 /// Compute the modulus of a key from its primes.
 #[cfg(feature = "private-key")]
-pub(crate) fn compute_modulus(primes: &[BoxedUint]) -> Odd<BoxedUint> {
+pub(crate) fn compute_modulus(primes: &[BoxedUint]) -> CryptoOdd<BoxedUint> {
     let mut primes = primes.iter();
     let mut out = primes.next().expect("must at least be one prime").clone();
     for p in primes {
         out = out.concatenating_mul(&p);
     }
-    Odd::new(out).expect("modulus must be odd")
+    CryptoOdd::new(out).expect("modulus must be odd")
 }
 
 /// Compute the private exponent from its primes (p and q) and public exponent
@@ -395,7 +411,7 @@ pub(crate) fn compute_private_exponent_euler_totient(
 
     // NOTE: `mod_inverse` checks if `exp` evenly divides `totient` and returns `None` if so.
     // This ensures that `exp` is not a factor of any `(prime - 1)`.
-    let totient = NonZero::new(totient).expect("known");
+    let totient = CryptoNonZero::new(totient).expect("known");
     match exp.invert_mod(&totient).into_option() {
         Some(res) => Ok(res),
         None => Err(Error::InvalidPrime),
@@ -423,9 +439,9 @@ pub(crate) fn compute_private_exponent_carmicheal(
 
     // LCM inlined
     let gcd = p1.gcd(&q1);
-    let lcm = (p1 / NonZero::new(gcd).expect("gcd is non zero")).concatenating_mul(&q1);
+    let lcm = (p1 / CryptoNonZero::new(gcd).expect("gcd is non zero")).concatenating_mul(&q1);
     let exp = exp.resize_unchecked(lcm.bits_precision());
-    if let Some(d) = exp.invert_mod(&NonZero::new(lcm).expect("non zero")).into() {
+    if let Some(d) = exp.invert_mod(&CryptoNonZero::new(lcm).expect("non zero")).into() {
         Ok(d)
     } else {
         // `exp` evenly divides `lcm`
@@ -491,7 +507,7 @@ mod tests {
         )
         .unwrap();
 
-        let (mut p1, mut q1) = recover_primes(&NonZero::new(n).unwrap(), &e, &d).unwrap();
+        let (mut p1, mut q1) = recover_primes(&CryptoNonZero::new(n).unwrap(), &e, &d).unwrap();
 
         if p1 < q1 {
             std::mem::swap(&mut p1, &mut q1);

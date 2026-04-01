@@ -58,9 +58,7 @@ use alloc::{boxed::Box, vec, vec::Vec};
 use const_oid::AssociatedOid;
 use core::fmt::Debug;
 #[cfg(feature = "alloc")]
-use crypto_bigint::{BoxedUint, Resize};
-#[cfg(not(feature = "alloc"))]
-use crypto_bigint::Resize;
+use crypto_bigint::BoxedUint;
 use digest::Digest;
 use rand_core::TryCryptoRng;
 
@@ -76,6 +74,7 @@ use crate::errors::{Error, Result};
 #[cfg(feature="private-key")]
 use crate::key::{self, RsaPrivateKey};
 use crate::traits::{
+    IntegerResize,
     modular::{FromBeBytes, IntoMontyForm, ModulusParams, PowBoundedExp},
     PaddingScheme, PublicKeyParts, SignatureScheme, UnsignedModularInt,
 };
@@ -97,7 +96,7 @@ impl Pkcs1v15Encrypt {
     ) -> Result<&'a [u8]>
     where
         R: TryCryptoRng + ?Sized,
-        T: UnsignedModularInt + FromBeBytes + Resize<Output = T>,
+        T: UnsignedModularInt + FromBeBytes + IntegerResize<Output = T>,
         K: PublicKeyParts<T>,
         K::MontyParams: ModulusParams<Modulus = T>,
         <K::MontyParams as ModulusParams>::MontgomeryForm:
@@ -123,7 +122,7 @@ fn encrypt<R: TryCryptoRng + ?Sized, K, T>(
     msg: &[u8],
 ) -> Result<Vec<u8>>
 where
-    T: UnsignedModularInt + FromBeBytes + Resize<Output = T> + PartialOrd,
+    T: UnsignedModularInt + FromBeBytes + IntegerResize<Output = T> + PartialOrd,
     K: PublicKeyParts<T>,
     K::MontyParams: ModulusParams<Modulus = T>,
     <K::MontyParams as ModulusParams>::MontgomeryForm: IntoMontyForm<K::MontyParams> + PowBoundedExp<K::MontyParams>,
@@ -200,7 +199,7 @@ impl PaddingScheme for Pkcs1v15Encrypt {
     ) -> Result<Vec<u8>>
     where
         Rng: TryCryptoRng + ?Sized,
-        T: UnsignedModularInt + FromBeBytes + Resize<Output = T> + PartialOrd,
+        T: UnsignedModularInt + FromBeBytes + IntegerResize<Output = T> + PartialOrd,
         K: PublicKeyParts<T>,
         K::MontyParams: ModulusParams<Modulus = T>,
         <K::MontyParams as ModulusParams>::MontgomeryForm: IntoMontyForm<K::MontyParams> + PowBoundedExp<K::MontyParams>,
@@ -275,7 +274,7 @@ impl SignatureScheme for Pkcs1v15Sign {
 
     fn verify<K, T>(self, pub_key: &K, hashed: &[u8], sig: &[u8]) -> Result<()>
     where
-        T: UnsignedModularInt + FromBeBytes + Resize<Output = T> + PartialOrd,
+        T: UnsignedModularInt + FromBeBytes + IntegerResize<Output = T> + PartialOrd,
         T::Bytes: AsMut<[u8]>,
         K: PublicKeyParts<T>,
         K::MontyParams: ModulusParams<Modulus = T>,
@@ -304,7 +303,7 @@ pub fn encrypt_into<'a, R, K, T>(
 ) -> Result<&'a [u8]>
 where
     R: TryCryptoRng + ?Sized,
-    T: UnsignedModularInt + FromBeBytes + Resize<Output = T>,
+    T: UnsignedModularInt + FromBeBytes + IntegerResize<Output = T>,
     K: PublicKeyParts<T>,
     K::MontyParams: ModulusParams<Modulus = T>,
     <K::MontyParams as ModulusParams>::MontgomeryForm: IntoMontyForm<K::MontyParams> + PowBoundedExp<K::MontyParams>,
@@ -372,7 +371,7 @@ pub(crate) fn verify_generic<K, T>(
     storage: &mut [u8],
 ) -> Result<()>
 where
-    T: UnsignedModularInt + Resize<Output = T> + PartialOrd,
+    T: UnsignedModularInt + IntegerResize<Output = T> + PartialOrd,
     K: PublicKeyParts<T>,
     K::MontyParams: ModulusParams<Modulus = T>,
     <K::MontyParams as ModulusParams>::MontgomeryForm: IntoMontyForm<K::MontyParams> + PowBoundedExp<K::MontyParams>,

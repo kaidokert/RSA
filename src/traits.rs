@@ -10,5 +10,5 @@ pub use encryption::{Decryptor, EncryptingKeypair, RandomizedDecryptor, Randomiz
 pub use keys::{PrivateKeyParts, PublicKeyParts};
 #[cfg(not(feature = "private-key"))]
 pub use keys::{PublicKeyParts};
-pub use modular::UnsignedModularInt;
+pub use modular::{IntegerResize, NonZero, Odd, UnsignedModularInt};
 pub use padding::{PaddingScheme, SignatureScheme};

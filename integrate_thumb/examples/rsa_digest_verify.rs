@@ -3,7 +3,9 @@
 
 use cortex_m_semihosting::{debug, hprintln};
 use panic_semihosting as _;
-use rsa::modmath_support::{public_key_from_be_bytes, rsa_decrypt, verify_pkcs1v15_digest};
+use rsa::modmath_support::{public_key_from_be_bytes, rsa_decrypt, ModMathFixedUint};
+use rsa::pkcs1v15::{GenericSignature, GenericVerifyingKey};
+use rsa::signature::DigestVerifier;
 use sha1::Sha1;
 
 const MODULUS: [u8; 64] = [
@@ -40,6 +42,8 @@ fn main() -> ! {
 fn run() -> rsa::Result<()> {
     let key = public_key_from_be_bytes(&MODULUS, 3)?;
     let recovered = rsa_decrypt(&key, &SIGNATURE)?;
+    let verifying_key = GenericVerifyingKey::<Sha1, _, _>::new(key);
+    let signature = GenericSignature::from(ModMathFixedUint::<64>::from_be_slice(&SIGNATURE));
 
     hprintln!("rsa_digest_verify");
     hprintln!("recovered block:");
@@ -47,15 +51,16 @@ fn run() -> rsa::Result<()> {
         hprintln!("{:02x}", byte);
     }
 
-    verify_pkcs1v15_digest::<Sha1, _, 64>(
-        &key,
-        |digest: &mut Sha1| {
-            use sha1::Digest;
-            digest.update(b"hello world!");
-            Ok(())
-        },
-        &SIGNATURE,
-    )?;
+    verifying_key
+        .verify_digest(
+            |digest: &mut Sha1| {
+                use sha1::Digest;
+                digest.update(b"hello world!");
+                Ok(())
+            },
+            &signature,
+        )
+        .map_err(|_| rsa::Error::Verification)?;
     hprintln!("verification: ok");
     Ok(())
 }

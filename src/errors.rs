@@ -73,6 +73,7 @@ pub enum Error {
     InvalidArguments,
 
     /// Decoding error.
+    #[cfg(feature = "alloc")]
     Decode(crypto_bigint::DecodeError),
 
     /// Random number generator error.
@@ -112,6 +113,7 @@ impl core::fmt::Display for Error {
             Error::LabelTooLong => write!(f, "label too long"),
             Error::InvalidPadLen => write!(f, "invalid padding length"),
             Error::InvalidArguments => write!(f, "invalid arguments"),
+            #[cfg(feature = "alloc")]
             Error::Decode(err) => write!(f, "{:?}", err),
             Error::Rng => write!(f, "rng error"),
             Error::OutputBufferTooSmall => write!(f, "output buffer too small"),
@@ -132,6 +134,7 @@ impl From<pkcs8::Error> for Error {
         Error::Pkcs8(err)
     }
 }
+#[cfg(feature = "alloc")]
 impl From<crypto_bigint::DecodeError> for Error {
     fn from(err: crypto_bigint::DecodeError) -> Error {
         Error::Decode(err)

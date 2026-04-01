@@ -2,10 +2,12 @@ use core::borrow::Borrow;
 
 #[cfg(feature = "alloc")]
 use alloc::boxed::Box;
-use crypto_bigint::{NonZero, Odd, Resize};
+#[cfg(feature = "alloc")]
+use crypto_bigint::{NonZero as CryptoNonZero, Odd as CryptoOdd};
 #[cfg(feature = "alloc")]
 use crypto_bigint::{
     BoxedUint,
+    Resize as CryptoResize,
     modular::{BoxedMontyForm, BoxedMontyParams},
 };
 use zeroize::Zeroize;
@@ -14,7 +16,22 @@ pub trait NumBytes: Borrow<[u8]> + Zeroize + AsRef<[u8]> {}
 
 impl<const N: usize> NumBytes for [u8; N] {}
 
-pub trait UnsignedModularInt: Zeroize + Clone  + Resize {
+#[repr(transparent)]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NonZero<T>(T);
+
+#[repr(transparent)]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Odd<T>(T);
+
+pub trait IntegerResize: Sized {
+    type Output;
+
+    fn resize_unchecked(self, at_least_bits_precision: u32) -> Self::Output;
+    fn try_resize(self, at_least_bits_precision: u32) -> Option<Self::Output>;
+}
+
+pub trait UnsignedModularInt: Zeroize + Clone + IntegerResize<Output = Self> {
     type Bytes: NumBytes;
     fn leading_zeros(&self) -> u32;
     fn to_be_bytes(&self) -> Self::Bytes;
@@ -28,6 +45,77 @@ pub trait UnsignedModularInt: Zeroize + Clone  + Resize {
 
 pub trait FromBeBytes: UnsignedModularInt {
     fn from_be_bytes_vartime(bytes: &[u8]) -> Self;
+}
+
+impl<T> NonZero<T>
+where
+    T: UnsignedModularInt,
+{
+    pub fn new(value: T) -> Option<Self> {
+        if value.bits() == 0 {
+            None
+        } else {
+            Some(Self(value))
+        }
+    }
+
+    pub fn get(self) -> T {
+        self.0
+    }
+
+    pub fn as_ref(&self) -> &T {
+        &self.0
+    }
+
+    pub fn bits(&self) -> u32 {
+        self.0.bits()
+    }
+
+    pub fn bits_precision(&self) -> u32 {
+        self.0.bits_precision()
+    }
+
+    pub fn to_be_bytes(&self) -> T::Bytes {
+        self.0.to_be_bytes()
+    }
+
+    #[cfg(feature = "alloc")]
+    pub fn to_be_bytes_trimmed_vartime(&self) -> Box<[u8]> {
+        self.0.to_be_bytes_trimmed_vartime()
+    }
+}
+
+impl<T> Odd<T>
+where
+    T: UnsignedModularInt,
+{
+    pub fn new(value: T) -> Option<Self> {
+        let non_zero = NonZero::new(value)?;
+        let bytes = non_zero.as_ref().to_be_bytes();
+        let bytes = bytes.as_ref();
+        let is_odd = bytes.last().map(|byte| byte & 1 == 1).unwrap_or(false);
+        if is_odd {
+            Some(Self(non_zero.get()))
+        } else {
+            None
+        }
+    }
+
+    pub fn get(self) -> T {
+        self.0
+    }
+
+    pub fn as_ref(&self) -> &T {
+        &self.0
+    }
+
+    pub fn as_nz_ref(&self) -> NonZero<T> {
+        NonZero::new(self.0.clone()).expect("odd values are non-zero")
+    }
+
+    pub fn bits_precision(&self) -> u32 {
+        self.0.bits_precision()
+    }
 }
 
 
@@ -87,7 +175,8 @@ impl ModulusParams for BoxedMontyParams {
     type Modulus = BoxedUint;
     type MontgomeryForm = BoxedMontyForm;
     fn modulus(&self) -> &Odd<Self::Modulus> {
-        self.modulus()
+        // Safety: both wrappers are transparent newtypes over the same `BoxedUint`.
+        unsafe { &*(self.modulus() as *const CryptoOdd<Self::Modulus> as *const Odd<Self::Modulus>) }
     }
     fn bits_precision(&self) -> u32 {
         self.bits_precision()
@@ -96,6 +185,19 @@ impl ModulusParams for BoxedMontyParams {
 
 #[cfg(feature = "alloc")]
 impl NumBytes for alloc::boxed::Box<[u8]> {}
+
+#[cfg(feature = "alloc")]
+impl IntegerResize for BoxedUint {
+    type Output = Self;
+
+    fn resize_unchecked(self, at_least_bits_precision: u32) -> Self::Output {
+        CryptoResize::resize_unchecked(self, at_least_bits_precision)
+    }
+
+    fn try_resize(self, at_least_bits_precision: u32) -> Option<Self::Output> {
+        CryptoResize::try_resize(self, at_least_bits_precision)
+    }
+}
 
 #[cfg(feature = "alloc")]
 impl UnsignedModularInt for BoxedUint {
@@ -118,7 +220,7 @@ impl UnsignedModularInt for BoxedUint {
         self.to_be_bytes_trimmed_vartime()
     }
     fn rem_vartime(&self, modulus: &NonZero<Self>) -> Self {
-        self.rem_vartime(modulus)
+        self.rem_vartime(&CryptoNonZero::new(modulus.as_ref().clone()).expect("Value is non-zero"))
     }
     fn as_nz_ref(&self) -> NonZero<Self> {
         NonZero::new(self.clone()).expect("Value is non-zero")

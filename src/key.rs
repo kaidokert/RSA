@@ -4,7 +4,10 @@ use core::cmp::Ordering;
 use core::fmt;
 use core::hash::{Hash, Hasher};
 
-use crypto_bigint::{NonZero, Odd, Resize};
+#[cfg(feature = "alloc")]
+use crypto_bigint::{NonZero as CryptoNonZero, Odd as CryptoOdd};
+#[cfg(feature = "alloc")]
+use crypto_bigint::Resize as _;
 #[cfg(feature = "alloc")]
 use crypto_bigint::{
     modular::{BoxedMontyForm, BoxedMontyParams},
@@ -35,7 +38,7 @@ use crate::errors::{Error, Result};
 use crate::traits::keys::{CrtValue, PrivateKeyParts};
 use crate::traits::keys::PublicKeyParts;
 use crate::traits::{
-    PaddingScheme, SignatureScheme, UnsignedModularInt,
+    IntegerResize, NonZero, PaddingScheme, SignatureScheme, UnsignedModularInt,
     modular::{FromBeBytes, IntoMontyForm, ModulusParams, PowBoundedExp},
 };
 
@@ -240,7 +243,7 @@ where
 
 impl<T, M> GenericRsaPublicKey<T, M>
 where
-    T: UnsignedModularInt + crypto_bigint::Zero + crypto_bigint::One + crypto_bigint::CtAssign,
+    T: UnsignedModularInt,
     M: ModulusParams<Modulus = T>,
 {
     /// Create a public key from already-validated components and modulus parameters.
@@ -248,14 +251,14 @@ where
     /// This is intended for alternate bigint backends that prepare their own
     /// modular arithmetic context outside the `BoxedUint` constructors.
     pub fn from_components(n: T, e: T, n_params: M) -> Result<Self> {
-        let n = NonZero::new(n).into_option().ok_or(Error::InvalidModulus)?;
+        let n = NonZero::new(n).ok_or(Error::InvalidModulus)?;
         Ok(Self { n, e, n_params })
     }
 }
 
 impl<T, M> GenericRsaPublicKey<T, M>
 where
-    T: UnsignedModularInt + FromBeBytes + Resize<Output = T> + PartialOrd,
+    T: UnsignedModularInt + FromBeBytes + IntegerResize<Output = T> + PartialOrd,
     M: ModulusParams<Modulus = T>,
     M::MontgomeryForm: IntoMontyForm<M> + PowBoundedExp<M>,
 {
@@ -307,7 +310,7 @@ impl GenericRsaPublicKey<BoxedUint, BoxedMontyParams> {
     pub fn new_with_max_size(n: BoxedUint, e: BoxedUint, max_size: usize) -> Result<Self> {
         check_public_with_max_size(&n, &e, Some(max_size))?;
 
-        let n_odd = Odd::new(n.clone())
+        let n_odd = CryptoOdd::new(n.clone())
             .into_option()
             .ok_or(Error::InvalidModulus)?;
         let n_params = BoxedMontyParams::new(n_odd);
@@ -323,7 +326,7 @@ impl GenericRsaPublicKey<BoxedUint, BoxedMontyParams> {
     /// Most applications should use [`RsaPublicKey::new`] or
     /// [`RsaPublicKey::new_with_max_size`] instead.
     pub fn new_unchecked(n: BoxedUint, e: BoxedUint) -> Self {
-        let n_odd = Odd::new(n.clone()).expect("n must be odd");
+        let n_odd = CryptoOdd::new(n.clone()).expect("n must be odd");
         let n_params = BoxedMontyParams::new(n_odd);
         let n = NonZero::new(n).expect("odd numbers are non zero");
 
@@ -434,7 +437,7 @@ impl RsaPrivateKey {
         d: BoxedUint,
         mut primes: Vec<BoxedUint>,
     ) -> Result<RsaPrivateKey> {
-        let n = Odd::new(n).into_option().ok_or(Error::InvalidModulus)?;
+        let n = CryptoOdd::new(n).into_option().ok_or(Error::InvalidModulus)?;
 
         // The modulus may come in padded with zeros, shorten it
         // to ensure optimal performance of arithmetic operations.
@@ -442,15 +445,15 @@ impl RsaPrivateKey {
         let n = n.resize_unchecked(n_bits);
 
         let n_params = BoxedMontyParams::new(n.clone());
-        let n_c = NonZero::new(n.get())
-            .into_option()
-            .ok_or(Error::InvalidModulus)?;
+        let n_c = NonZero::new(n.get()).ok_or(Error::InvalidModulus)?;
 
         match primes.len() {
             0 => {
                 // Recover `p` and `q` from `d`.
                 // See method in Appendix C.2: https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-56Br2.pdf
-                let (p, q) = recover_primes(&n_c, &e, &d)?;
+                let n_for_recovery =
+                    CryptoNonZero::new(n_c.as_ref().clone()).expect("modulus is non-zero");
+                let (p, q) = recover_primes(&n_for_recovery, &e, &d)?;
                 primes.push(p);
                 primes.push(q);
             }
@@ -474,7 +477,7 @@ impl RsaPrivateKey {
             .into_iter()
             .map(|p| {
                 let p_bits = p.bits();
-                p.resize_unchecked(p_bits)
+                crypto_bigint::Resize::resize_unchecked(p, p_bits)
             })
             .collect();
 
@@ -630,21 +633,21 @@ impl RsaPrivateKey {
         let p = self.primes[0].clone();
         let q = self.primes[1].clone();
 
-        let p_odd = Odd::new(p.clone())
+        let p_odd = CryptoOdd::new(p.clone())
             .into_option()
             .ok_or(Error::InvalidPrime)?;
         let p_params = BoxedMontyParams::new(p_odd);
-        let q_odd = Odd::new(q.clone())
+        let q_odd = CryptoOdd::new(q.clone())
             .into_option()
             .ok_or(Error::InvalidPrime)?;
         let q_params = BoxedMontyParams::new(q_odd);
 
-        let x = NonZero::new(p.wrapping_sub(BoxedUint::one()))
+        let x = CryptoNonZero::new(p.wrapping_sub(BoxedUint::one()))
             .into_option()
             .ok_or(Error::InvalidPrime)?;
         let dp = d.rem_vartime(&x);
 
-        let x = NonZero::new(q.wrapping_sub(BoxedUint::one()))
+        let x = CryptoNonZero::new(q.wrapping_sub(BoxedUint::one()))
             .into_option()
             .ok_or(Error::InvalidPrime)?;
         let dq = d.rem_vartime(&x);
@@ -652,16 +655,18 @@ impl RsaPrivateKey {
         // Note that since `p` and `q` may have different `bits_precision`,
         // so we have to equalize them to calculate the remainder.
         let q_mod_p = match p.bits_precision().cmp(&q.bits_precision()) {
-            Ordering::Less => (&q
-                % NonZero::new(p.clone())
-                    .expect("`p` is non-zero")
-                    .resize_unchecked(q.bits_precision()))
-            .resize_unchecked(p.bits_precision()),
+            Ordering::Less => crypto_bigint::Resize::resize_unchecked(
+                &q % crypto_bigint::Resize::resize_unchecked(
+                    CryptoNonZero::new(p.clone()).expect("`p` is non-zero"),
+                    q.bits_precision(),
+                ),
+                p.bits_precision(),
+            ),
             Ordering::Greater => {
                 (&q).resize_unchecked(p.bits_precision())
-                    % &NonZero::new(p.clone()).expect("`p` is non-zero")
+                    % &CryptoNonZero::new(p.clone()).expect("`p` is non-zero")
             }
-            Ordering::Equal => &q % NonZero::new(p.clone()).expect("`p` is non-zero"),
+            Ordering::Equal => &q % CryptoNonZero::new(p.clone()).expect("`p` is non-zero"),
         };
 
         let q_mod_p = BoxedMontyForm::new(q_mod_p, &p_params);
@@ -694,7 +699,7 @@ impl RsaPrivateKey {
         let p = &self.primes[0];
         let q = &self.primes[1];
         // TODO: maybe store primes as `NonZero`?
-        Option::from(q.invert_mod(&NonZero::new(p.clone()).expect("prime")))
+        Option::from(q.invert_mod(&CryptoNonZero::new(p.clone()).expect("prime")))
     }
 
     /// Performs basic sanity checks on the key.
@@ -786,7 +791,7 @@ impl PrivateKeyParts for RsaPrivateKey {
 #[inline]
 #[cfg(feature = "alloc")]
 pub fn check_public(public_key: &impl PublicKeyParts<BoxedUint>) -> Result<()>  {
-    check_public_with_max_size(public_key.n(), public_key.e(), None)
+    check_public_with_max_size(public_key.n().as_ref(), public_key.e(), None)
 }
 
 /// Check that the public key is well formed and has an exponent within acceptable bounds.
@@ -846,7 +851,7 @@ fn validate_private_key_parts(key: &RsaPrivateKey) -> Result<()> {
         }
         m = m.wrapping_mul(prime);
     }
-    if m != *key.pubkey_components.n {
+    if m != *key.pubkey_components.n.as_ref() {
         return Err(Error::InvalidModulus);
     }
 
@@ -858,7 +863,7 @@ fn validate_private_key_parts(key: &RsaPrivateKey) -> Result<()> {
     let de = key.d.concatenating_mul(&key.pubkey_components.e);
 
     for prime in &key.primes {
-        let x = NonZero::new(prime.wrapping_sub(BoxedUint::one())).unwrap();
+        let x = CryptoNonZero::new(prime.wrapping_sub(BoxedUint::one())).unwrap();
         let congruence = de.rem_vartime(&x);
         if !bool::from(congruence.is_one()) {
             return Err(Error::InvalidExponent);
@@ -944,7 +949,7 @@ mod tests {
     #[test]
     fn test_from_into() {
         let raw_n = BoxedUint::from(101u64);
-        let n_odd = Odd::new(raw_n.clone()).unwrap();
+        let n_odd = CryptoOdd::new(raw_n.clone()).unwrap();
         let private_key = RsaPrivateKey {
             pubkey_components: RsaPublicKey {
                 n: NonZero::new(raw_n.clone()).unwrap(),

@@ -21,7 +21,7 @@ pub use self::{
 
 use alloc::{vec, vec::Vec};
 use core::fmt::{self, Debug};
-use crypto_bigint::{BoxedUint, Resize};
+use crypto_bigint::BoxedUint;
 
 use digest::{Digest, FixedOutputReset};
 use rand_core::TryCryptoRng;
@@ -31,7 +31,7 @@ use crate::algorithms::pss::*;
 use crate::algorithms::rsa::{rsa_decrypt_and_check, rsa_encrypt};
 use crate::errors::{Error, Result};
 use crate::traits::{
-    PublicKeyParts, SignatureScheme, UnsignedModularInt,
+    IntegerResize, PublicKeyParts, SignatureScheme, UnsignedModularInt,
     modular::{FromBeBytes, IntoMontyForm, ModulusParams, PowBoundedExp},
 };
 use crate::{RsaPrivateKey, RsaPublicKey};
@@ -125,7 +125,7 @@ where
 
     fn verify<K, T>(mut self, pub_key: &K, hashed: &[u8], sig: &[u8]) -> Result<()>
     where
-        T: UnsignedModularInt + FromBeBytes + Resize<Output = T> + PartialOrd,
+        T: UnsignedModularInt + FromBeBytes + IntegerResize<Output = T> + PartialOrd,
         K: PublicKeyParts<T>,
         K::MontyParams: ModulusParams<Modulus = T>,
         <K::MontyParams as ModulusParams>::MontgomeryForm: IntoMontyForm<K::MontyParams> + PowBoundedExp<K::MontyParams>,

@@ -12,7 +12,7 @@ pub use self::{decrypting_key::DecryptingKey, encrypting_key::EncryptingKey};
 use alloc::boxed::Box;
 use alloc::{vec, vec::Vec};
 use core::fmt;
-use crypto_bigint::{BoxedUint, Resize};
+use crypto_bigint::BoxedUint;
 
 use digest::{Digest, FixedOutputReset};
 use rand_core::TryCryptoRng;
@@ -23,7 +23,7 @@ use crate::algorithms::rsa::{rsa_decrypt_and_check, rsa_encrypt};
 use crate::errors::{Error, Result};
 use crate::key::{self, RsaPrivateKey, RsaPublicKey};
 use crate::traits::{
-    PaddingScheme, PublicKeyParts, UnsignedModularInt,
+    IntegerResize, PaddingScheme, PublicKeyParts, UnsignedModularInt,
     modular::{FromBeBytes, IntoMontyForm, ModulusParams, PowBoundedExp},
 };
 
@@ -174,7 +174,7 @@ where
     ) -> Result<Vec<u8>>
     where
         Rng: TryCryptoRng + ?Sized,
-        T: UnsignedModularInt + FromBeBytes + Resize<Output = T> + PartialOrd,
+        T: UnsignedModularInt + FromBeBytes + IntegerResize<Output = T> + PartialOrd,
         K: PublicKeyParts<T>,
         K::MontyParams: ModulusParams<Modulus = T>,
         <K::MontyParams as ModulusParams>::MontgomeryForm: IntoMontyForm<K::MontyParams> + PowBoundedExp<K::MontyParams>,

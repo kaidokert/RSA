@@ -9,10 +9,9 @@ use crate::errors::Result;
 #[cfg(feature = "private-key")]
 use crate::key::RsaPrivateKey;
 use crate::traits::{
-    PublicKeyParts, UnsignedModularInt,
+    IntegerResize, PublicKeyParts, UnsignedModularInt,
     modular::{FromBeBytes, IntoMontyForm, ModulusParams, PowBoundedExp},
 };
-use crypto_bigint::Resize;
 
 /// Padding scheme used for encryption.
 pub trait PaddingScheme {
@@ -38,7 +37,7 @@ pub trait PaddingScheme {
     ) -> Result<Vec<u8>>
     where
         Rng: TryCryptoRng + ?Sized,
-        T: UnsignedModularInt + FromBeBytes + Resize<Output = T> + PartialOrd,
+        T: UnsignedModularInt + FromBeBytes + IntegerResize<Output = T> + PartialOrd,
         K: PublicKeyParts<T>,
         K::MontyParams: ModulusParams<Modulus = T>,
         <K::MontyParams as ModulusParams>::MontgomeryForm:
@@ -64,7 +63,7 @@ pub trait SignatureScheme {
     /// If the message is valid `Ok(())` is returned, otherwise an `Err` indicating failure.
     fn verify<K, T>(self, pub_key: &K, hashed: &[u8], sig: &[u8]) -> Result<()>
     where
-        T: UnsignedModularInt + FromBeBytes + Resize<Output = T> + PartialOrd,
+        T: UnsignedModularInt + FromBeBytes + IntegerResize<Output = T> + PartialOrd,
         T::Bytes: AsMut<[u8]>,
         K: PublicKeyParts<T>,
         K::MontyParams: ModulusParams<Modulus = T>,

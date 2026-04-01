@@ -6,7 +6,7 @@ use super::{pkcs1v15_generate_prefix_helper, Prefix};
 use crate::{
     key::GenericRsaPublicKey,
     traits::{
-        PublicKeyParts, UnsignedModularInt,
+        IntegerResize, PublicKeyParts, UnsignedModularInt,
         modular::{IntoMontyForm, ModulusParams, PowBoundedExp},
     },
 };
@@ -17,7 +17,6 @@ use core::marker::PhantomData;
 #[cfg(feature = "alloc")]
 use crypto_bigint::{BoxedUint, modular::BoxedMontyParams};
 use digest::{Digest, FixedOutput, HashMarker, Update};
-use crypto_bigint::Resize;
 use signature::{hazmat::PrehashVerifier, DigestVerifier, Verifier};
 
 #[cfg(feature = "encoding")]
@@ -43,7 +42,7 @@ use crate::key::RsaPublicKey;
 pub struct GenericVerifyingKey<D, T, M>
 where
     D: Digest,
-    T: UnsignedModularInt + Resize<Output = T> + PartialOrd,
+    T: UnsignedModularInt + IntegerResize<Output = T> + PartialOrd,
     M: ModulusParams<Modulus = T>,
 {
     pub(super) inner: GenericRsaPublicKey<T, M>,
@@ -61,7 +60,7 @@ pub type VerifyingKey<D> = GenericVerifyingKey<D, BoxedUint, BoxedMontyParams>;
 impl<D, T, M> GenericVerifyingKey<D, T, M>
 where
     D: Digest + AssociatedOid,
-    T: UnsignedModularInt + Resize<Output = T> + PartialOrd,
+    T: UnsignedModularInt + IntegerResize<Output = T> + PartialOrd,
     M: ModulusParams<Modulus = T>,
     M::MontgomeryForm: IntoMontyForm<M> + PowBoundedExp<M>,
 {
@@ -81,7 +80,7 @@ where
 impl<D, T, M> GenericVerifyingKey<D, T, M>
 where
     D: Digest,
-    T: UnsignedModularInt + Resize<Output = T> + PartialOrd,
+    T: UnsignedModularInt + IntegerResize<Output = T> + PartialOrd,
     M: ModulusParams<Modulus = T>,
     M::MontgomeryForm: IntoMontyForm<M> + PowBoundedExp<M>,
 {
@@ -124,7 +123,7 @@ where
 impl<D, T, M> DigestVerifier<D, GenericSignature<T>> for GenericVerifyingKey<D, T, M>
 where
     D: Default + FixedOutput + HashMarker + Update,
-    T: UnsignedModularInt + Resize<Output = T> + PartialOrd,
+    T: UnsignedModularInt + IntegerResize<Output = T> + PartialOrd,
     M: ModulusParams<Modulus = T>,
     M::MontgomeryForm: IntoMontyForm<M> + PowBoundedExp<M>,
     T::Bytes: AsMut<[u8]>,
@@ -143,7 +142,7 @@ where
 impl<D, T, M> PrehashVerifier<GenericSignature<T>> for GenericVerifyingKey<D, T, M>
 where
     D: Digest,
-    T: UnsignedModularInt + Resize<Output = T> + PartialOrd,
+    T: UnsignedModularInt + IntegerResize<Output = T> + PartialOrd,
     M: ModulusParams<Modulus = T>,
     M::MontgomeryForm: IntoMontyForm<M> + PowBoundedExp<M>,
     T::Bytes: AsMut<[u8]>,
@@ -160,7 +159,7 @@ where
 impl<D, T, M> Verifier<GenericSignature<T>> for GenericVerifyingKey<D, T, M>
 where
     D: Digest,
-    T: UnsignedModularInt + Resize<Output = T> + PartialOrd,
+    T: UnsignedModularInt + IntegerResize<Output = T> + PartialOrd,
     M: ModulusParams<Modulus = T>,
     M::MontgomeryForm: IntoMontyForm<M> + PowBoundedExp<M>,
     T::Bytes: AsMut<[u8]>,
@@ -173,7 +172,7 @@ where
 impl<D, T, M> AsRef<GenericRsaPublicKey<T, M>> for GenericVerifyingKey<D, T, M>
 where
     D: Digest,
-    T: UnsignedModularInt + Resize<Output = T> + PartialOrd,
+    T: UnsignedModularInt + IntegerResize<Output = T> + PartialOrd,
     M: ModulusParams<Modulus = T>,
 {
     fn as_ref(&self) -> &GenericRsaPublicKey<T, M> {
@@ -195,7 +194,7 @@ where
 impl<D, T, M> Clone for GenericVerifyingKey<D, T, M>
 where
     D: Digest,
-    T: UnsignedModularInt + Resize<Output = T> + PartialOrd,
+    T: UnsignedModularInt + IntegerResize<Output = T> + PartialOrd,
     M: ModulusParams<Modulus = T> + Clone,
 {
     fn clone(&self) -> Self {
@@ -221,7 +220,7 @@ where
 impl<D, T, M> From<GenericRsaPublicKey<T, M>> for GenericVerifyingKey<D, T, M>
 where
     D: Digest + AssociatedOid,
-    T: UnsignedModularInt + Resize<Output = T> + PartialOrd,
+    T: UnsignedModularInt + IntegerResize<Output = T> + PartialOrd,
     M: ModulusParams<Modulus = T>,
     M::MontgomeryForm: IntoMontyForm<M> + PowBoundedExp<M>,
 {
@@ -233,7 +232,7 @@ where
 impl<D, T, M> From<GenericVerifyingKey<D, T, M>> for GenericRsaPublicKey<T, M>
 where
     D: Digest,
-    T: UnsignedModularInt + Resize<Output = T> + PartialOrd,
+    T: UnsignedModularInt + IntegerResize<Output = T> + PartialOrd,
     M: ModulusParams<Modulus = T>,
 {
     fn from(key: GenericVerifyingKey<D, T, M>) -> Self {
@@ -274,7 +273,7 @@ where
 impl<D, T, M> PartialEq for GenericVerifyingKey<D, T, M>
 where
     D: Digest,
-    T: UnsignedModularInt + Resize<Output = T> + PartialEq + PartialOrd,
+    T: UnsignedModularInt + IntegerResize<Output = T> + PartialEq + PartialOrd,
     M: ModulusParams<Modulus = T>,
 {
     fn eq(&self, other: &Self) -> bool {

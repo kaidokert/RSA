@@ -3,7 +3,9 @@
 
 use cortex_m_semihosting::{debug, hprintln};
 use panic_semihosting as _;
-use rsa::modmath_support::{public_key_from_be_bytes, verify_pkcs1v15_message};
+use rsa::modmath_support::{public_key_from_be_bytes, ModMathFixedUint};
+use rsa::pkcs1v15::{GenericSignature, GenericVerifyingKey};
+use rsa::signature::Verifier;
 use sha1::Sha1;
 
 const MODULUS: [u8; 64] = [
@@ -39,7 +41,11 @@ fn main() -> ! {
 
 fn run() -> rsa::Result<()> {
     let key = public_key_from_be_bytes(&MODULUS, 3)?;
-    verify_pkcs1v15_message::<Sha1, 64>(&key, b"hello world!", &SIGNATURE)?;
+    let verifying_key = GenericVerifyingKey::<Sha1, _, _>::new(key);
+    let signature = GenericSignature::from(ModMathFixedUint::<64>::from_be_slice(&SIGNATURE));
+    verifying_key
+        .verify(b"hello world!", &signature)
+        .map_err(|_| rsa::Error::Verification)?;
     hprintln!("rsa_verifier: ok");
     Ok(())
 }

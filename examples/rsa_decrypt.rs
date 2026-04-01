@@ -1,4 +1,7 @@
-use rsa::modmath_support::{public_key_from_be_bytes, rsa_decrypt, verify_pkcs1v15_sha1_prehash};
+use rsa::modmath_support::{public_key_from_be_bytes, rsa_decrypt, ModMathFixedUint};
+use rsa::pkcs1v15::{GenericSignature, GenericVerifyingKey};
+use rsa::signature::hazmat::PrehashVerifier;
+use sha1::Sha1;
 
 fn main() {
     let data = b"hello world!";
@@ -23,7 +26,12 @@ fn main() {
 
     let key = public_key_from_be_bytes(&modulus, 3).expect("public key");
     let encoded_message = rsa_decrypt(&key, &signature).expect("rsa public op");
-    verify_pkcs1v15_sha1_prehash(&key, &digest, &signature).expect("pkcs1v15 verify");
+    let verifying_key = GenericVerifyingKey::<Sha1, _, _>::new(key);
+    let signature = GenericSignature::from(ModMathFixedUint::<64>::from_be_slice(&signature));
+    verifying_key
+        .verify_prehash(&digest, &signature)
+        .map_err(|_| rsa::Error::Verification)
+        .expect("pkcs1v15 verify");
 
     println!("message: {}", core::str::from_utf8(data).unwrap());
     println!("raw decrypted signature block:");
