@@ -227,7 +227,9 @@ where
     let oid = D::OID.as_bytes();
     let oid_len = oid.len() as u8;
     let digest_len = <D as Digest>::output_size() as u8;
-    let out = storage.get_mut(..oid.len() + 10).ok_or(Error::OutputBufferTooSmall)?;
+    let out = storage
+        .get_mut(..oid.len() + 10)
+        .ok_or(Error::OutputBufferTooSmall)?;
     out[..6].copy_from_slice(&[
         0x30,
         oid_len + 8 + digest_len,

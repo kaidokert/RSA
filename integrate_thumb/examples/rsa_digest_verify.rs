@@ -2,8 +2,9 @@
 #![no_main]
 
 use cortex_m_semihosting::{debug, hprintln};
+use fixed_bigint::FixedUInt;
 use panic_semihosting as _;
-use rsa::modmath_support::{public_key_from_be_bytes, rsa_decrypt, ModMathFixedUint};
+use rsa::modmath_support::{public_key_from_be_bytes, rsa_decrypt};
 use rsa::pkcs1v15::{GenericSignature, GenericVerifyingKey};
 use rsa::signature::DigestVerifier;
 use sha1::Sha1;
@@ -40,14 +41,16 @@ fn main() -> ! {
 }
 
 fn run() -> rsa::Result<()> {
-    let key = public_key_from_be_bytes(&MODULUS, 3)?;
+    type U512 = FixedUInt<u8, 64>;
+
+    let key = public_key_from_be_bytes::<U512>(&MODULUS, 3)?;
     let recovered = rsa_decrypt(&key, &SIGNATURE)?;
     let verifying_key = GenericVerifyingKey::<Sha1, _, _>::new(key);
-    let signature = GenericSignature::from(ModMathFixedUint::<64>::from_be_slice(&SIGNATURE));
+    let signature = GenericSignature::from(U512::from_be_bytes(&SIGNATURE));
 
     hprintln!("rsa_digest_verify");
     hprintln!("recovered block:");
-    for byte in recovered {
+    for byte in recovered.as_ref() {
         hprintln!("{:02x}", byte);
     }
 

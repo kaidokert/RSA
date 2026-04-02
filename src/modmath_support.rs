@@ -1,98 +1,97 @@
-//! Experimental `modmath` backend adapters for generic RSA verification paths.
+//! Generic `modmath` backend adapters for fixed-width RSA public-key paths.
 
 #[cfg(feature = "alloc")]
 use alloc::boxed::Box;
-#[cfg(feature = "alloc")]
-use alloc::vec;
-use core::mem::size_of;
+use core::ops::{Rem, Shr, ShrAssign};
 
-use ctutils::{Choice, CtAssign, CtEq};
-use fixed_bigint::{FixedUInt, MachineWord};
-use fixed_bigint::num_traits::PrimInt;
-use modmath::basic_mod_exp;
+use modmath::{basic_mod_exp, Parity};
+use num_traits::ops::wrapping::{WrappingAdd, WrappingSub};
+use num_traits::{One, Zero};
 use zeroize::Zeroize;
 
 use crate::{
     algorithms::rsa::rsa_encrypt,
     errors::{Error, Result},
     key::GenericRsaPublicKey,
-    traits::modular::{FromBeBytes, IntegerResize, IntoMontyForm, ModulusParams, NonZero, NumBytes, Odd, Pow, PowBoundedExp, UnsignedModularInt},
+    traits::{
+        modular::{
+            FromBeBytes, IntegerResize, IntoMontyForm, ModulusParams, NonZero, Odd, Pow,
+            PowBoundedExp, UnsignedModularInt,
+        },
+        FixedWidthUnsignedInt,
+    },
 };
 
-pub trait ModMathWord: MachineWord {
-    type Bytes<const N: usize>: NumBytes;
-
-    fn encode_be<const N: usize>(value: &FixedUInt<Self, N>) -> <Self as ModMathWord>::Bytes<N>;
+pub trait ModMathInt:
+    FixedWidthUnsignedInt
+    + From<u8>
+    + PartialOrd
+    + One
+    + Zero
+    + Parity
+    + WrappingAdd
+    + WrappingSub
+    + Rem<Output = Self>
+    + Shr<usize, Output = Self>
+    + ShrAssign<usize>
+{
 }
 
-impl ModMathWord for u8 {
-    type Bytes<const N: usize> = [u8; N];
-
-    fn encode_be<const N: usize>(value: &FixedUInt<Self, N>) -> <Self as ModMathWord>::Bytes<N> {
-        let mut bytes = [0u8; N];
-        let _ = value
-            .to_be_bytes(&mut bytes)
-            .expect("fixed buffer matches precision");
-        bytes
-    }
+impl<T> ModMathInt for T where
+    T: FixedWidthUnsignedInt
+        + From<u8>
+        + PartialOrd
+        + One
+        + Zero
+        + Parity
+        + WrappingAdd
+        + WrappingSub
+        + Rem<Output = Self>
+        + Shr<usize, Output = Self>
+        + ShrAssign<usize>
+{
 }
 
 #[cfg(feature = "alloc")]
-impl ModMathWord for u32 {
-    type Bytes<const N: usize> = Box<[u8]>;
-
-    fn encode_be<const N: usize>(value: &FixedUInt<Self, N>) -> <Self as ModMathWord>::Bytes<N> {
-        let mut bytes = vec![0u8; size_of::<Self>() * N];
-        let _ = value
-            .to_be_bytes(&mut bytes)
-            .expect("fixed buffer matches precision");
-        bytes.into_boxed_slice()
-    }
-}
-
-/// A fixed-size integer wrapper that satisfies the current RSA abstraction layer
-/// while delegating modular exponentiation to `modmath`.
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord)]
-pub struct GenericModMathFixedUint<W: ModMathWord, const N: usize>(pub FixedUInt<W, N>);
+pub struct ModMathValue<T>(pub T);
 
-pub type ModMathFixedUint<const N: usize> = GenericModMathFixedUint<u8, N>;
 #[cfg(feature = "alloc")]
-pub type ModMathFixedUint32<const N: usize> = GenericModMathFixedUint<u32, N>;
+impl<T> ModMathValue<T> {
+    pub fn from_inner(inner: T) -> Self {
+        Self(inner)
+    }
 
-impl<W: ModMathWord, const N: usize> GenericModMathFixedUint<W, N> {
-    /// Build a fixed-width integer from big-endian bytes.
-    pub fn from_be_slice(bytes: &[u8]) -> Self {
-        Self(FixedUInt::from_be_bytes(bytes))
+    pub fn inner(&self) -> &T {
+        &self.0
     }
 }
 
-impl<W: ModMathWord, const N: usize> From<u8> for GenericModMathFixedUint<W, N> {
-    fn from(value: u8) -> Self {
-        Self(FixedUInt::from(value))
-    }
-}
-
-impl<W: ModMathWord, const N: usize> Zeroize for GenericModMathFixedUint<W, N> {
+#[cfg(feature = "alloc")]
+impl<T> Zeroize for ModMathValue<T>
+where
+    T: Zeroize,
+{
     fn zeroize(&mut self) {
-        self.0 = FixedUInt::new();
+        self.0.zeroize();
     }
 }
 
-impl<W: ModMathWord, const N: usize> CtEq for GenericModMathFixedUint<W, N> {
-    fn ct_eq(&self, other: &Self) -> Choice {
-        Choice::from((self == other) as u8)
+#[cfg(feature = "alloc")]
+impl<T> From<u8> for ModMathValue<T>
+where
+    T: ModMathInt,
+{
+    fn from(value: u8) -> Self {
+        Self(<T as From<u8>>::from(value))
     }
 }
 
-impl<W: ModMathWord, const N: usize> CtAssign for GenericModMathFixedUint<W, N> {
-    fn ct_assign(&mut self, src: &Self, choice: Choice) {
-        if bool::from(choice) {
-            *self = *src;
-        }
-    }
-}
-
-impl<W: ModMathWord, const N: usize> IntegerResize for GenericModMathFixedUint<W, N> {
+#[cfg(feature = "alloc")]
+impl<T> IntegerResize for ModMathValue<T>
+where
+    T: ModMathInt,
+{
     type Output = Self;
 
     fn resize_unchecked(self, _at_least_bits_precision: u32) -> Self::Output {
@@ -108,15 +107,19 @@ impl<W: ModMathWord, const N: usize> IntegerResize for GenericModMathFixedUint<W
     }
 }
 
-impl<W: ModMathWord, const N: usize> UnsignedModularInt for GenericModMathFixedUint<W, N> {
-    type Bytes = <W as ModMathWord>::Bytes<N>;
+#[cfg(feature = "alloc")]
+impl<T> UnsignedModularInt for ModMathValue<T>
+where
+    T: ModMathInt,
+{
+    type Bytes = <T as FixedWidthUnsignedInt>::Bytes;
 
     fn leading_zeros(&self) -> u32 {
-        self.0.leading_zeros()
+        FixedWidthUnsignedInt::leading_zeros(&self.0)
     }
 
     fn to_be_bytes(&self) -> Self::Bytes {
-        <W as ModMathWord>::encode_be(&self.0)
+        FixedWidthUnsignedInt::to_be_bytes(&self.0)
     }
 
     #[cfg(feature = "alloc")]
@@ -139,32 +142,41 @@ impl<W: ModMathWord, const N: usize> UnsignedModularInt for GenericModMathFixedU
     }
 
     fn bits(&self) -> u32 {
-        self.0.bit_length()
+        self.bits_precision() - self.leading_zeros()
     }
 
     fn bits_precision(&self) -> u32 {
-        (size_of::<W>() * N * 8) as u32
+        FixedWidthUnsignedInt::bits_precision(&self.0)
     }
 }
 
-impl<W: ModMathWord, const N: usize> FromBeBytes for GenericModMathFixedUint<W, N> {
+#[cfg(feature = "alloc")]
+impl<T> FromBeBytes for ModMathValue<T>
+where
+    T: ModMathInt,
+{
     fn from_be_bytes_vartime(bytes: &[u8]) -> Self {
-        Self::from_be_slice(bytes)
+        Self(<T as FixedWidthUnsignedInt>::from_be_bytes_vartime(bytes))
     }
 }
+
+#[cfg(not(feature = "alloc"))]
+pub type ModMathValue<T> = T;
 
 #[derive(Clone, Debug)]
-pub struct GenericModMathParams<W: ModMathWord, const N: usize> {
-    modulus: Odd<GenericModMathFixedUint<W, N>>,
+pub struct ModMathParams<T: ModMathInt> {
+    #[cfg(feature = "alloc")]
+    modulus: Odd<ModMathValue<T>>,
+    #[cfg(not(feature = "alloc"))]
+    modulus: Odd<T>,
 }
 
-pub type ModMathParams<const N: usize> = GenericModMathParams<u8, N>;
-#[cfg(feature = "alloc")]
-pub type ModMathParams32<const N: usize> = GenericModMathParams<u32, N>;
-
-impl<W: ModMathWord, const N: usize> GenericModMathParams<W, N> {
+impl<T: ModMathInt> ModMathParams<T> {
     /// Create modular arithmetic parameters for an odd, non-zero modulus.
-    pub fn new(modulus: GenericModMathFixedUint<W, N>) -> Result<Self> {
+    pub fn new(modulus: T) -> Result<Self> {
+        #[cfg(feature = "alloc")]
+        let modulus = Odd::new(ModMathValue(modulus)).ok_or(Error::InvalidModulus)?;
+        #[cfg(not(feature = "alloc"))]
         let modulus = Odd::new(modulus).ok_or(Error::InvalidModulus)?;
         Ok(Self { modulus })
     }
@@ -172,41 +184,62 @@ impl<W: ModMathWord, const N: usize> GenericModMathParams<W, N> {
 
 /// Construct a public key backed by the `modmath` adapter from big-endian
 /// modulus bytes and a small public exponent.
-pub fn public_key_from_be_bytes<const N: usize>(
-    modulus: &[u8; N],
+pub fn public_key_from_be_bytes<T>(
+    modulus: &[u8],
     exponent: u8,
-) -> Result<GenericRsaPublicKey<ModMathFixedUint<N>, ModMathParams<N>>> {
-    let n = ModMathFixedUint::<N>::from_be_slice(modulus);
-    let e = ModMathFixedUint::<N>::from(exponent);
-    GenericRsaPublicKey::from_components(n, e, ModMathParams::new(n)?)
+) -> Result<GenericRsaPublicKey<ModMathValue<T>, ModMathParams<T>>>
+where
+    T: ModMathInt,
+{
+    #[cfg(feature = "alloc")]
+    {
+        let n = ModMathValue(<T as FixedWidthUnsignedInt>::from_be_bytes_vartime(modulus));
+        let e = ModMathValue(<T as From<u8>>::from(exponent));
+        GenericRsaPublicKey::from_components(n, e, ModMathParams::new(n.0)?)
+    }
+    #[cfg(not(feature = "alloc"))]
+    {
+        let n = <T as FixedWidthUnsignedInt>::from_be_bytes_vartime(modulus);
+        let e = <T as From<u8>>::from(exponent);
+        GenericRsaPublicKey::from_components(n, e, ModMathParams::new(n)?)
+    }
 }
 
 /// Apply the raw RSA public operation to a fixed-width block.
 ///
-/// For signature use-cases this effectively "decrypts" the signature into its
-/// encoded message representative.
-pub fn rsa_decrypt<const N: usize>(
-    key: &GenericRsaPublicKey<ModMathFixedUint<N>, ModMathParams<N>>,
-    input: &[u8; N],
-) -> Result<[u8; N]> {
-    let block = ModMathFixedUint::<N>::from_be_slice(input);
-    Ok(rsa_encrypt(key, &block)?.to_be_bytes())
+/// For signature use-cases this recovers the encoded message representative.
+pub fn rsa_decrypt<T>(
+    key: &GenericRsaPublicKey<ModMathValue<T>, ModMathParams<T>>,
+    input: &[u8],
+) -> Result<<ModMathValue<T> as UnsignedModularInt>::Bytes>
+where
+    T: ModMathInt,
+{
+    #[cfg(feature = "alloc")]
+    {
+        let input =
+            ModMathValue::from_inner(<T as FixedWidthUnsignedInt>::from_be_bytes_vartime(input));
+        Ok(rsa_encrypt(key, &input)?.to_be_bytes())
+    }
+    #[cfg(not(feature = "alloc"))]
+    {
+        let input = <T as FixedWidthUnsignedInt>::from_be_bytes_vartime(input);
+        Ok(rsa_encrypt(key, &input)?.to_be_bytes())
+    }
 }
 
 #[derive(Clone, Debug)]
-pub struct GenericModMathForm<W: ModMathWord, const N: usize> {
-    integer: GenericModMathFixedUint<W, N>,
-    params: GenericModMathParams<W, N>,
+pub struct ModMathForm<T: ModMathInt> {
+    #[cfg(feature = "alloc")]
+    integer: ModMathValue<T>,
+    #[cfg(not(feature = "alloc"))]
+    integer: T,
+    params: ModMathParams<T>,
 }
 
-pub type ModMathForm<const N: usize> = GenericModMathForm<u8, N>;
 #[cfg(feature = "alloc")]
-pub type ModMathForm32<const N: usize> = GenericModMathForm<u32, N>;
-
-impl<W: ModMathWord, const N: usize> IntoMontyForm<GenericModMathParams<W, N>>
-    for GenericModMathForm<W, N>
-{
-    fn from_reduced(integer: GenericModMathFixedUint<W, N>, params: &GenericModMathParams<W, N>) -> Self {
+impl<T: ModMathInt> IntoMontyForm<ModMathParams<T>> for ModMathForm<T> {
+    fn from_reduced(integer: ModMathValue<T>, params: &ModMathParams<T>) -> Self {
         Self {
             integer,
             params: params.clone(),
@@ -214,36 +247,76 @@ impl<W: ModMathWord, const N: usize> IntoMontyForm<GenericModMathParams<W, N>>
     }
 }
 
-impl<W: ModMathWord, const N: usize> Pow<GenericModMathParams<W, N>>
-    for GenericModMathForm<W, N>
-{
-    fn pow(&self, exp: &GenericModMathFixedUint<W, N>) -> Self {
+#[cfg(not(feature = "alloc"))]
+impl<T: ModMathInt> IntoMontyForm<ModMathParams<T>> for ModMathForm<T> {
+    fn from_reduced(integer: T, params: &ModMathParams<T>) -> Self {
         Self {
-            integer: GenericModMathFixedUint(basic_mod_exp(self.integer.0, exp.0, self.params.modulus.as_ref().0)),
+            integer,
+            params: params.clone(),
+        }
+    }
+}
+
+#[cfg(feature = "alloc")]
+impl<T: ModMathInt> Pow<ModMathParams<T>> for ModMathForm<T> {
+    fn pow(&self, exp: &ModMathValue<T>) -> Self {
+        Self {
+            integer: ModMathValue(basic_mod_exp(
+                self.integer.0,
+                exp.0,
+                self.params.modulus.as_ref().0,
+            )),
             params: self.params.clone(),
         }
     }
 
-    fn retrieve(&self) -> GenericModMathFixedUint<W, N> {
+    fn retrieve(&self) -> ModMathValue<T> {
         self.integer
     }
 }
 
-impl<W: ModMathWord, const N: usize> PowBoundedExp<GenericModMathParams<W, N>>
-    for GenericModMathForm<W, N>
-{
-    fn pow_bounded_exp(&self, exp: &GenericModMathFixedUint<W, N>, _exp_bits: u32) -> Self {
+#[cfg(not(feature = "alloc"))]
+impl<T: ModMathInt> Pow<ModMathParams<T>> for ModMathForm<T> {
+    fn pow(&self, exp: &T) -> Self {
+        Self {
+            integer: basic_mod_exp(self.integer, *exp, *self.params.modulus.as_ref()),
+            params: self.params.clone(),
+        }
+    }
+
+    fn retrieve(&self) -> T {
+        self.integer
+    }
+}
+
+#[cfg(feature = "alloc")]
+impl<T: ModMathInt> PowBoundedExp<ModMathParams<T>> for ModMathForm<T> {
+    fn pow_bounded_exp(&self, exp: &ModMathValue<T>, _exp_bits: u32) -> Self {
         self.pow(exp)
     }
 
-    fn retrieve(&self) -> GenericModMathFixedUint<W, N> {
+    fn retrieve(&self) -> ModMathValue<T> {
         self.integer
     }
 }
 
-impl<W: ModMathWord, const N: usize> ModulusParams for GenericModMathParams<W, N> {
-    type Modulus = GenericModMathFixedUint<W, N>;
-    type MontgomeryForm = GenericModMathForm<W, N>;
+#[cfg(not(feature = "alloc"))]
+impl<T: ModMathInt> PowBoundedExp<ModMathParams<T>> for ModMathForm<T> {
+    fn pow_bounded_exp(&self, exp: &T, _exp_bits: u32) -> Self {
+        self.pow(exp)
+    }
+
+    fn retrieve(&self) -> T {
+        self.integer
+    }
+}
+
+impl<T: ModMathInt> ModulusParams for ModMathParams<T> {
+    #[cfg(feature = "alloc")]
+    type Modulus = ModMathValue<T>;
+    #[cfg(not(feature = "alloc"))]
+    type Modulus = T;
+    type MontgomeryForm = ModMathForm<T>;
 
     fn modulus(&self) -> &Odd<Self::Modulus> {
         &self.modulus
@@ -256,20 +329,24 @@ impl<W: ModMathWord, const N: usize> ModulusParams for GenericModMathParams<W, N
 
 #[cfg(test)]
 mod tests {
-    use super::{public_key_from_be_bytes, ModMathParams32};
-    use crate::{BoxedUint, Pkcs1v15Encrypt, RsaPublicKey, traits::RandomizedEncryptor};
-    use crate::key::GenericRsaPublicKey;
-    use crate::pkcs1v15::{GenericSignature, GenericVerifyingKey};
+    use fixed_bigint::FixedUInt;
     use rand::rngs::ChaCha8Rng;
     use rand_core::SeedableRng;
     use sha1::Sha1;
     use signature::hazmat::PrehashVerifier;
 
+    use super::{public_key_from_be_bytes, ModMathParams, ModMathValue};
+    use crate::key::GenericRsaPublicKey;
+    use crate::pkcs1v15::{GenericEncryptingKey, GenericSignature, GenericVerifyingKey};
+    use crate::{traits::RandomizedEncryptor, BoxedUint, Pkcs1v15Encrypt, RsaPublicKey};
+
     #[test]
     fn verify_pkcs1v15_signature_with_modmath_fixed_uint() {
+        type U512 = FixedUInt<u8, 64>;
+
         let digest: [u8; 20] = [
-            0x43, 0x0c, 0xe3, 0x4d, 0x02, 0x07, 0x24, 0xed, 0x75, 0xa1,
-            0x96, 0xdf, 0xc2, 0xad, 0x67, 0xc7, 0x77, 0x72, 0xd1, 0x69,
+            0x43, 0x0c, 0xe3, 0x4d, 0x02, 0x07, 0x24, 0xed, 0x75, 0xa1, 0x96, 0xdf, 0xc2, 0xad,
+            0x67, 0xc7, 0x77, 0x72, 0xd1, 0x69,
         ];
         let modulus: [u8; 64] = [
             0x96, 0x9D, 0x03, 0xFF, 0xA9, 0x8D, 0x88, 0x8F, 0x3A, 0xA4, 0xF2, 0xFE, 0xD2, 0x32,
@@ -286,17 +363,20 @@ mod tests {
             0xC2, 0x73, 0xFF, 0x08, 0x88, 0xDD, 0x4D, 0xE0,
         ];
 
-        let key = public_key_from_be_bytes(&modulus, 3).unwrap();
+        let key = public_key_from_be_bytes::<U512>(&modulus, 3).unwrap();
         let verifying_key = GenericVerifyingKey::<Sha1, _, _>::new(key);
-        let signature = GenericSignature::from(super::ModMathFixedUint::<64>::from_be_slice(&signature));
+        let signature =
+            GenericSignature::from(ModMathValue::from_inner(U512::from_be_bytes(&signature)));
         verifying_key.verify_prehash(&digest, &signature).unwrap();
     }
 
     #[test]
     fn verify_pkcs1v15_signature_with_modmath_fixed_uint32() {
+        type U512 = FixedUInt<u32, 16>;
+
         let digest: [u8; 20] = [
-            0x43, 0x0c, 0xe3, 0x4d, 0x02, 0x07, 0x24, 0xed, 0x75, 0xa1,
-            0x96, 0xdf, 0xc2, 0xad, 0x67, 0xc7, 0x77, 0x72, 0xd1, 0x69,
+            0x43, 0x0c, 0xe3, 0x4d, 0x02, 0x07, 0x24, 0xed, 0x75, 0xa1, 0x96, 0xdf, 0xc2, 0xad,
+            0x67, 0xc7, 0x77, 0x72, 0xd1, 0x69,
         ];
         let modulus: [u8; 64] = [
             0x96, 0x9D, 0x03, 0xFF, 0xA9, 0x8D, 0x88, 0x8F, 0x3A, 0xA4, 0xF2, 0xFE, 0xD2, 0x32,
@@ -313,16 +393,24 @@ mod tests {
             0xC2, 0x73, 0xFF, 0x08, 0x88, 0xDD, 0x4D, 0xE0,
         ];
 
-        let n = super::ModMathFixedUint32::<16>::from_be_slice(&modulus);
-        let e = super::ModMathFixedUint32::<16>::from(3u8);
-        let key = GenericRsaPublicKey::from_components(n, e, ModMathParams32::new(n).unwrap()).unwrap();
+        let n = U512::from_be_bytes(&modulus);
+        let e = U512::from(3u8);
+        let key = GenericRsaPublicKey::from_components(
+            ModMathValue::from_inner(n),
+            ModMathValue::from_inner(e),
+            ModMathParams::new(n).unwrap(),
+        )
+        .unwrap();
         let verifying_key = GenericVerifyingKey::<Sha1, _, _>::new(key);
-        let signature = GenericSignature::from(super::ModMathFixedUint32::<16>::from_be_slice(&signature));
+        let signature =
+            GenericSignature::from(ModMathValue::from_inner(U512::from_be_bytes(&signature)));
         verifying_key.verify_prehash(&digest, &signature).unwrap();
     }
 
     #[test]
     fn encrypt_pkcs1v15_with_modmath_fixed_uint_matches_boxeduint() {
+        type U512 = FixedUInt<u8, 64>;
+
         let modulus: [u8; 64] = [
             0x96, 0x9D, 0x03, 0xFF, 0xA9, 0x8D, 0x88, 0x8F, 0x3A, 0xA4, 0xF2, 0xFE, 0xD2, 0x32,
             0xE6, 0x1C, 0x4A, 0xCF, 0x06, 0x63, 0xA9, 0x2F, 0x99, 0x03, 0x4C, 0xF7, 0xB7, 0x24,
@@ -332,17 +420,23 @@ mod tests {
         ];
         let msg = b"hello world!";
 
-        let modmath_key = public_key_from_be_bytes(&modulus, 3).unwrap();
-        let boxed_key = RsaPublicKey::new(BoxedUint::from_be_slice(&modulus, 512).unwrap(), 3u64.into()).unwrap();
+        let modmath_key = public_key_from_be_bytes::<U512>(&modulus, 3).unwrap();
+        let boxed_key = RsaPublicKey::new(
+            BoxedUint::from_be_slice(&modulus, 512).unwrap(),
+            3u64.into(),
+        )
+        .unwrap();
 
         let mut modmath_rng = ChaCha8Rng::from_seed([42; 32]);
         let mut boxed_rng = ChaCha8Rng::from_seed([42; 32]);
         let mut storage = [0u8; 64];
 
-        let modmath_ciphertext = crate::pkcs1v15::GenericEncryptingKey::new(modmath_key)
+        let modmath_ciphertext = GenericEncryptingKey::new(modmath_key)
             .encrypt_with_rng_into(&mut modmath_rng, msg, &mut storage)
             .unwrap();
-        let boxed_ciphertext = boxed_key.encrypt(&mut boxed_rng, Pkcs1v15Encrypt, msg).unwrap();
+        let boxed_ciphertext = boxed_key
+            .encrypt(&mut boxed_rng, Pkcs1v15Encrypt, msg)
+            .unwrap();
 
         assert_eq!(modmath_ciphertext, boxed_ciphertext.as_slice());
     }

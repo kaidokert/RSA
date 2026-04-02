@@ -9,8 +9,8 @@ use crate::errors::Result;
 #[cfg(feature = "private-key")]
 use crate::key::RsaPrivateKey;
 use crate::traits::{
-    IntegerResize, PublicKeyParts, UnsignedModularInt,
     modular::{FromBeBytes, IntoMontyForm, ModulusParams, PowBoundedExp},
+    IntegerResize, PublicKeyParts, UnsignedModularInt,
 };
 
 /// Padding scheme used for encryption.
@@ -19,7 +19,7 @@ pub trait PaddingScheme {
     ///
     /// If an `rng` is passed, it uses RSA blinding to help mitigate timing
     /// side-channel attacks.
-    #[cfg(feature="private-key")]
+    #[cfg(feature = "private-key")]
     fn decrypt<Rng: TryCryptoRng + ?Sized>(
         self,
         rng: Option<&mut Rng>,
@@ -28,13 +28,8 @@ pub trait PaddingScheme {
     ) -> Result<Vec<u8>>;
 
     /// Encrypt the given message using the given public key.
-    #[cfg(feature="alloc")]
-    fn encrypt<Rng, K, T>(
-        self,
-        rng: &mut Rng,
-        pub_key: &K,
-        msg: &[u8],
-    ) -> Result<Vec<u8>>
+    #[cfg(feature = "alloc")]
+    fn encrypt<Rng, K, T>(self, rng: &mut Rng, pub_key: &K, msg: &[u8]) -> Result<Vec<u8>>
     where
         Rng: TryCryptoRng + ?Sized,
         T: UnsignedModularInt + FromBeBytes + IntegerResize<Output = T> + PartialOrd,
@@ -47,7 +42,7 @@ pub trait PaddingScheme {
 /// Digital signature scheme.
 pub trait SignatureScheme {
     /// Sign the given digest.
-    #[cfg(feature="private-key")]
+    #[cfg(feature = "private-key")]
     fn sign<Rng: TryCryptoRng + ?Sized>(
         self,
         rng: Option<&mut Rng>,

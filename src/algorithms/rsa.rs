@@ -4,28 +4,28 @@
 use core::cmp::Ordering;
 
 #[cfg(feature = "private-key")]
-use crypto_bigint::{NonZero as CryptoNonZero, Odd as CryptoOdd};
-#[cfg(feature = "private-key")]
 use crypto_bigint::Resize as _;
 #[cfg(feature = "private-key")]
 use crypto_bigint::{
     modular::{BoxedMontyForm, BoxedMontyParams},
     BoxedUint, ConcatenatingMul, ConcatenatingSquare, Gcd, RandomMod,
 };
+#[cfg(feature = "private-key")]
+use crypto_bigint::{NonZero as CryptoNonZero, Odd as CryptoOdd};
 use rand_core::TryCryptoRng;
 use zeroize::Zeroize;
 
+#[cfg(not(feature = "private-key"))]
+use crate::traits::keys::PublicKeyParts;
+#[cfg(feature = "private-key")]
+use crate::traits::keys::{PrivateKeyParts, PublicKeyParts};
 use crate::{
     errors::{Error, Result},
     traits::{
-        IntegerResize, NonZero, UnsignedModularInt,
         modular::{IntoMontyForm, ModulusParams, Pow, PowBoundedExp},
+        IntegerResize, NonZero, UnsignedModularInt,
     },
 };
-#[cfg(feature = "private-key")]
-use crate::traits::keys::{PrivateKeyParts, PublicKeyParts};
-#[cfg(not(feature = "private-key"))]
-use crate::traits::keys::{PublicKeyParts};
 
 /// ⚠️ Raw RSA encryption of m with the public key. No padding is performed.
 ///
@@ -39,7 +39,8 @@ where
     T: UnsignedModularInt + IntegerResize<Output = T>,
     K: PublicKeyParts<T>,
     K::MontyParams: ModulusParams<Modulus = T>,
-    <K::MontyParams as ModulusParams>::MontgomeryForm: IntoMontyForm<K::MontyParams> + PowBoundedExp<K::MontyParams>,
+    <K::MontyParams as ModulusParams>::MontgomeryForm:
+        IntoMontyForm<K::MontyParams> + PowBoundedExp<K::MontyParams>,
 {
     let e = key.e();
     let res = pow_mod_params_vartime_exp_bits(m, e, e.bits(), key.n_params());
@@ -133,10 +134,7 @@ pub fn rsa_decrypt<R: TryCryptoRng + ?Sized>(
                         CryptoNonZero::new(p.clone()).expect("`p` is non-zero"),
                         q_params.bits_precision(),
                     );
-                    crypto_bigint::Resize::resize_unchecked(
-                        &m2 % p_wide,
-                        p_params.bits_precision(),
-                    )
+                    crypto_bigint::Resize::resize_unchecked(&m2 % p_wide, p_params.bits_precision())
                 }
                 Ordering::Greater => (&m2).resize_unchecked(p_params.bits_precision()),
                 Ordering::Equal => m2.clone(),
@@ -152,11 +150,8 @@ pub fn rsa_decrypt<R: TryCryptoRng + ?Sized>(
             // m = m2 + h.q
             let m2 =
                 crypto_bigint::Resize::try_resize(m2, n.bits_precision()).ok_or(Error::Internal)?;
-            let hq = crypto_bigint::Resize::try_resize(
-                h.concatenating_mul(&q),
-                n.bits_precision(),
-            )
-            .ok_or(Error::Internal)?;
+            let hq = crypto_bigint::Resize::try_resize(h.concatenating_mul(&q), n.bits_precision())
+                .ok_or(Error::Internal)?;
             m2.wrapping_add(&hq)
         }
         _ => {
@@ -282,12 +277,7 @@ where
 /// Computes `base.pow_mod(exp, n)` with a bounded exponent and precomputed `n_params`.
 ///
 /// The exponent bit length `exp_bits` may be leaked in the time pattern.
-fn pow_mod_params_vartime_exp_bits<T, M>(
-    base: &T,
-    exp: &T,
-    exp_bits: u32,
-    n_params: &M,
-) -> T
+fn pow_mod_params_vartime_exp_bits<T, M>(base: &T, exp: &T, exp_bits: u32, n_params: &M) -> T
 where
     T: UnsignedModularInt + IntegerResize<Output = T>,
     M: ModulusParams<Modulus = T>,
@@ -441,7 +431,10 @@ pub(crate) fn compute_private_exponent_carmicheal(
     let gcd = p1.gcd(&q1);
     let lcm = (p1 / CryptoNonZero::new(gcd).expect("gcd is non zero")).concatenating_mul(&q1);
     let exp = exp.resize_unchecked(lcm.bits_precision());
-    if let Some(d) = exp.invert_mod(&CryptoNonZero::new(lcm).expect("non zero")).into() {
+    if let Some(d) = exp
+        .invert_mod(&CryptoNonZero::new(lcm).expect("non zero"))
+        .into()
+    {
         Ok(d)
     } else {
         // `exp` evenly divides `lcm`

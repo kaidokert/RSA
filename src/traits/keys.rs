@@ -4,12 +4,12 @@
 use alloc::boxed::Box;
 #[cfg(feature = "private-key")]
 use crypto_bigint::{
-    BoxedUint,
     modular::{BoxedMontyForm, BoxedMontyParams},
+    BoxedUint,
 };
 use zeroize::Zeroize;
 
-use crate::traits::{NonZero, UnsignedModularInt, modular::ModulusParams};
+use crate::traits::{modular::ModulusParams, NonZero, UnsignedModularInt};
 
 /// Components of an RSA public key.
 pub trait PublicKeyParts<T: UnsignedModularInt> {

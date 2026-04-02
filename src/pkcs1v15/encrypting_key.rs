@@ -2,15 +2,15 @@ use super::encrypt_into;
 use crate::{
     key::GenericRsaPublicKey,
     traits::{
-        IntegerResize, PublicKeyParts, RandomizedEncryptor, UnsignedModularInt,
         modular::{FromBeBytes, IntoMontyForm, ModulusParams, PowBoundedExp},
+        IntegerResize, PublicKeyParts, RandomizedEncryptor, UnsignedModularInt,
     },
     Result,
 };
 #[cfg(feature = "alloc")]
 use alloc::vec::Vec;
 #[cfg(feature = "alloc")]
-use crypto_bigint::{BoxedUint, modular::BoxedMontyParams};
+use crypto_bigint::{modular::BoxedMontyParams, BoxedUint};
 use rand_core::CryptoRng;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};

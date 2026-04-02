@@ -26,32 +26,31 @@
 //!
 //! [RFC8017 § 8.2]: https://datatracker.ietf.org/doc/html/rfc8017#section-8.2
 
-#[cfg(feature="private-key")]
+#[cfg(feature = "private-key")]
 mod decrypting_key;
 mod encrypting_key;
 mod signature;
-#[cfg(feature="private-key")]
+#[cfg(feature = "private-key")]
 mod signing_key;
 mod verifying_key;
 
-#[cfg(feature="private-key")]
+#[cfg(feature = "private-key")]
 pub use self::{
-    decrypting_key::DecryptingKey, encrypting_key::GenericEncryptingKey,
-    signature::{GenericSignature, SignatureBytes}, signing_key::SigningKey,
+    decrypting_key::DecryptingKey,
+    encrypting_key::GenericEncryptingKey,
+    signature::{GenericSignature, SignatureBytes},
+    signing_key::SigningKey,
     verifying_key::GenericVerifyingKey,
 };
-#[cfg(not(feature="private-key"))]
+#[cfg(not(feature = "private-key"))]
 pub use self::{
-    encrypting_key::GenericEncryptingKey, signature::{GenericSignature, SignatureBytes},
+    encrypting_key::GenericEncryptingKey,
+    signature::{GenericSignature, SignatureBytes},
     verifying_key::GenericVerifyingKey,
 };
 
 #[cfg(feature = "alloc")]
-pub use self::{
-    encrypting_key::EncryptingKey,
-    signature::Signature,
-    verifying_key::VerifyingKey,
-};
+pub use self::{encrypting_key::EncryptingKey, signature::Signature, verifying_key::VerifyingKey};
 
 #[cfg(feature = "alloc")]
 use alloc::{boxed::Box, vec, vec::Vec};
@@ -62,21 +61,20 @@ use crypto_bigint::BoxedUint;
 use digest::Digest;
 use rand_core::TryCryptoRng;
 
-#[cfg(feature="alloc")]
-use crate::algorithms::pad::uint_to_zeroizing_be_pad;
 use crate::algorithms::pad::uint_to_be_pad_into;
+#[cfg(feature = "alloc")]
+use crate::algorithms::pad::uint_to_zeroizing_be_pad;
 use crate::algorithms::pkcs1v15::*;
-#[cfg(feature="private-key")]
+#[cfg(not(feature = "private-key"))]
+use crate::algorithms::rsa::rsa_encrypt;
+#[cfg(feature = "private-key")]
 use crate::algorithms::rsa::{rsa_decrypt_and_check, rsa_encrypt};
-#[cfg(not(feature="private-key"))]
-use crate::algorithms::rsa::{rsa_encrypt};
 use crate::errors::{Error, Result};
-#[cfg(feature="private-key")]
+#[cfg(feature = "private-key")]
 use crate::key::{self, RsaPrivateKey};
 use crate::traits::{
-    IntegerResize,
     modular::{FromBeBytes, IntoMontyForm, ModulusParams, PowBoundedExp},
-    PaddingScheme, PublicKeyParts, SignatureScheme, UnsignedModularInt,
+    IntegerResize, PaddingScheme, PublicKeyParts, SignatureScheme, UnsignedModularInt,
 };
 
 /// Encryption using PKCS#1 v1.5 padding.
@@ -116,16 +114,13 @@ impl Pkcs1v15Encrypt {
 /// length of the public modulus minus 11 bytes.
 #[cfg(feature = "alloc")]
 #[inline]
-fn encrypt<R: TryCryptoRng + ?Sized, K, T>(
-    rng: &mut R,
-    pub_key: &K,
-    msg: &[u8],
-) -> Result<Vec<u8>>
+fn encrypt<R: TryCryptoRng + ?Sized, K, T>(rng: &mut R, pub_key: &K, msg: &[u8]) -> Result<Vec<u8>>
 where
     T: UnsignedModularInt + FromBeBytes + IntegerResize<Output = T> + PartialOrd,
     K: PublicKeyParts<T>,
     K::MontyParams: ModulusParams<Modulus = T>,
-    <K::MontyParams as ModulusParams>::MontgomeryForm: IntoMontyForm<K::MontyParams> + PowBoundedExp<K::MontyParams>,
+    <K::MontyParams as ModulusParams>::MontgomeryForm:
+        IntoMontyForm<K::MontyParams> + PowBoundedExp<K::MontyParams>,
 {
     let mut storage = vec![0u8; pub_key.size()];
     let ciphertext = Pkcs1v15Encrypt.encrypt_into(rng, pub_key, msg, &mut storage)?;
@@ -178,9 +173,8 @@ where
     Prefix::from_slice(prefix).expect("prefix buffer is too small")
 }
 
-
 impl PaddingScheme for Pkcs1v15Encrypt {
-    #[cfg(feature="private-key")]
+    #[cfg(feature = "private-key")]
     fn decrypt<Rng: TryCryptoRng + ?Sized>(
         self,
         rng: Option<&mut Rng>,
@@ -190,19 +184,15 @@ impl PaddingScheme for Pkcs1v15Encrypt {
         decrypt(rng, priv_key, ciphertext)
     }
 
-    #[cfg(feature="alloc")]
-    fn encrypt<Rng, K, T>(
-        self,
-        rng: &mut Rng,
-        pub_key: &K,
-        msg: &[u8],
-    ) -> Result<Vec<u8>>
+    #[cfg(feature = "alloc")]
+    fn encrypt<Rng, K, T>(self, rng: &mut Rng, pub_key: &K, msg: &[u8]) -> Result<Vec<u8>>
     where
         Rng: TryCryptoRng + ?Sized,
         T: UnsignedModularInt + FromBeBytes + IntegerResize<Output = T> + PartialOrd,
         K: PublicKeyParts<T>,
         K::MontyParams: ModulusParams<Modulus = T>,
-        <K::MontyParams as ModulusParams>::MontgomeryForm: IntoMontyForm<K::MontyParams> + PowBoundedExp<K::MontyParams>,
+        <K::MontyParams as ModulusParams>::MontgomeryForm:
+            IntoMontyForm<K::MontyParams> + PowBoundedExp<K::MontyParams>,
     {
         let mut storage = vec![0u8; pub_key.size()];
         let ciphertext = self.encrypt_into(rng, pub_key, msg, &mut storage)?;
@@ -256,7 +246,7 @@ impl Pkcs1v15Sign {
 }
 
 impl SignatureScheme for Pkcs1v15Sign {
-    #[cfg(feature="private-key")]
+    #[cfg(feature = "private-key")]
     fn sign<Rng: TryCryptoRng + ?Sized>(
         self,
         rng: Option<&mut Rng>,
@@ -278,7 +268,8 @@ impl SignatureScheme for Pkcs1v15Sign {
         T::Bytes: AsMut<[u8]>,
         K: PublicKeyParts<T>,
         K::MontyParams: ModulusParams<Modulus = T>,
-        <K::MontyParams as ModulusParams>::MontgomeryForm: IntoMontyForm<K::MontyParams> + PowBoundedExp<K::MontyParams>,
+        <K::MontyParams as ModulusParams>::MontgomeryForm:
+            IntoMontyForm<K::MontyParams> + PowBoundedExp<K::MontyParams>,
     {
         if let Some(hash_len) = self.hash_len {
             if hashed.len() != hash_len {
@@ -288,7 +279,13 @@ impl SignatureScheme for Pkcs1v15Sign {
 
         let mut storage = pub_key.n().as_ref().to_be_bytes();
         let sig = T::from_be_bytes_vartime(sig);
-        verify_generic(pub_key, self.prefix.as_ref(), hashed, &sig, storage.as_mut())
+        verify_generic(
+            pub_key,
+            self.prefix.as_ref(),
+            hashed,
+            &sig,
+            storage.as_mut(),
+        )
     }
 }
 
@@ -306,7 +303,8 @@ where
     T: UnsignedModularInt + FromBeBytes + IntegerResize<Output = T>,
     K: PublicKeyParts<T>,
     K::MontyParams: ModulusParams<Modulus = T>,
-    <K::MontyParams as ModulusParams>::MontgomeryForm: IntoMontyForm<K::MontyParams> + PowBoundedExp<K::MontyParams>,
+    <K::MontyParams as ModulusParams>::MontgomeryForm:
+        IntoMontyForm<K::MontyParams> + PowBoundedExp<K::MontyParams>,
 {
     Pkcs1v15Encrypt.encrypt_into(rng, pub_key, msg, storage)
 }
@@ -374,7 +372,8 @@ where
     T: UnsignedModularInt + IntegerResize<Output = T> + PartialOrd,
     K: PublicKeyParts<T>,
     K::MontyParams: ModulusParams<Modulus = T>,
-    <K::MontyParams as ModulusParams>::MontgomeryForm: IntoMontyForm<K::MontyParams> + PowBoundedExp<K::MontyParams>,
+    <K::MontyParams as ModulusParams>::MontgomeryForm:
+        IntoMontyForm<K::MontyParams> + PowBoundedExp<K::MontyParams>,
 {
     let n = pub_key.n();
     if sig >= n.as_ref() || sig.bits_precision() != pub_key.n_bits_precision() {
@@ -385,7 +384,6 @@ where
 
     pkcs1v15_sign_unpad(prefix, hashed, em, pub_key.size())
 }
-
 
 mod oid {
     use const_oid::ObjectIdentifier;

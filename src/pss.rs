@@ -31,8 +31,8 @@ use crate::algorithms::pss::*;
 use crate::algorithms::rsa::{rsa_decrypt_and_check, rsa_encrypt};
 use crate::errors::{Error, Result};
 use crate::traits::{
-    IntegerResize, PublicKeyParts, SignatureScheme, UnsignedModularInt,
     modular::{FromBeBytes, IntoMontyForm, ModulusParams, PowBoundedExp},
+    IntegerResize, PublicKeyParts, SignatureScheme, UnsignedModularInt,
 };
 use crate::{RsaPrivateKey, RsaPublicKey};
 
@@ -106,7 +106,7 @@ impl<D> SignatureScheme for Pss<D>
 where
     D: Digest + FixedOutputReset,
 {
-    #[cfg(feature="private-key")]
+    #[cfg(feature = "private-key")]
     fn sign<Rng: TryCryptoRng + ?Sized>(
         mut self,
         rng: Option<&mut Rng>,
@@ -128,7 +128,8 @@ where
         T: UnsignedModularInt + FromBeBytes + IntegerResize<Output = T> + PartialOrd,
         K: PublicKeyParts<T>,
         K::MontyParams: ModulusParams<Modulus = T>,
-        <K::MontyParams as ModulusParams>::MontgomeryForm: IntoMontyForm<K::MontyParams> + PowBoundedExp<K::MontyParams>,
+        <K::MontyParams as ModulusParams>::MontgomeryForm:
+            IntoMontyForm<K::MontyParams> + PowBoundedExp<K::MontyParams>,
     {
         let sig = T::from_be_bytes_vartime(sig);
         if sig >= *pub_key.n().as_ref() || sig.bits_precision() != pub_key.n_bits_precision() {
@@ -139,7 +140,13 @@ where
         let em = uint_to_be_pad_into(rsa_encrypt(pub_key, &sig)?, pub_key.size(), &mut em)?;
         let mut em = em.to_vec();
 
-        emsa_pss_verify(hashed, &mut em, self.salt_len, &mut self.digest, pub_key.n().bits() as _)
+        emsa_pss_verify(
+            hashed,
+            &mut em,
+            self.salt_len,
+            &mut self.digest,
+            pub_key.n().bits() as _,
+        )
     }
 }
 

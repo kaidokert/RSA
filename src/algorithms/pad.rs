@@ -21,7 +21,11 @@ fn left_pad(input: &[u8], padded_len: usize) -> Result<Vec<u8>> {
 }
 
 #[inline]
-pub fn left_pad_into<'a>(input: &[u8], padded_len: usize, storage: &'a mut [u8]) -> Result<&'a [u8]> {
+pub fn left_pad_into<'a>(
+    input: &[u8],
+    padded_len: usize,
+    storage: &'a mut [u8],
+) -> Result<&'a [u8]> {
     if input.len() > padded_len {
         return Err(Error::InvalidPadLen);
     }
@@ -38,7 +42,6 @@ pub fn left_pad_into<'a>(input: &[u8], padded_len: usize, storage: &'a mut [u8])
     Ok(&storage[..padded_len])
 }
 
-
 /// Converts input to the new vector of the given length, using BE and with 0s left padded.
 /// In some cases BoxedUint might already have leading zeroes, this function removes them
 /// before padding again.
@@ -53,7 +56,7 @@ pub(crate) fn uint_to_be_pad(input: BoxedUint, padded_len: usize) -> Result<Vec<
 #[inline]
 pub fn uint_to_be_pad_into<T>(input: T, padded_len: usize, storage: &mut [u8]) -> Result<&[u8]>
 where
-    T: UnsignedModularInt
+    T: UnsignedModularInt,
 {
     let leading_zeros = input.leading_zeros() as usize / 8;
     let bytes = input.to_be_bytes();
@@ -79,7 +82,8 @@ pub fn uint_to_zeroizing_be_pad_into<T>(
     storage: &mut [u8],
 ) -> Result<&[u8]>
 where
-    T: UnsignedModularInt
+    T: UnsignedModularInt,
+    T::Bytes: zeroize::Zeroize,
 {
     let leading_zeros = input.leading_zeros() as usize / 8;
     let m = Zeroizing::new(input);

@@ -1,13 +1,13 @@
-use super::{verify_generic, GenericSignature};
 #[cfg(feature = "alloc")]
 use super::pkcs1v15_generate_prefix;
 #[cfg(not(feature = "alloc"))]
 use super::{pkcs1v15_generate_prefix_helper, Prefix};
+use super::{verify_generic, GenericSignature};
 use crate::{
     key::GenericRsaPublicKey,
     traits::{
-        IntegerResize, PublicKeyParts, UnsignedModularInt,
         modular::{IntoMontyForm, ModulusParams, PowBoundedExp},
+        IntegerResize, PublicKeyParts, UnsignedModularInt,
     },
 };
 #[cfg(feature = "alloc")]
@@ -15,10 +15,12 @@ use alloc::vec::Vec;
 use const_oid::AssociatedOid;
 use core::marker::PhantomData;
 #[cfg(feature = "alloc")]
-use crypto_bigint::{BoxedUint, modular::BoxedMontyParams};
+use crypto_bigint::{modular::BoxedMontyParams, BoxedUint};
 use digest::{Digest, FixedOutput, HashMarker, Update};
 use signature::{hazmat::PrehashVerifier, DigestVerifier, Verifier};
 
+#[cfg(feature = "alloc")]
+use crate::key::RsaPublicKey;
 #[cfg(feature = "encoding")]
 use {
     super::oid,
@@ -32,8 +34,6 @@ use {
     serdect::serde::{de, ser, Deserialize, Serialize},
     spki::DecodePublicKey,
 };
-#[cfg(feature = "alloc")]
-use crate::key::RsaPublicKey;
 
 /// Verifying key for `RSASSA-PKCS1-v1_5` signatures as described in [RFC8017 § 8.2].
 ///

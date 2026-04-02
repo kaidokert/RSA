@@ -4,6 +4,7 @@
 use core::convert::Infallible;
 
 use cortex_m_semihosting::{debug, hprintln};
+use fixed_bigint::FixedUInt;
 use panic_semihosting as _;
 use rsa::{
     pkcs1v15::GenericEncryptingKey,
@@ -88,7 +89,9 @@ fn main() -> ! {
 }
 
 fn run() -> rsa::Result<()> {
-    let key = GenericEncryptingKey::new(public_key_from_be_bytes(&MODULUS, 3)?);
+    type U512 = FixedUInt<u8, 64>;
+
+    let key = GenericEncryptingKey::new(public_key_from_be_bytes::<U512>(&MODULUS, 3)?);
     let mut rng = CounterRng::new();
     let mut storage = [0u8; 64];
     let ciphertext = key.encrypt_with_rng_into(&mut rng, b"hello world!", &mut storage)?;

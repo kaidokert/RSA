@@ -256,25 +256,15 @@ mod key;
 #[cfg(feature = "modmath")]
 pub mod modmath_support;
 
+#[cfg(feature = "modmath")]
+pub use crate::modmath_support::{ModMathForm, ModMathInt, ModMathParams, ModMathValue};
 #[cfg(feature = "encoding")]
 pub use pkcs1;
 #[cfg(feature = "encoding")]
 pub use pkcs8;
 #[cfg(feature = "sha2")]
 pub use sha2;
-#[cfg(feature = "modmath")]
-pub use crate::modmath_support::{ModMathFixedUint, ModMathForm, ModMathParams};
-#[cfg(all(feature = "modmath", feature = "alloc"))]
-pub use crate::modmath_support::{ModMathFixedUint32, ModMathForm32, ModMathParams32};
 
-#[cfg(feature = "alloc")]
-pub use crate::{
-    errors::{Error, Result},
-    key::{GenericRsaPublicKey, RsaPrivateKey, RsaPublicKey},
-    oaep::Oaep,
-    pkcs1v15::{Pkcs1v15Encrypt, Pkcs1v15Sign},
-    pss::Pss,
-};
 #[cfg(all(feature = "alloc", feature = "private-key"))]
 pub use crate::traits::keys::CrtValue;
 #[cfg(all(not(feature = "alloc"), feature = "full"))]
@@ -282,6 +272,14 @@ pub use crate::{
     errors::{Error, Result},
     key::{GenericRsaPublicKey, RsaPrivateKey},
     pkcs1v15::{Pkcs1v15Encrypt, Pkcs1v15Sign},
+};
+#[cfg(feature = "alloc")]
+pub use crate::{
+    errors::{Error, Result},
+    key::{GenericRsaPublicKey, RsaPrivateKey, RsaPublicKey},
+    oaep::Oaep,
+    pkcs1v15::{Pkcs1v15Encrypt, Pkcs1v15Sign},
+    pss::Pss,
 };
 
 #[cfg(all(not(feature = "alloc"), not(feature = "full")))]

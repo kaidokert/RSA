@@ -23,8 +23,8 @@ use crate::algorithms::rsa::{rsa_decrypt_and_check, rsa_encrypt};
 use crate::errors::{Error, Result};
 use crate::key::{self, RsaPrivateKey, RsaPublicKey};
 use crate::traits::{
-    IntegerResize, PaddingScheme, PublicKeyParts, UnsignedModularInt,
     modular::{FromBeBytes, IntoMontyForm, ModulusParams, PowBoundedExp},
+    IntegerResize, PaddingScheme, PublicKeyParts, UnsignedModularInt,
 };
 
 /// Encryption and Decryption using [OAEP padding](https://datatracker.ietf.org/doc/html/rfc8017#section-7.1).
@@ -149,7 +149,7 @@ where
     D: Digest + FixedOutputReset,
     MGD: Digest + FixedOutputReset,
 {
-    #[cfg(feature="private-key")]
+    #[cfg(feature = "private-key")]
     fn decrypt<Rng: TryCryptoRng + ?Sized>(
         mut self,
         rng: Option<&mut Rng>,
@@ -166,18 +166,14 @@ where
         )
     }
 
-    fn encrypt<Rng, K, T>(
-        mut self,
-        rng: &mut Rng,
-        pub_key: &K,
-        msg: &[u8],
-    ) -> Result<Vec<u8>>
+    fn encrypt<Rng, K, T>(mut self, rng: &mut Rng, pub_key: &K, msg: &[u8]) -> Result<Vec<u8>>
     where
         Rng: TryCryptoRng + ?Sized,
         T: UnsignedModularInt + FromBeBytes + IntegerResize<Output = T> + PartialOrd,
         K: PublicKeyParts<T>,
         K::MontyParams: ModulusParams<Modulus = T>,
-        <K::MontyParams as ModulusParams>::MontgomeryForm: IntoMontyForm<K::MontyParams> + PowBoundedExp<K::MontyParams>,
+        <K::MontyParams as ModulusParams>::MontgomeryForm:
+            IntoMontyForm<K::MontyParams> + PowBoundedExp<K::MontyParams>,
     {
         let em = oaep_encrypt(
             rng,

@@ -5,14 +5,14 @@ use core::fmt;
 use core::hash::{Hash, Hasher};
 
 #[cfg(feature = "alloc")]
-use crypto_bigint::{NonZero as CryptoNonZero, Odd as CryptoOdd};
-#[cfg(feature = "alloc")]
 use crypto_bigint::Resize as _;
 #[cfg(feature = "alloc")]
 use crypto_bigint::{
     modular::{BoxedMontyForm, BoxedMontyParams},
     BoxedUint, ConcatenatingMul, Integer,
 };
+#[cfg(feature = "alloc")]
+use crypto_bigint::{NonZero as CryptoNonZero, Odd as CryptoOdd};
 
 use rand_core::CryptoRng;
 use zeroize::{Zeroize, ZeroizeOnDrop};
@@ -34,12 +34,12 @@ use crate::algorithms::rsa::{
 #[cfg(feature = "private-key")]
 use crate::dummy_rng::DummyRng;
 use crate::errors::{Error, Result};
+use crate::traits::keys::PublicKeyParts;
 #[cfg(feature = "private-key")]
 use crate::traits::keys::{CrtValue, PrivateKeyParts};
-use crate::traits::keys::PublicKeyParts;
 use crate::traits::{
-    IntegerResize, NonZero, PaddingScheme, SignatureScheme, UnsignedModularInt,
     modular::{FromBeBytes, IntoMontyForm, ModulusParams, PowBoundedExp},
+    IntegerResize, NonZero, PaddingScheme, SignatureScheme, UnsignedModularInt,
 };
 
 /// Represents the public part of an RSA key.
@@ -212,7 +212,8 @@ impl From<RsaPrivateKey> for GenericRsaPublicKey<BoxedUint, BoxedMontyParams> {
 #[cfg(feature = "private-key")]
 impl From<&RsaPrivateKey> for GenericRsaPublicKey<BoxedUint, BoxedMontyParams> {
     fn from(private_key: &RsaPrivateKey) -> Self {
-        let public_key: &dyn PublicKeyParts<BoxedUint, MontyParams = BoxedMontyParams> = private_key;
+        let public_key: &dyn PublicKeyParts<BoxedUint, MontyParams = BoxedMontyParams> =
+            private_key;
         GenericRsaPublicKey {
             n: public_key.n().clone(),
             e: public_key.e().clone(),
@@ -437,7 +438,9 @@ impl RsaPrivateKey {
         d: BoxedUint,
         mut primes: Vec<BoxedUint>,
     ) -> Result<RsaPrivateKey> {
-        let n = CryptoOdd::new(n).into_option().ok_or(Error::InvalidModulus)?;
+        let n = CryptoOdd::new(n)
+            .into_option()
+            .ok_or(Error::InvalidModulus)?;
 
         // The modulus may come in padded with zeros, shorten it
         // to ensure optimal performance of arithmetic operations.
@@ -790,7 +793,7 @@ impl PrivateKeyParts for RsaPrivateKey {
 /// Check that the public key is well formed and has an exponent within acceptable bounds.
 #[inline]
 #[cfg(feature = "alloc")]
-pub fn check_public(public_key: &impl PublicKeyParts<BoxedUint>) -> Result<()>  {
+pub fn check_public(public_key: &impl PublicKeyParts<BoxedUint>) -> Result<()> {
     check_public_with_max_size(public_key.n().as_ref(), public_key.e(), None)
 }
 

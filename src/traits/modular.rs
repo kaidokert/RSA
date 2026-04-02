@@ -3,18 +3,18 @@ use core::borrow::Borrow;
 #[cfg(feature = "alloc")]
 use alloc::boxed::Box;
 #[cfg(feature = "alloc")]
-use crypto_bigint::{NonZero as CryptoNonZero, Odd as CryptoOdd};
-#[cfg(feature = "alloc")]
 use crypto_bigint::{
-    BoxedUint,
-    Resize as CryptoResize,
     modular::{BoxedMontyForm, BoxedMontyParams},
+    BoxedUint, Resize as CryptoResize,
 };
+#[cfg(feature = "alloc")]
+use crypto_bigint::{NonZero as CryptoNonZero, Odd as CryptoOdd};
+use num_traits::{FromBytes as NumFromBytes, PrimInt, ToBytes as NumToBytes, Zero};
 use zeroize::Zeroize;
 
-pub trait NumBytes: Borrow<[u8]> + Zeroize + AsRef<[u8]> {}
+pub trait NumBytes: Borrow<[u8]> + AsRef<[u8]> {}
 
-impl<const N: usize> NumBytes for [u8; N] {}
+impl<T> NumBytes for T where T: Borrow<[u8]> + AsRef<[u8]> {}
 
 #[repr(transparent)]
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -29,6 +29,113 @@ pub trait IntegerResize: Sized {
 
     fn resize_unchecked(self, at_least_bits_precision: u32) -> Self::Output;
     fn try_resize(self, at_least_bits_precision: u32) -> Option<Self::Output>;
+}
+
+pub trait FixedWidthUnsignedInt: Zeroize + Clone + Copy {
+    type Bytes: NumBytes + Default + AsMut<[u8]>;
+
+    fn leading_zeros(&self) -> u32;
+    fn to_be_bytes(&self) -> Self::Bytes;
+    fn from_be_bytes_vartime(bytes: &[u8]) -> Self;
+    fn bits_precision(&self) -> u32;
+}
+
+impl<T> FixedWidthUnsignedInt for T
+where
+    T: Zeroize + Clone + Copy + PrimInt + NumToBytes + NumFromBytes,
+    T: NumToBytes<Bytes = <T as NumFromBytes>::Bytes>,
+    <T as NumToBytes>::Bytes: NumBytes + Default + AsMut<[u8]>,
+{
+    type Bytes = <T as NumToBytes>::Bytes;
+
+    fn leading_zeros(&self) -> u32 {
+        PrimInt::leading_zeros(*self)
+    }
+
+    fn to_be_bytes(&self) -> Self::Bytes {
+        NumToBytes::to_be_bytes(self)
+    }
+
+    fn from_be_bytes_vartime(bytes: &[u8]) -> Self {
+        let mut repr = <T as NumFromBytes>::Bytes::default();
+        let out = repr.as_mut();
+        let out_len = out.len();
+        let copy_len = bytes.len().min(out_len);
+        out.fill(0);
+        out[out_len - copy_len..].copy_from_slice(&bytes[bytes.len() - copy_len..]);
+        NumFromBytes::from_be_bytes(&repr)
+    }
+
+    fn bits_precision(&self) -> u32 {
+        <T as Zero>::zero().count_zeros()
+    }
+}
+
+#[cfg(not(feature = "alloc"))]
+impl<T> IntegerResize for T
+where
+    T: FixedWidthUnsignedInt,
+{
+    type Output = Self;
+
+    fn resize_unchecked(self, _at_least_bits_precision: u32) -> Self::Output {
+        self
+    }
+
+    fn try_resize(self, at_least_bits_precision: u32) -> Option<Self::Output> {
+        if at_least_bits_precision >= self.bits_precision() {
+            Some(self)
+        } else {
+            None
+        }
+    }
+}
+
+#[cfg(not(feature = "alloc"))]
+impl<T> UnsignedModularInt for T
+where
+    T: FixedWidthUnsignedInt + IntegerResize<Output = T> + core::ops::Rem<Output = T>,
+{
+    type Bytes = <T as FixedWidthUnsignedInt>::Bytes;
+
+    fn leading_zeros(&self) -> u32 {
+        FixedWidthUnsignedInt::leading_zeros(self)
+    }
+
+    fn to_be_bytes(&self) -> Self::Bytes {
+        FixedWidthUnsignedInt::to_be_bytes(self)
+    }
+
+    fn rem_vartime(&self, modulus: &NonZero<Self>) -> Self {
+        *self % *modulus.as_ref()
+    }
+
+    fn as_nz_ref(&self) -> NonZero<Self> {
+        NonZero::new(*self).expect("value is non-zero")
+    }
+
+    fn bits(&self) -> u32 {
+        self.bits_precision() - self.leading_zeros()
+    }
+
+    fn bits_precision(&self) -> u32 {
+        FixedWidthUnsignedInt::bits_precision(self)
+    }
+
+    #[cfg(feature = "alloc")]
+    fn to_be_bytes_trimmed_vartime(&self) -> Box<[u8]> {
+        unreachable!("alloc-gated")
+    }
+}
+
+#[cfg(not(feature = "alloc"))]
+impl<T> FromBeBytes for T
+where
+    T: FixedWidthUnsignedInt + core::ops::Rem<Output = T>,
+{
+    fn from_be_bytes_vartime(bytes: &[u8]) -> Self {
+        FixedWidthUnsignedInt::from_be_bytes_vartime(bytes)
+    }
 }
 
 pub trait UnsignedModularInt: Zeroize + Clone + IntegerResize<Output = Self> {
@@ -118,7 +225,6 @@ where
     }
 }
 
-
 /// Build a Montgomery-domain value from an integer already reduced modulo `params.modulus()`.
 pub trait IntoMontyForm<P: ModulusParams>: Sized {
     fn from_reduced(integer: P::Modulus, params: &P) -> Self;
@@ -176,15 +282,14 @@ impl ModulusParams for BoxedMontyParams {
     type MontgomeryForm = BoxedMontyForm;
     fn modulus(&self) -> &Odd<Self::Modulus> {
         // Safety: both wrappers are transparent newtypes over the same `BoxedUint`.
-        unsafe { &*(self.modulus() as *const CryptoOdd<Self::Modulus> as *const Odd<Self::Modulus>) }
+        unsafe {
+            &*(self.modulus() as *const CryptoOdd<Self::Modulus> as *const Odd<Self::Modulus>)
+        }
     }
     fn bits_precision(&self) -> u32 {
         self.bits_precision()
     }
 }
-
-#[cfg(feature = "alloc")]
-impl NumBytes for alloc::boxed::Box<[u8]> {}
 
 #[cfg(feature = "alloc")]
 impl IntegerResize for BoxedUint {
@@ -211,7 +316,7 @@ impl UnsignedModularInt for BoxedUint {
         self.as_words()
             .iter()
             .rev()
-            .flat_map(|word| word.to_be_bytes())
+            .flat_map(|word| u64::to_be_bytes(*word))
             .collect::<alloc::vec::Vec<u8>>()
             .into_boxed_slice()
     }
