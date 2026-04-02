@@ -290,5 +290,3 @@ pub use crate::{
 
 #[cfg(all(feature = "hazmat", feature = "alloc"))]
 pub mod hazmat;
-
-// export some alloc-compatible methods for testing

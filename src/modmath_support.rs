@@ -53,6 +53,26 @@ impl<T> ModMathInt for T where
 }
 
 #[cfg(feature = "alloc")]
+fn wrap_value<T>(value: T) -> ModMathValue<T> {
+    ModMathValue(value)
+}
+
+#[cfg(not(feature = "alloc"))]
+fn wrap_value<T>(value: T) -> ModMathValue<T> {
+    value
+}
+
+#[cfg(feature = "alloc")]
+fn unwrap_value<T: Copy>(value: &ModMathValue<T>) -> T {
+    value.0
+}
+
+#[cfg(not(feature = "alloc"))]
+fn unwrap_value<T: Copy>(value: &ModMathValue<T>) -> T {
+    *value
+}
+
+#[cfg(feature = "alloc")]
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord)]
 pub struct ModMathValue<T>(pub T);
 
@@ -165,19 +185,13 @@ pub type ModMathValue<T> = T;
 
 #[derive(Clone, Debug)]
 pub struct ModMathParams<T: ModMathInt> {
-    #[cfg(feature = "alloc")]
     modulus: Odd<ModMathValue<T>>,
-    #[cfg(not(feature = "alloc"))]
-    modulus: Odd<T>,
 }
 
 impl<T: ModMathInt> ModMathParams<T> {
     /// Create modular arithmetic parameters for an odd, non-zero modulus.
     pub fn new(modulus: T) -> Result<Self> {
-        #[cfg(feature = "alloc")]
-        let modulus = Odd::new(ModMathValue(modulus)).ok_or(Error::InvalidModulus)?;
-        #[cfg(not(feature = "alloc"))]
-        let modulus = Odd::new(modulus).ok_or(Error::InvalidModulus)?;
+        let modulus = Odd::new(wrap_value(modulus)).ok_or(Error::InvalidModulus)?;
         Ok(Self { modulus })
     }
 }
@@ -191,18 +205,9 @@ pub fn public_key_from_be_bytes<T>(
 where
     T: ModMathInt,
 {
-    #[cfg(feature = "alloc")]
-    {
-        let n = ModMathValue(<T as FixedWidthUnsignedInt>::from_be_bytes_vartime(modulus));
-        let e = ModMathValue(<T as From<u8>>::from(exponent));
-        GenericRsaPublicKey::from_components(n, e, ModMathParams::new(n.0)?)
-    }
-    #[cfg(not(feature = "alloc"))]
-    {
-        let n = <T as FixedWidthUnsignedInt>::from_be_bytes_vartime(modulus);
-        let e = <T as From<u8>>::from(exponent);
-        GenericRsaPublicKey::from_components(n, e, ModMathParams::new(n)?)
-    }
+    let n = wrap_value(<T as FixedWidthUnsignedInt>::from_be_bytes_vartime(modulus));
+    let e = wrap_value(<T as From<u8>>::from(exponent));
+    GenericRsaPublicKey::from_components(n, e, ModMathParams::new(unwrap_value(&n))?)
 }
 
 /// Apply the raw RSA public operation to a fixed-width block.
@@ -215,29 +220,16 @@ pub fn rsa_decrypt<T>(
 where
     T: ModMathInt,
 {
-    #[cfg(feature = "alloc")]
-    {
-        let input =
-            ModMathValue::from_inner(<T as FixedWidthUnsignedInt>::from_be_bytes_vartime(input));
-        Ok(rsa_encrypt(key, &input)?.to_be_bytes())
-    }
-    #[cfg(not(feature = "alloc"))]
-    {
-        let input = <T as FixedWidthUnsignedInt>::from_be_bytes_vartime(input);
-        Ok(rsa_encrypt(key, &input)?.to_be_bytes())
-    }
+    let input = wrap_value(<T as FixedWidthUnsignedInt>::from_be_bytes_vartime(input));
+    Ok(rsa_encrypt(key, &input)?.to_be_bytes())
 }
 
 #[derive(Clone, Debug)]
 pub struct ModMathForm<T: ModMathInt> {
-    #[cfg(feature = "alloc")]
     integer: ModMathValue<T>,
-    #[cfg(not(feature = "alloc"))]
-    integer: T,
     params: ModMathParams<T>,
 }
 
-#[cfg(feature = "alloc")]
 impl<T: ModMathInt> IntoMontyForm<ModMathParams<T>> for ModMathForm<T> {
     fn from_reduced(integer: ModMathValue<T>, params: &ModMathParams<T>) -> Self {
         Self {
@@ -247,24 +239,13 @@ impl<T: ModMathInt> IntoMontyForm<ModMathParams<T>> for ModMathForm<T> {
     }
 }
 
-#[cfg(not(feature = "alloc"))]
-impl<T: ModMathInt> IntoMontyForm<ModMathParams<T>> for ModMathForm<T> {
-    fn from_reduced(integer: T, params: &ModMathParams<T>) -> Self {
-        Self {
-            integer,
-            params: params.clone(),
-        }
-    }
-}
-
-#[cfg(feature = "alloc")]
 impl<T: ModMathInt> Pow<ModMathParams<T>> for ModMathForm<T> {
     fn pow(&self, exp: &ModMathValue<T>) -> Self {
         Self {
-            integer: ModMathValue(basic_mod_exp(
-                self.integer.0,
-                exp.0,
-                self.params.modulus.as_ref().0,
+            integer: wrap_value(basic_mod_exp(
+                unwrap_value(&self.integer),
+                unwrap_value(exp),
+                unwrap_value(self.params.modulus.as_ref()),
             )),
             params: self.params.clone(),
         }
@@ -275,21 +256,6 @@ impl<T: ModMathInt> Pow<ModMathParams<T>> for ModMathForm<T> {
     }
 }
 
-#[cfg(not(feature = "alloc"))]
-impl<T: ModMathInt> Pow<ModMathParams<T>> for ModMathForm<T> {
-    fn pow(&self, exp: &T) -> Self {
-        Self {
-            integer: basic_mod_exp(self.integer, *exp, *self.params.modulus.as_ref()),
-            params: self.params.clone(),
-        }
-    }
-
-    fn retrieve(&self) -> T {
-        self.integer
-    }
-}
-
-#[cfg(feature = "alloc")]
 impl<T: ModMathInt> PowBoundedExp<ModMathParams<T>> for ModMathForm<T> {
     fn pow_bounded_exp(&self, exp: &ModMathValue<T>, _exp_bits: u32) -> Self {
         self.pow(exp)
@@ -300,22 +266,8 @@ impl<T: ModMathInt> PowBoundedExp<ModMathParams<T>> for ModMathForm<T> {
     }
 }
 
-#[cfg(not(feature = "alloc"))]
-impl<T: ModMathInt> PowBoundedExp<ModMathParams<T>> for ModMathForm<T> {
-    fn pow_bounded_exp(&self, exp: &T, _exp_bits: u32) -> Self {
-        self.pow(exp)
-    }
-
-    fn retrieve(&self) -> T {
-        self.integer
-    }
-}
-
 impl<T: ModMathInt> ModulusParams for ModMathParams<T> {
-    #[cfg(feature = "alloc")]
     type Modulus = ModMathValue<T>;
-    #[cfg(not(feature = "alloc"))]
-    type Modulus = T;
     type MontgomeryForm = ModMathForm<T>;
 
     fn modulus(&self) -> &Odd<Self::Modulus> {
