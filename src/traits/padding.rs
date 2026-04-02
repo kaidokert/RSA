@@ -8,10 +8,7 @@ use rand_core::TryCryptoRng;
 use crate::errors::Result;
 #[cfg(feature = "private-key")]
 use crate::key::RsaPrivateKey;
-use crate::traits::{
-    modular::{FromBeBytes, IntoMontyForm, ModulusParams, PowBoundedExp},
-    IntegerResize, PublicKeyParts, UnsignedModularInt,
-};
+use crate::traits::{PublicKeyParts, UnsignedModularInt};
 
 /// Padding scheme used for encryption.
 pub trait PaddingScheme {
@@ -32,11 +29,8 @@ pub trait PaddingScheme {
     fn encrypt<Rng, K, T>(self, rng: &mut Rng, pub_key: &K, msg: &[u8]) -> Result<Vec<u8>>
     where
         Rng: TryCryptoRng + ?Sized,
-        T: UnsignedModularInt + FromBeBytes + IntegerResize<Output = T> + PartialOrd,
-        K: PublicKeyParts<T>,
-        K::MontyParams: ModulusParams<Modulus = T>,
-        <K::MontyParams as ModulusParams>::MontgomeryForm:
-            IntoMontyForm<K::MontyParams> + PowBoundedExp<K::MontyParams>;
+        T: UnsignedModularInt,
+        K: PublicKeyParts<T>;
 }
 
 /// Digital signature scheme.
@@ -58,10 +52,6 @@ pub trait SignatureScheme {
     /// If the message is valid `Ok(())` is returned, otherwise an `Err` indicating failure.
     fn verify<K, T>(self, pub_key: &K, hashed: &[u8], sig: &[u8]) -> Result<()>
     where
-        T: UnsignedModularInt + FromBeBytes + IntegerResize<Output = T> + PartialOrd,
-        T::Bytes: AsMut<[u8]>,
-        K: PublicKeyParts<T>,
-        K::MontyParams: ModulusParams<Modulus = T>,
-        <K::MontyParams as ModulusParams>::MontgomeryForm:
-            IntoMontyForm<K::MontyParams> + PowBoundedExp<K::MontyParams>;
+        T: UnsignedModularInt,
+        K: PublicKeyParts<T>;
 }

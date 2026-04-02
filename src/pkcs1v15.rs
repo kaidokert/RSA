@@ -72,10 +72,7 @@ use crate::algorithms::rsa::{rsa_decrypt_and_check, rsa_encrypt};
 use crate::errors::{Error, Result};
 #[cfg(feature = "private-key")]
 use crate::key::{self, RsaPrivateKey};
-use crate::traits::{
-    modular::{FromBeBytes, IntoMontyForm, ModulusParams, PowBoundedExp},
-    IntegerResize, PaddingScheme, PublicKeyParts, SignatureScheme, UnsignedModularInt,
-};
+use crate::traits::{PaddingScheme, PublicKeyParts, SignatureScheme, UnsignedModularInt};
 
 /// Encryption using PKCS#1 v1.5 padding.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -94,11 +91,8 @@ impl Pkcs1v15Encrypt {
     ) -> Result<&'a [u8]>
     where
         R: TryCryptoRng + ?Sized,
-        T: UnsignedModularInt + FromBeBytes + IntegerResize<Output = T>,
+        T: UnsignedModularInt,
         K: PublicKeyParts<T>,
-        K::MontyParams: ModulusParams<Modulus = T>,
-        <K::MontyParams as ModulusParams>::MontgomeryForm:
-            IntoMontyForm<K::MontyParams> + PowBoundedExp<K::MontyParams>,
     {
         let padded_len = pub_key.size();
         let em = pkcs1v15_encrypt_pad_into(rng, msg, padded_len, storage)?;
@@ -116,11 +110,8 @@ impl Pkcs1v15Encrypt {
 #[inline]
 fn encrypt<R: TryCryptoRng + ?Sized, K, T>(rng: &mut R, pub_key: &K, msg: &[u8]) -> Result<Vec<u8>>
 where
-    T: UnsignedModularInt + FromBeBytes + IntegerResize<Output = T> + PartialOrd,
+    T: UnsignedModularInt,
     K: PublicKeyParts<T>,
-    K::MontyParams: ModulusParams<Modulus = T>,
-    <K::MontyParams as ModulusParams>::MontgomeryForm:
-        IntoMontyForm<K::MontyParams> + PowBoundedExp<K::MontyParams>,
 {
     let mut storage = vec![0u8; pub_key.size()];
     let ciphertext = Pkcs1v15Encrypt.encrypt_into(rng, pub_key, msg, &mut storage)?;
@@ -188,11 +179,8 @@ impl PaddingScheme for Pkcs1v15Encrypt {
     fn encrypt<Rng, K, T>(self, rng: &mut Rng, pub_key: &K, msg: &[u8]) -> Result<Vec<u8>>
     where
         Rng: TryCryptoRng + ?Sized,
-        T: UnsignedModularInt + FromBeBytes + IntegerResize<Output = T> + PartialOrd,
+        T: UnsignedModularInt,
         K: PublicKeyParts<T>,
-        K::MontyParams: ModulusParams<Modulus = T>,
-        <K::MontyParams as ModulusParams>::MontgomeryForm:
-            IntoMontyForm<K::MontyParams> + PowBoundedExp<K::MontyParams>,
     {
         let mut storage = vec![0u8; pub_key.size()];
         let ciphertext = self.encrypt_into(rng, pub_key, msg, &mut storage)?;
@@ -264,12 +252,8 @@ impl SignatureScheme for Pkcs1v15Sign {
 
     fn verify<K, T>(self, pub_key: &K, hashed: &[u8], sig: &[u8]) -> Result<()>
     where
-        T: UnsignedModularInt + FromBeBytes + IntegerResize<Output = T> + PartialOrd,
-        T::Bytes: AsMut<[u8]>,
+        T: UnsignedModularInt,
         K: PublicKeyParts<T>,
-        K::MontyParams: ModulusParams<Modulus = T>,
-        <K::MontyParams as ModulusParams>::MontgomeryForm:
-            IntoMontyForm<K::MontyParams> + PowBoundedExp<K::MontyParams>,
     {
         if let Some(hash_len) = self.hash_len {
             if hashed.len() != hash_len {
@@ -300,11 +284,8 @@ pub fn encrypt_into<'a, R, K, T>(
 ) -> Result<&'a [u8]>
 where
     R: TryCryptoRng + ?Sized,
-    T: UnsignedModularInt + FromBeBytes + IntegerResize<Output = T>,
+    T: UnsignedModularInt,
     K: PublicKeyParts<T>,
-    K::MontyParams: ModulusParams<Modulus = T>,
-    <K::MontyParams as ModulusParams>::MontgomeryForm:
-        IntoMontyForm<K::MontyParams> + PowBoundedExp<K::MontyParams>,
 {
     Pkcs1v15Encrypt.encrypt_into(rng, pub_key, msg, storage)
 }
@@ -369,11 +350,8 @@ pub(crate) fn verify_generic<K, T>(
     storage: &mut [u8],
 ) -> Result<()>
 where
-    T: UnsignedModularInt + IntegerResize<Output = T> + PartialOrd,
+    T: UnsignedModularInt,
     K: PublicKeyParts<T>,
-    K::MontyParams: ModulusParams<Modulus = T>,
-    <K::MontyParams as ModulusParams>::MontgomeryForm:
-        IntoMontyForm<K::MontyParams> + PowBoundedExp<K::MontyParams>,
 {
     let n = pub_key.n();
     if sig >= n.as_ref() || sig.bits_precision() != pub_key.n_bits_precision() {

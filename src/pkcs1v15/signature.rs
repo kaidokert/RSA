@@ -7,7 +7,7 @@ use core::fmt::{Debug, Display, Formatter, LowerHex, UpperHex};
 use crypto_bigint::BoxedUint;
 use signature::SignatureEncoding;
 
-use crate::traits::{modular::FromBeBytes, UnsignedModularInt};
+use crate::traits::UnsignedModularInt;
 
 #[cfg(feature = "serde")]
 use serdect::serde::{de, Deserialize, Serialize};
@@ -90,7 +90,7 @@ where
 #[cfg(feature = "alloc")]
 impl<T> TryFrom<&[u8]> for GenericSignature<T>
 where
-    T: FromBeBytes,
+    T: UnsignedModularInt,
 {
     type Error = signature::Error;
 
@@ -104,7 +104,7 @@ where
 #[cfg(feature = "alloc")]
 impl<T> SignatureEncoding for GenericSignature<T>
 where
-    T: FromBeBytes + 'static,
+    T: UnsignedModularInt + 'static,
     T::Bytes: Clone + Send + Sync + 'static,
 {
     type Repr = SignatureBytes<T>;
@@ -113,7 +113,7 @@ where
 #[cfg(all(feature = "encoding", feature = "alloc"))]
 impl<T> SignatureBitStringEncoding for GenericSignature<T>
 where
-    T: FromBeBytes + 'static,
+    T: UnsignedModularInt + 'static,
     T::Bytes: Clone + Send + Sync + 'static,
 {
     fn to_bitstring(&self) -> DerResult<BitString> {

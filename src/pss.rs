@@ -30,10 +30,7 @@ use crate::algorithms::pad::{uint_to_be_pad, uint_to_be_pad_into, uint_to_zeroiz
 use crate::algorithms::pss::*;
 use crate::algorithms::rsa::{rsa_decrypt_and_check, rsa_encrypt};
 use crate::errors::{Error, Result};
-use crate::traits::{
-    modular::{FromBeBytes, IntoMontyForm, ModulusParams, PowBoundedExp},
-    IntegerResize, PublicKeyParts, SignatureScheme, UnsignedModularInt,
-};
+use crate::traits::{PublicKeyParts, SignatureScheme, UnsignedModularInt};
 use crate::{RsaPrivateKey, RsaPublicKey};
 
 #[cfg(feature = "encoding")]
@@ -125,11 +122,8 @@ where
 
     fn verify<K, T>(mut self, pub_key: &K, hashed: &[u8], sig: &[u8]) -> Result<()>
     where
-        T: UnsignedModularInt + FromBeBytes + IntegerResize<Output = T> + PartialOrd,
+        T: UnsignedModularInt,
         K: PublicKeyParts<T>,
-        K::MontyParams: ModulusParams<Modulus = T>,
-        <K::MontyParams as ModulusParams>::MontgomeryForm:
-            IntoMontyForm<K::MontyParams> + PowBoundedExp<K::MontyParams>,
     {
         let sig = T::from_be_bytes_vartime(sig);
         if sig >= *pub_key.n().as_ref() || sig.bits_precision() != pub_key.n_bits_precision() {

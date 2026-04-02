@@ -38,8 +38,7 @@ use crate::traits::keys::PublicKeyParts;
 #[cfg(feature = "private-key")]
 use crate::traits::keys::{CrtValue, PrivateKeyParts};
 use crate::traits::{
-    modular::{FromBeBytes, IntoMontyForm, ModulusParams, PowBoundedExp},
-    IntegerResize, NonZero, PaddingScheme, SignatureScheme, UnsignedModularInt,
+    modular::ModulusParams, NonZero, PaddingScheme, SignatureScheme, UnsignedModularInt,
 };
 
 /// Represents the public part of an RSA key.
@@ -259,9 +258,8 @@ where
 
 impl<T, M> GenericRsaPublicKey<T, M>
 where
-    T: UnsignedModularInt + FromBeBytes + IntegerResize<Output = T> + PartialOrd,
+    T: UnsignedModularInt,
     M: ModulusParams<Modulus = T>,
-    M::MontgomeryForm: IntoMontyForm<M> + PowBoundedExp<M>,
 {
     /// Encrypt the given message.
     #[cfg(feature = "alloc")]
@@ -280,10 +278,7 @@ where
     /// passed in through `hash`.
     ///
     /// If the message is valid `Ok(())` is returned, otherwise an `Err` indicating failure.
-    pub fn verify<S: SignatureScheme>(&self, scheme: S, hashed: &[u8], sig: &[u8]) -> Result<()>
-    where
-        T::Bytes: AsMut<[u8]>,
-    {
+    pub fn verify<S: SignatureScheme>(&self, scheme: S, hashed: &[u8], sig: &[u8]) -> Result<()> {
         scheme.verify(self, hashed, sig)
     }
 }

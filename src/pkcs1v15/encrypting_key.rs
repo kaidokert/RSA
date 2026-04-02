@@ -1,10 +1,7 @@
 use super::encrypt_into;
 use crate::{
     key::GenericRsaPublicKey,
-    traits::{
-        modular::{FromBeBytes, IntoMontyForm, ModulusParams, PowBoundedExp},
-        IntegerResize, PublicKeyParts, RandomizedEncryptor, UnsignedModularInt,
-    },
+    traits::{modular::ModulusParams, PublicKeyParts, RandomizedEncryptor, UnsignedModularInt},
     Result,
 };
 #[cfg(feature = "alloc")]
@@ -22,7 +19,7 @@ use serde::{Deserialize, Serialize};
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct GenericEncryptingKey<T, M>
 where
-    T: UnsignedModularInt + IntegerResize<Output = T> + PartialOrd,
+    T: UnsignedModularInt,
     M: ModulusParams<Modulus = T>,
 {
     pub(super) inner: GenericRsaPublicKey<T, M>,
@@ -34,7 +31,7 @@ pub type EncryptingKey = GenericEncryptingKey<BoxedUint, BoxedMontyParams>;
 
 impl<T, M> GenericEncryptingKey<T, M>
 where
-    T: UnsignedModularInt + IntegerResize<Output = T> + PartialOrd,
+    T: UnsignedModularInt,
     M: ModulusParams<Modulus = T>,
 {
     /// Create a new encrypting key from an RSA public key.
@@ -45,9 +42,8 @@ where
 
 impl<T, M> RandomizedEncryptor for GenericEncryptingKey<T, M>
 where
-    T: UnsignedModularInt + FromBeBytes + IntegerResize<Output = T> + PartialOrd,
+    T: UnsignedModularInt,
     M: ModulusParams<Modulus = T>,
-    M::MontgomeryForm: IntoMontyForm<M> + PowBoundedExp<M>,
 {
     fn encrypt_with_rng_into<'a, R: rand_core::TryCryptoRng + ?Sized>(
         &self,

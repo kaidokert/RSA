@@ -23,7 +23,7 @@ use crate::{
     errors::{Error, Result},
     traits::{
         modular::{IntoMontyForm, ModulusParams, Pow, PowBoundedExp},
-        IntegerResize, NonZero, UnsignedModularInt,
+        NonZero, UnsignedModularInt,
     },
 };
 
@@ -36,11 +36,8 @@ use crate::{
 #[inline]
 pub fn rsa_encrypt<T, K>(key: &K, m: &T) -> Result<T>
 where
-    T: UnsignedModularInt + IntegerResize<Output = T>,
+    T: UnsignedModularInt,
     K: PublicKeyParts<T>,
-    K::MontyParams: ModulusParams<Modulus = T>,
-    <K::MontyParams as ModulusParams>::MontgomeryForm:
-        IntoMontyForm<K::MontyParams> + PowBoundedExp<K::MontyParams>,
 {
     let e = key.e();
     let res = pow_mod_params_vartime_exp_bits(m, e, e.bits(), key.n_params());
@@ -266,12 +263,12 @@ fn unblind(m: &BoxedUint, unblinder: &BoxedUint, n_params: &BoxedMontyParams) ->
 /// Computes `base.pow_mod(exp, n)` with precomputed `n_params`.
 fn pow_mod_params<T, M>(base: &T, exp: &T, n_params: &M) -> T
 where
-    T: UnsignedModularInt + IntegerResize<Output = T>,
+    T: UnsignedModularInt,
     M: ModulusParams<Modulus = T>,
-    M::MontgomeryForm: IntoMontyForm<M> + Pow<M>,
+    M::MontgomeryForm: Pow<M>,
 {
     let base = reduce_vartime(base, n_params);
-    base.pow(exp).retrieve()
+    Pow::retrieve(&base.pow(exp))
 }
 
 /// Computes `base.pow_mod(exp, n)` with a bounded exponent and precomputed `n_params`.
@@ -279,9 +276,8 @@ where
 /// The exponent bit length `exp_bits` may be leaked in the time pattern.
 fn pow_mod_params_vartime_exp_bits<T, M>(base: &T, exp: &T, exp_bits: u32, n_params: &M) -> T
 where
-    T: UnsignedModularInt + IntegerResize<Output = T>,
+    T: UnsignedModularInt,
     M: ModulusParams<Modulus = T>,
-    M::MontgomeryForm: IntoMontyForm<M> + PowBoundedExp<M>,
 {
     let base = reduce_vartime(base, n_params);
     base.pow_bounded_exp(exp, exp_bits).retrieve()
@@ -289,9 +285,8 @@ where
 
 fn reduce_vartime<T, M>(n: &T, p: &M) -> M::MontgomeryForm
 where
-    T: UnsignedModularInt + IntegerResize<Output = T>,
+    T: UnsignedModularInt,
     M: ModulusParams<Modulus = T>,
-    M::MontgomeryForm: IntoMontyForm<M>,
 {
     let modulus = NonZero::new(p.modulus().as_ref().clone()).expect("modulus is non-zero");
     let n_reduced = n.rem_vartime(&modulus).resize_unchecked(p.bits_precision());

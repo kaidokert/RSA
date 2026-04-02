@@ -94,7 +94,7 @@ where
 #[cfg(not(feature = "alloc"))]
 impl<T> UnsignedModularInt for T
 where
-    T: FixedWidthUnsignedInt + IntegerResize<Output = T> + core::ops::Rem<Output = T>,
+    T: FixedWidthUnsignedInt + core::ops::Rem<Output = T> + PartialOrd,
 {
     type Bytes = <T as FixedWidthUnsignedInt>::Bytes;
 
@@ -138,8 +138,14 @@ where
     }
 }
 
-pub trait UnsignedModularInt: Zeroize + Clone + IntegerResize<Output = Self> {
-    type Bytes: NumBytes;
+pub trait FromBeBytes {
+    fn from_be_bytes_vartime(bytes: &[u8]) -> Self;
+}
+
+pub trait UnsignedModularInt:
+    Zeroize + Clone + PartialOrd + IntegerResize<Output = Self> + FromBeBytes
+{
+    type Bytes: NumBytes + AsMut<[u8]>;
     fn leading_zeros(&self) -> u32;
     fn to_be_bytes(&self) -> Self::Bytes;
     fn rem_vartime(&self, modulus: &NonZero<Self>) -> Self;
@@ -148,10 +154,6 @@ pub trait UnsignedModularInt: Zeroize + Clone + IntegerResize<Output = Self> {
     fn bits_precision(&self) -> u32;
     #[cfg(feature = "alloc")]
     fn to_be_bytes_trimmed_vartime(&self) -> Box<[u8]>;
-}
-
-pub trait FromBeBytes: UnsignedModularInt {
-    fn from_be_bytes_vartime(bytes: &[u8]) -> Self;
 }
 
 impl<T> NonZero<T>
@@ -269,9 +271,9 @@ impl Pow<BoxedMontyParams> for BoxedMontyForm {
     }
 }
 
-pub trait ModulusParams {
+pub trait ModulusParams: Sized {
     type Modulus: UnsignedModularInt;
-    type MontgomeryForm;
+    type MontgomeryForm: IntoMontyForm<Self> + PowBoundedExp<Self>;
     fn modulus(&self) -> &Odd<Self::Modulus>;
     fn bits_precision(&self) -> u32;
 }
