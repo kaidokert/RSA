@@ -1,6 +1,5 @@
 /target
 **/*.rs.bk
-shims/fake_crypto_bigint/target/
-shims/fake_crypto_bigint/Cargo.lock
 integrate_thumb/target/
 integrate_thumb/Cargo.lock
+footprint/cortex-m/target/
