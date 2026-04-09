@@ -110,6 +110,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "c0nst"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "019024ed810d5466b603e9369a8f887ae1f0b87bb6b16d46995c062e34a5cfde"
+dependencies = [
+ "proc-macro2",
+]
+
+[[package]]
 name = "cbc"
 version = "0.2.0-rc.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -281,6 +290,18 @@ name = "fastrand"
 version = "2.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "37909eebbb50d72f9059c3b6d82c0463f2ff062c9e95845c43a6c9c0355411be"
+
+[[package]]
+name = "fixed-bigint"
+version = "0.2.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "03fc3c9e92275aa81261b08f10464ca9c8e2483bd0dec2ac5913d66d6b92cb74"
+dependencies = [
+ "c0nst",
+ "num-integer",
+ "num-traits",
+ "zeroize",
+]
 
 [[package]]
 name = "fnv"
@@ -510,6 +531,24 @@ name = "memchr"
 version = "2.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f52b00d39961fc5b2736ea853c9cc86238e165017a493d1d5c8eac6bdc4cc273"
+
+[[package]]
+name = "modmath"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "09affa2336723fa147077af3ad9cb540419782a88ea9ee91476a84da273797e6"
+dependencies = [
+ "num-traits",
+]
+
+[[package]]
+name = "num-integer"
+version = "0.1.46"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7969661fd2958a5cb096e56c8e1ad0444ac2bbcd0061bd28660485a44879858f"
+dependencies = [
+ "num-traits",
+]
 
 [[package]]
 name = "num-traits"
@@ -783,9 +822,13 @@ dependencies = [
  "crypto-bigint",
  "crypto-common",
  "crypto-primes",
+ "ctutils",
  "digest",
+ "fixed-bigint",
  "hex",
  "hex-literal",
+ "modmath",
+ "num-traits",
  "pkcs1",
  "pkcs8",
  "proptest",

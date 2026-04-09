@@ -42,11 +42,9 @@ pub fn test_fixture(testable: fn() -> bool, backend: &str) -> ! {
     } else {
         let _ = writeln!(w, "rsa REJECT");
     }
-    let _ = writeln!(
-        w,
-        "METRIC stack:{} cycles:{} target:riscv32 backend:{}",
-        stack, elapsed, backend
-    );
+    let _ = write!(w, "METRIC stack:{} cycles:{} target:riscv32 backend:", stack, elapsed);
+    let _ = w.write_str(backend);
+    let _ = w.write_str("\n");
 
     // sifive_e has no exit mechanism — loop forever, wrapper kills QEMU
     loop {

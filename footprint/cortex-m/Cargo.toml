@@ -18,6 +18,7 @@ panic-semihosting = { version = "0.6", features = ["exit"] }
 fixed-bigint = { version = "0.2.5", default-features = false, features = ["zeroize", "use-unsafe"] }
 rsa = { path = "../..", package = "rsa", default-features = false, features = ["modmath"] }
 sha1 = { version = "0.11.0-rc.5", default-features = false, features = ["oid"] }
+sha2 = { version = "0.11.0-rc.5", default-features = false, features = ["oid"] }
 
 [profile.release]
 codegen-units = 1

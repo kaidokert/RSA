@@ -4,9 +4,7 @@
 Generates a markdown metrics table from the results.
 """
 
-import json
 import os
-from pathlib import Path
 import re
 import subprocess
 import sys
@@ -29,7 +27,6 @@ TARGET_DIR = os.path.join(tempfile.gettempdir(), "rsa_footprint_cortexm")
 SYSROOT = subprocess.run(
     ["rustc", "--print", "sysroot"], capture_output=True, text=True, check=True
 ).stdout.strip()
-LLVM_SIZE = Path(SYSROOT) / "lib" / "rustlib" / "x86_64-pc-windows-msvc" / "bin" / "llvm-size.exe"
 
 
 def run_cmd(args, timeout=TIMEOUT_RUN, **kwargs):
@@ -80,23 +77,22 @@ def run_qemu(target, example, features):
     return combined
 
 
-def artifact_path(target, example):
-    return Path(TARGET_DIR) / target / "release" / "examples" / example
-
-
 def get_text_size(target, example, features):
-    """Get .text section size via llvm-size output."""
+    """Get .text section size via cargo-size output."""
     try:
-        args = [str(LLVM_SIZE), "-A", str(artifact_path(target, example))]
+        args = ["cargo", "size", "--target", target, "--release", "--example", example]
+        if features:
+            args.extend(["--features", ",".join(features)])
+        args.extend(["--", "-A"])
         rc, out, err = run_cmd(args, timeout=TIMEOUT_BUILD)
         if rc == 0:
             match = re.search(r"^\.text\s+(\d+)\s", out, re.MULTILINE)
             if match:
                 return int(match.group(1))
         else:
-            print(f"    llvm-size failed (rc={rc}): {err.strip()}", file=sys.stderr)
+            print(f"    cargo size failed (rc={rc}): {err.strip()}", file=sys.stderr)
     except (subprocess.TimeoutExpired, FileNotFoundError) as e:
-        print(f"    llvm-size not available: {e}", file=sys.stderr)
+        print(f"    cargo size not available: {e}", file=sys.stderr)
     return None
 
 

@@ -197,16 +197,17 @@ impl<T: ModMathInt> ModMathParams<T> {
 }
 
 /// Construct a public key backed by the `modmath` adapter from big-endian
-/// modulus bytes and a small public exponent.
+/// modulus bytes and a public exponent.
 pub fn public_key_from_be_bytes<T>(
     modulus: &[u8],
-    exponent: u8,
+    exponent: u32,
 ) -> Result<GenericRsaPublicKey<ModMathValue<T>, ModMathParams<T>>>
 where
     T: ModMathInt,
 {
     let n = wrap_value(<T as FixedWidthUnsignedInt>::from_be_bytes_vartime(modulus));
-    let e = wrap_value(<T as From<u8>>::from(exponent));
+    let exponent = exponent.to_be_bytes();
+    let e = wrap_value(<T as FixedWidthUnsignedInt>::from_be_bytes_vartime(&exponent));
     GenericRsaPublicKey::from_components(n, e, ModMathParams::new(unwrap_value(&n))?)
 }
 

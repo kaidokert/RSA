@@ -23,7 +23,9 @@ pub const SIGNATURE: [u8; 64] = [
 pub const MESSAGE: &[u8] = b"hello world!";
 
 use cyclecount::CycleCounter;
-use stack::{check_stack_high_water_mark, paint_stack};
+use stack::{
+    check_stack_high_water_mark, check_stack_high_water_mark_inner, paint_stack, paint_stack_inner,
+};
 
 pub fn target_arch_name() -> &'static str {
     #[cfg(thumbv6m)]
@@ -46,6 +48,31 @@ pub fn test_fixture(testable: fn() -> bool, backend: &str) {
     let result = testable();
     let elapsed = counter.elapsed() / 1000;
     let stack = check_stack_high_water_mark();
+    if result {
+        hprintln!("rsa ACCEPT");
+    } else {
+        hprintln!("rsa REJECT");
+    }
+    hprintln!(
+        "METRIC stack:{} cycles:{} target:{} backend:{}",
+        stack,
+        elapsed,
+        target_arch_name(),
+        backend
+    );
+    if result {
+        debug::exit(debug::EXIT_SUCCESS);
+    } else {
+        debug::exit(debug::EXIT_FAILURE);
+    }
+}
+
+pub fn test_fixture_arg<const SAFE_ZONE_BYTES: usize>(testable: fn() -> bool, backend: &str) {
+    paint_stack_inner::<SAFE_ZONE_BYTES>();
+    let counter = CycleCounter::new();
+    let result = testable();
+    let elapsed = counter.elapsed() / 1000;
+    let stack = check_stack_high_water_mark_inner::<SAFE_ZONE_BYTES>();
     if result {
         hprintln!("rsa ACCEPT");
     } else {

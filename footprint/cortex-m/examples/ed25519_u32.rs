@@ -6,12 +6,12 @@ use fixed_bigint::FixedUInt;
 use rsa::modmath_support::public_key_from_be_bytes;
 use rsa::pkcs1v15::{GenericSignature, GenericVerifyingKey};
 use rsa::signature::DigestVerifier;
-use rsa_footprint_cortex_m::{test_fixture, MESSAGE, MODULUS, SIGNATURE};
+use rsa_footprint_cortex_m::{test_fixture_arg, MESSAGE, MODULUS, SIGNATURE};
 use sha1::Sha1;
 
 #[entry]
 fn main() -> ! {
-    test_fixture(
+    test_fixture_arg::<2048>(
         || {
             type U512 = FixedUInt<u32, 16>;
             let key = public_key_from_be_bytes::<U512>(&MODULUS, 3).unwrap();
