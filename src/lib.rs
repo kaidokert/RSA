@@ -268,6 +268,8 @@ pub use pkcs8;
 #[cfg(feature = "sha2")]
 pub use sha2;
 
+#[cfg(feature = "alloc")]
+pub use crate::key::RsaPublicKey;
 #[cfg(all(feature = "alloc", feature = "private-key"))]
 pub use crate::traits::keys::CrtValue;
 pub use crate::{
@@ -275,8 +277,6 @@ pub use crate::{
     key::GenericRsaPublicKey,
     pkcs1v15::{Pkcs1v15Encrypt, Pkcs1v15Sign},
 };
-#[cfg(feature = "alloc")]
-pub use crate::key::RsaPublicKey;
 
 #[cfg(feature = "private-key")]
 pub use crate::key::RsaPrivateKey;
