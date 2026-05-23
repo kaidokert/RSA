@@ -112,6 +112,10 @@ where
     }
 }
 
+//
+// `*Verifier` trait impls
+//
+
 impl<D, T, M> DigestVerifier<D, GenericSignature<T>> for GenericVerifyingKey<D, T, M>
 where
     D: Default + FixedOutput + HashMarker + Update,
@@ -155,6 +159,10 @@ where
     }
 }
 
+//
+// Other trait impls
+//
+
 impl<D, T, M> AsRef<GenericRsaPublicKey<T, M>> for GenericVerifyingKey<D, T, M>
 where
     D: Digest,
@@ -177,6 +185,7 @@ where
     const ALGORITHM_IDENTIFIER: AlgorithmIdentifierRef<'static> = pkcs1::ALGORITHM_ID;
 }
 
+// Implemented manually so we don't have to bind D with Clone
 impl<D, T, M> Clone for GenericVerifyingKey<D, T, M>
 where
     D: Digest,
