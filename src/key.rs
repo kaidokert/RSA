@@ -527,7 +527,7 @@ impl RsaPrivateKey {
     /// This is intended for interoperating with systems that use non-standard exponents
     /// or loading legacy keys. Use [`RsaPrivateKey::from_components`] for standard key
     /// construction.
-    #[cfg(feature = "hazmat")]
+    #[cfg(all(feature = "hazmat", feature = "private-key"))]
     pub fn from_components_with_large_exponent(
         n: BoxedUint,
         e: BoxedUint,
@@ -893,7 +893,7 @@ fn validate_private_key_parts(key: &RsaPrivateKey) -> Result<()> {
 ///
 /// This performs all the same checks as `RsaPrivateKey::validate()` except
 /// it doesn't verify that the exponent is within the standard bounds.
-#[cfg(feature = "hazmat")]
+#[cfg(all(feature = "hazmat", feature = "private-key"))]
 fn validate_skip_exponent_size(key: &RsaPrivateKey) -> Result<()> {
     // Check public key properties (without exponent size checks)
     check_public_skip_exponent_size(key.pubkey_components.n.as_ref(), &key.pubkey_components.e)?;
@@ -949,6 +949,7 @@ impl<'de> Deserialize<'de> for RsaPrivateKey {
 }
 
 #[cfg(test)]
+#[cfg(all(feature = "alloc", feature = "private-key"))]
 mod tests {
     use super::*;
     use crate::algorithms::rsa::{rsa_decrypt_and_check, rsa_encrypt};

@@ -12,7 +12,7 @@ use core::borrow::Borrow;
 
 /// Returns a new vector of the given length, with 0s left padded.
 #[cfg(test)]
-#[cfg(feature = "alloc")]
+#[cfg(feature = "private-key")]
 #[inline]
 fn left_pad(input: &[u8], padded_len: usize) -> Result<Vec<u8>> {
     let mut out = vec![0u8; padded_len];
@@ -93,6 +93,7 @@ where
 }
 
 #[cfg(test)]
+#[cfg(feature = "private-key")]
 mod tests {
     use super::*;
     #[test]

@@ -407,6 +407,7 @@ mod oid {
 pub use oid::RsaSignatureAssociatedOid;
 
 #[cfg(test)]
+#[cfg(all(feature = "alloc", feature = "private-key"))]
 mod tests {
     use super::*;
     use ::signature::{

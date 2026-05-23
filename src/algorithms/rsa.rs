@@ -438,6 +438,7 @@ pub(crate) fn compute_private_exponent_carmicheal(
 }
 
 #[cfg(test)]
+#[cfg(feature = "private-key")]
 mod tests {
     use super::*;
 

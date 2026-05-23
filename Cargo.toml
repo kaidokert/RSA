@@ -57,24 +57,24 @@ fixed-bigint = { version = "0.2.5", default-features = false, features = ["zeroi
 [[bench]]
 name = "key"
 
-# Host examples that demonstrate the generic `modmath` backend. Gating on the
-# `modmath` feature keeps `cargo hack --feature-powerset` happy in combos that
-# disable it.
+# Host examples that demonstrate the generic `modmath` backend. They use the
+# alloc-only `ModMathValue::from_inner` wrapper, so the powerset of features
+# must include both `modmath` and `alloc`.
 [[example]]
 name = "rsa1024_verify"
-required-features = ["modmath"]
+required-features = ["modmath", "alloc"]
 
 [[example]]
 name = "rsa2048_verify"
-required-features = ["modmath"]
+required-features = ["modmath", "alloc"]
 
 [[example]]
 name = "rsa3072_verify"
-required-features = ["modmath"]
+required-features = ["modmath", "alloc"]
 
 [[example]]
 name = "rsa_decrypt"
-required-features = ["modmath"]
+required-features = ["modmath", "alloc"]
 
 [features]
 default = ["std", "encoding", "full", "modmath" ]

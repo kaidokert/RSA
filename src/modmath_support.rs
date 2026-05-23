@@ -372,6 +372,7 @@ impl<T: ModMathInt> ModulusParams for ModMathParams<T> {
 }
 
 #[cfg(test)]
+#[cfg(all(feature = "alloc", feature = "private-key"))]
 mod tests {
     use fixed_bigint::FixedUInt;
     use rand::rngs::ChaCha8Rng;
