@@ -11,18 +11,15 @@ mod fixture {
 fn main() {
     type U2048 = FixedUInt<u32, 64>;
 
-    let key = public_key_from_be_bytes::<U2048>(
-        &fixture::RSA2048_MODULUS,
-        fixture::RSA2048_PUBLIC_EXPONENT,
-    )
-    .expect("public key");
+    let key = public_key_from_be_bytes::<U2048>(&fixture::MODULUS, fixture::PUBLIC_EXPONENT)
+        .expect("public key");
     let verifying_key = GenericVerifyingKey::<Sha256, _, _>::new(key);
     let signature = GenericSignature::from(rsa::ModMathValue::from_inner(U2048::from_be_bytes(
-        &fixture::RSA2048_SIGNATURE,
+        &fixture::SIGNATURE,
     )));
 
     verifying_key
-        .verify(fixture::RSA2048_MESSAGE, &signature)
+        .verify(fixture::MESSAGE, &signature)
         .expect("pkcs1v15 verify");
 
     println!("rsa2048 verify: ok");

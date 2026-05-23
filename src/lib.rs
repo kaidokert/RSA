@@ -1,6 +1,9 @@
 #![cfg_attr(not(test), no_std)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
-#![cfg_attr(not(feature = "alloc"), allow(unused))]
+#![cfg_attr(
+    not(all(feature = "alloc", feature = "full", feature = "private-key")),
+    allow(unused)
+)]
 #![doc = include_str!("../README.md")]
 #![doc(html_logo_url = "https://raw.githubusercontent.com/RustCrypto/meta/master/logo_small.png")]
 #![warn(missing_docs)]
@@ -267,26 +270,20 @@ pub use sha2;
 
 #[cfg(all(feature = "alloc", feature = "private-key"))]
 pub use crate::traits::keys::CrtValue;
-#[cfg(all(not(feature = "alloc"), feature = "full"))]
-pub use crate::{
-    errors::{Error, Result},
-    key::{GenericRsaPublicKey, RsaPrivateKey},
-    pkcs1v15::{Pkcs1v15Encrypt, Pkcs1v15Sign},
-};
-#[cfg(feature = "alloc")]
-pub use crate::{
-    errors::{Error, Result},
-    key::{GenericRsaPublicKey, RsaPrivateKey, RsaPublicKey},
-    oaep::Oaep,
-    pkcs1v15::{Pkcs1v15Encrypt, Pkcs1v15Sign},
-    pss::Pss,
-};
-
-#[cfg(all(not(feature = "alloc"), not(feature = "full")))]
 pub use crate::{
     errors::{Error, Result},
     key::GenericRsaPublicKey,
+    pkcs1v15::{Pkcs1v15Encrypt, Pkcs1v15Sign},
 };
+#[cfg(feature = "alloc")]
+pub use crate::key::RsaPublicKey;
+
+#[cfg(feature = "private-key")]
+pub use crate::key::RsaPrivateKey;
+
+// OAEP / PSS schemes are part of the `full` feature.
+#[cfg(feature = "full")]
+pub use crate::{oaep::Oaep, pss::Pss};
 
 #[cfg(all(feature = "hazmat", feature = "alloc"))]
 pub mod hazmat;

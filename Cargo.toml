@@ -57,9 +57,28 @@ fixed-bigint = { version = "0.2.5", default-features = false, features = ["zeroi
 [[bench]]
 name = "key"
 
+# Host examples that demonstrate the generic `modmath` backend. Gating on the
+# `modmath` feature keeps `cargo hack --feature-powerset` happy in combos that
+# disable it.
+[[example]]
+name = "rsa1024_verify"
+required-features = ["modmath"]
+
+[[example]]
+name = "rsa2048_verify"
+required-features = ["modmath"]
+
+[[example]]
+name = "rsa3072_verify"
+required-features = ["modmath"]
+
+[[example]]
+name = "rsa_decrypt"
+required-features = ["modmath"]
+
 [features]
 default = ["std", "encoding", "full", "modmath" ]
-encoding = ["alloc", "dep:pkcs1", "dep:pkcs8", "dep:spki"]
+encoding = ["alloc", "private-key", "dep:pkcs1", "dep:pkcs8", "dep:spki"]
 hazmat = []
 getrandom = ["dep:crypto-bigint", "crypto-bigint/getrandom", "crypto-common"]
 serde = ["encoding", "dep:serde", "dep:serdect", "dep:crypto-bigint", "crypto-bigint/serde"]
