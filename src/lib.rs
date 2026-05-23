@@ -1,5 +1,6 @@
 #![cfg_attr(not(test), no_std)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
+#![cfg_attr(not(feature = "alloc"), allow(unused))]
 #![doc = include_str!("../README.md")]
 #![doc(html_logo_url = "https://raw.githubusercontent.com/RustCrypto/meta/master/logo_small.png")]
 #![warn(missing_docs)]
@@ -229,26 +230,34 @@
 #[cfg(doctest)]
 pub struct ReadmeDoctests;
 
+#[cfg(feature = "alloc")]
 #[macro_use]
 extern crate alloc;
 #[cfg(feature = "std")]
 extern crate std;
 
+#[cfg(feature = "alloc")]
 pub use crypto_bigint::BoxedUint;
 pub use rand_core;
 pub use signature;
 
 mod algorithms;
 pub mod errors;
+#[cfg(feature = "full")]
 pub mod oaep;
 pub mod pkcs1v15;
+#[cfg(feature = "full")]
 pub mod pss;
 pub mod traits;
 
 mod dummy_rng;
 mod encoding;
 mod key;
+#[cfg(feature = "modmath")]
+pub mod modmath_support;
 
+#[cfg(feature = "modmath")]
+pub use crate::modmath_support::{ModMathForm, ModMathInt, ModMathParams, ModMathValue};
 #[cfg(feature = "encoding")]
 pub use pkcs1;
 #[cfg(feature = "encoding")]
@@ -256,14 +265,28 @@ pub use pkcs8;
 #[cfg(feature = "sha2")]
 pub use sha2;
 
+#[cfg(all(feature = "alloc", feature = "private-key"))]
+pub use crate::traits::keys::CrtValue;
+#[cfg(all(not(feature = "alloc"), feature = "full"))]
 pub use crate::{
     errors::{Error, Result},
-    key::{RsaPrivateKey, RsaPublicKey},
+    key::{GenericRsaPublicKey, RsaPrivateKey},
+    pkcs1v15::{Pkcs1v15Encrypt, Pkcs1v15Sign},
+};
+#[cfg(feature = "alloc")]
+pub use crate::{
+    errors::{Error, Result},
+    key::{GenericRsaPublicKey, RsaPrivateKey, RsaPublicKey},
     oaep::Oaep,
     pkcs1v15::{Pkcs1v15Encrypt, Pkcs1v15Sign},
     pss::Pss,
-    traits::keys::CrtValue,
 };
 
-#[cfg(feature = "hazmat")]
+#[cfg(all(not(feature = "alloc"), not(feature = "full")))]
+pub use crate::{
+    errors::{Error, Result},
+    key::GenericRsaPublicKey,
+};
+
+#[cfg(all(feature = "hazmat", feature = "alloc"))]
 pub mod hazmat;

@@ -1,0 +1,41 @@
+cargo-features = ["profile-rustflags"]
+
+[package]
+name = "rsa_footprint_avr"
+version = "0.1.0"
+edition = "2024"
+autobins = false
+autotests = false
+autobenches = false
+
+[features]
+baseline = []
+
+[dependencies]
+avr-device = { version = "0.7", features = ["atmega2560", "rt"] }
+fixed-bigint = { version = "0.2.5", default-features = false, features = ["zeroize", "use-unsafe"] }
+rsa = { path = "../..", package = "rsa", default-features = false, features = ["modmath"] }
+sha1 = { version = "0.11.0-rc.5", default-features = false, features = ["oid"] }
+sha2 = { version = "0.11.0-rc.5", default-features = false, features = ["oid"] }
+ufmt = { version = "0.2" }
+
+[dependencies.arduino-hal]
+git = "https://github.com/rahix/avr-hal"
+rev = "ravedude-0.2.0"
+features = ["arduino-mega2560"]
+
+[profile.dev]
+panic = "abort"
+lto = "fat"
+opt-level = "z"
+codegen-units = 1
+strip = "none"
+debug = "full"
+rustflags = ["-Z", "ub-checks=no"]
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+debug = true
+lto = true
+opt-level = "z"

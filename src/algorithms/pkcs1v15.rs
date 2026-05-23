@@ -6,9 +6,10 @@
 //!
 //! [RFC8017 § 8.2]: https://datatracker.ietf.org/doc/html/rfc8017#section-8.2
 
+#[cfg(feature = "alloc")]
 use alloc::vec::Vec;
 use const_oid::AssociatedOid;
-use crypto_bigint::{Choice, CtAssign, CtEq, CtSelect};
+use ctutils::{Choice, CtAssign, CtEq, CtSelect};
 use digest::Digest;
 use rand_core::TryCryptoRng;
 use zeroize::Zeroizing;
@@ -38,6 +39,7 @@ fn non_zero_random_bytes<R: TryCryptoRng + ?Sized>(
 
 /// Applied the padding scheme from PKCS#1 v1.5 for encryption.  The message must be no longer than
 /// the length of the public modulus minus 11 bytes.
+#[cfg(feature = "alloc")]
 pub(crate) fn pkcs1v15_encrypt_pad<R>(
     rng: &mut R,
     msg: &[u8],
@@ -46,12 +48,25 @@ pub(crate) fn pkcs1v15_encrypt_pad<R>(
 where
     R: TryCryptoRng + ?Sized,
 {
+    let mut em = Zeroizing::new(vec![0u8; k]);
+    pkcs1v15_encrypt_pad_into(rng, msg, k, &mut em)?;
+    Ok(em)
+}
+
+pub fn pkcs1v15_encrypt_pad_into<'a, R>(
+    rng: &mut R,
+    msg: &[u8],
+    k: usize,
+    storage: &'a mut [u8],
+) -> Result<&'a [u8]>
+where
+    R: TryCryptoRng + ?Sized,
+{
     if msg.len() + 11 > k {
         return Err(Error::MessageTooLong);
     }
-
     // EM = 0x00 || 0x02 || PS || 0x00 || M
-    let mut em = Zeroizing::new(vec![0u8; k]);
+    let em = storage.get_mut(..k).ok_or(Error::OutputBufferTooSmall)?;
     em[1] = 2;
     non_zero_random_bytes(rng, &mut em[2..k - msg.len() - 1]).map_err(|_: R::Error| Error::Rng)?;
     em[k - msg.len() - 1] = 0;
@@ -66,14 +81,28 @@ where
 /// learn whether each instance returned an error then they can decrypt and
 /// forge signatures as if they had the private key. See
 /// `decrypt_session_key` for a way of solving this problem.
+#[cfg(feature = "alloc")]
 #[inline]
 pub(crate) fn pkcs1v15_encrypt_unpad(em: Vec<u8>, k: usize) -> Result<Vec<u8>> {
-    let (valid, out, index) = decrypt_inner(em, k)?;
+    let mut out = vec![0u8; k];
+    let out = pkcs1v15_encrypt_unpad_into(&em, k, &mut out)?;
+    Ok(out.to_vec())
+}
+
+#[inline]
+pub fn pkcs1v15_encrypt_unpad_into<'a>(
+    em: &[u8],
+    k: usize,
+    storage: &'a mut [u8],
+) -> Result<&'a [u8]> {
+    let (valid, index) = decrypt_inner(em, k)?;
     if valid == 0 {
         return Err(Error::Decryption);
     }
 
-    Ok(out[index as usize..].to_vec())
+    let out = storage.get_mut(..k).ok_or(Error::OutputBufferTooSmall)?;
+    out.copy_from_slice(em);
+    Ok(&out[index as usize..])
 }
 
 /// Removes the PKCS1v15 padding It returns one or zero in valid that indicates whether the
@@ -82,7 +111,7 @@ pub(crate) fn pkcs1v15_encrypt_unpad(em: Vec<u8>, k: usize) -> Result<Vec<u8>> {
 /// in order to maintain constant memory access patterns. If the plaintext was
 /// valid then index contains the index of the original message in em.
 #[inline]
-fn decrypt_inner(em: Vec<u8>, k: usize) -> Result<(u8, Vec<u8>, u32)> {
+fn decrypt_inner(em: &[u8], k: usize) -> Result<(u8, u32)> {
     if k < 11 {
         return Err(Error::Decryption);
     }
@@ -113,11 +142,24 @@ fn decrypt_inner(em: Vec<u8>, k: usize) -> Result<(u8, Vec<u8>, u32)> {
     let valid = first_byte_is_zero & second_byte_is_two & !looking_for_index & valid_ps;
     index = u32::ct_select(&0, &(index + 1), valid);
 
-    Ok((valid.to_u8(), em, index))
+    Ok((valid.to_u8(), index))
+}
+
+#[cfg(feature = "alloc")]
+#[inline]
+pub(crate) fn pkcs1v15_sign_pad(prefix: &[u8], hashed: &[u8], k: usize) -> Result<Vec<u8>> {
+    let mut em = vec![0xff; k];
+    pkcs1v15_sign_pad_into(prefix, hashed, k, &mut em)?;
+    Ok(em)
 }
 
 #[inline]
-pub(crate) fn pkcs1v15_sign_pad(prefix: &[u8], hashed: &[u8], k: usize) -> Result<Vec<u8>> {
+pub fn pkcs1v15_sign_pad_into<'a>(
+    prefix: &[u8],
+    hashed: &[u8],
+    k: usize,
+    storage: &'a mut [u8],
+) -> Result<&'a [u8]> {
     let hash_len = hashed.len();
     let t_len = prefix.len() + hashed.len();
     if k < t_len + 11 {
@@ -125,7 +167,8 @@ pub(crate) fn pkcs1v15_sign_pad(prefix: &[u8], hashed: &[u8], k: usize) -> Resul
     }
 
     // EM = 0x00 || 0x01 || PS || 0x00 || T
-    let mut em = vec![0xff; k];
+    let em = storage.get_mut(..k).ok_or(Error::OutputBufferTooSmall)?;
+    em.fill(0xff);
     em[0] = 0;
     em[1] = 1;
     em[k - t_len - 1] = 0;
@@ -163,25 +206,41 @@ pub(crate) fn pkcs1v15_sign_unpad(prefix: &[u8], hashed: &[u8], em: &[u8], k: us
 }
 
 /// prefix = 0x30 <oid_len + 8 + digest_len> 0x30 <oid_len + 4> 0x06 <oid_len> oid 0x05 0x00 0x04 <digest_len>
+#[cfg(feature = "alloc")]
 #[inline]
 pub(crate) fn pkcs1v15_generate_prefix<D>() -> Vec<u8>
 where
     D: Digest + AssociatedOid,
 {
     let oid = D::OID.as_bytes();
+    let mut v = vec![0u8; oid.len() + 10];
+    let out = pkcs1v15_generate_prefix_into::<D>(&mut v)
+        .expect("pkcs1v15 prefix buffer should fit exact size");
+    out.to_vec()
+}
+
+#[inline]
+pub fn pkcs1v15_generate_prefix_into<D>(storage: &mut [u8]) -> Result<&[u8]>
+where
+    D: Digest + AssociatedOid,
+{
+    let oid = D::OID.as_bytes();
     let oid_len = oid.len() as u8;
     let digest_len = <D as Digest>::output_size() as u8;
-    let mut v = vec![
+    let out = storage
+        .get_mut(..oid.len() + 10)
+        .ok_or(Error::OutputBufferTooSmall)?;
+    out[..6].copy_from_slice(&[
         0x30,
         oid_len + 8 + digest_len,
         0x30,
         oid_len + 4,
         0x6,
         oid_len,
-    ];
-    v.extend_from_slice(oid);
-    v.extend_from_slice(&[0x05, 0x00, 0x04, digest_len]);
-    v
+    ]);
+    out[6..6 + oid.len()].copy_from_slice(oid);
+    out[6 + oid.len()..oid.len() + 10].copy_from_slice(&[0x05, 0x00, 0x04, digest_len]);
+    Ok(&out[..oid.len() + 10])
 }
 
 #[cfg(test)]
