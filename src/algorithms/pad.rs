@@ -88,7 +88,7 @@ where
     let leading_zeros = input.leading_zeros() as usize / 8;
     let m = Zeroizing::new(input);
     let m = Zeroizing::new(m.to_be_bytes());
-    let bytes: &[u8] = m.as_ref().as_ref();
+    let bytes: &[u8] = m.as_ref();
     left_pad_into(&bytes[leading_zeros..], padded_len, storage)
 }
 

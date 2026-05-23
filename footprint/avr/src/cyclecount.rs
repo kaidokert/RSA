@@ -8,9 +8,9 @@
 //! This module counts overflows in a TIMER1_OVF ISR so the elapsed time
 //! returned by [`CycleCounter`] is correct even across many wraps.
 
-use core::cell::Cell;
-use avr_device::interrupt::Mutex;
 use arduino_hal::pac::TC1;
+use avr_device::interrupt::Mutex;
+use core::cell::Cell;
 
 static TIMER1_WRAPS: Mutex<Cell<u32>> = Mutex::new(Cell::new(0));
 
@@ -52,8 +52,12 @@ impl CycleCounter {
         // Clear any pending TOV1 flag so we don't count a spurious wrap.
         tc1.tifr1.write(|w| w.tov1().set_bit());
         tc1.timsk1.write(|w| w.toie1().set_bit());
-        unsafe { avr_device::interrupt::enable(); }
-        Self { start_total: read_total(tc1) }
+        unsafe {
+            avr_device::interrupt::enable();
+        }
+        Self {
+            start_total: read_total(tc1),
+        }
     }
 
     /// Elapsed ticks since [`start`](Self::start).

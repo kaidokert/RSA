@@ -15,7 +15,7 @@ exclude = ["marvin_toolkit/", "thirdparty/"]
 
 [dependencies]
 const-oid = { version = "0.10", default-features = false }
-crypto-primes = { version = "0.7", default-features = false }
+crypto-primes = { version = "0.7", optional = true, default-features = false }
 digest = { version = "0.11", default-features = false, features = ["oid"] }
 rand_core = { version = "0.10", default-features = false }
 signature = { version = "3", default-features = false, features = ["digest", "rand_core"] }

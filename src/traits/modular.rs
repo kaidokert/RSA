@@ -1,3 +1,7 @@
+// TODO: docs polish. Trait surface is still moving; revisit once the abstraction
+// settles. CLAUDE.md "Known Limits #3" tracks this.
+#![allow(missing_docs)]
+
 use core::borrow::Borrow;
 
 #[cfg(feature = "alloc")]
@@ -172,6 +176,7 @@ where
         self.0
     }
 
+    #[allow(clippy::should_implement_trait)]
     pub fn as_ref(&self) -> &T {
         &self.0
     }
@@ -214,6 +219,7 @@ where
         self.0
     }
 
+    #[allow(clippy::should_implement_trait)]
     pub fn as_ref(&self) -> &T {
         &self.0
     }

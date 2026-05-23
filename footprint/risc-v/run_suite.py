@@ -11,31 +11,37 @@ import sys
 import tempfile
 
 EXAMPLES = [
-    ("baseline", "baseline", "baseline", ["baseline"]),
-    ("ed25519_u8", "u8", "rsa512", []),
-    ("ed25519_u32", "u32", "rsa512", []),
-    ("rsa768_u8", "u8", "rsa768", []),
-    ("rsa768_u32", "u32", "rsa768", []),
-    ("rsa1024_u8", "u8", "rsa1024", []),
-    ("rsa1024_u32", "u32", "rsa1024", []),
-    ("rsa1536_u8", "u8", "rsa1536", []),
-    ("rsa1536_u32", "u32", "rsa1536", []),
-    ("rsa2048_u8", "u8", "rsa2048", []),
-    ("rsa2048_u32", "u32", "rsa2048", []),
-    ("rsa3072_u8", "u8", "rsa3072", []),
-    ("rsa3072_u32", "u32", "rsa3072", []),
-    ("rsa4096_u8", "u8", "rsa4096", []),
-    ("rsa4096_u32", "u32", "rsa4096", []),
+    # (example, backend, variant, [features])
+    ("baseline",   "baseline", "baseline",         ["baseline"]),
+    # SHA-1 + e=3 at 512-bit — the lightest workload cell in the matrix.
+    ("rsa_verify", "u8",       "rsa512_sha1",      ["key_512",  "limb_u8",  "hash_sha1"]),
+    ("rsa_verify", "u32",      "rsa512_sha1",      ["key_512",  "limb_u32", "hash_sha1"]),
+    # SHA-256 + e=65537 sweep — the rest of the matrix.
+    ("rsa_verify", "u8",       "rsa512_sha256",    ["key_512",  "limb_u8",  "hash_sha256"]),
+    ("rsa_verify", "u32",      "rsa512_sha256",    ["key_512",  "limb_u32", "hash_sha256"]),
+    ("rsa_verify", "u8",       "rsa768_sha256",    ["key_768",  "limb_u8",  "hash_sha256"]),
+    ("rsa_verify", "u32",      "rsa768_sha256",    ["key_768",  "limb_u32", "hash_sha256"]),
+    ("rsa_verify", "u8",       "rsa1024_sha256",   ["key_1024", "limb_u8",  "hash_sha256"]),
+    ("rsa_verify", "u32",      "rsa1024_sha256",   ["key_1024", "limb_u32", "hash_sha256"]),
+    ("rsa_verify", "u8",       "rsa1536_sha256",   ["key_1536", "limb_u8",  "hash_sha256"]),
+    ("rsa_verify", "u32",      "rsa1536_sha256",   ["key_1536", "limb_u32", "hash_sha256"]),
+    ("rsa_verify", "u8",       "rsa2048_sha256",   ["key_2048", "limb_u8",  "hash_sha256"]),
+    ("rsa_verify", "u32",      "rsa2048_sha256",   ["key_2048", "limb_u32", "hash_sha256"]),
+    ("rsa_verify", "u8",       "rsa3072_sha256",   ["key_3072", "limb_u8",  "hash_sha256"]),
+    ("rsa_verify", "u32",      "rsa3072_sha256",   ["key_3072", "limb_u32", "hash_sha256"]),
+    ("rsa_verify", "u8",       "rsa4096_sha256",   ["key_4096", "limb_u8",  "hash_sha256"]),
+    ("rsa_verify", "u32",      "rsa4096_sha256",   ["key_4096", "limb_u32", "hash_sha256"]),
 ]
-# Variant -> (column label for table) in render order.
+# Variant -> (key bits label, hash label) in render order.
 KEY_VARIANTS = [
-    ("rsa512", "512"),
-    ("rsa768", "768"),
-    ("rsa1024", "1024"),
-    ("rsa1536", "1536"),
-    ("rsa2048", "2048"),
-    ("rsa3072", "3072"),
-    ("rsa4096", "4096"),
+    ("rsa512_sha1",    "512",  "sha1"),
+    ("rsa512_sha256",  "512",  "sha256"),
+    ("rsa768_sha256",  "768",  "sha256"),
+    ("rsa1024_sha256", "1024", "sha256"),
+    ("rsa1536_sha256", "1536", "sha256"),
+    ("rsa2048_sha256", "2048", "sha256"),
+    ("rsa3072_sha256", "3072", "sha256"),
+    ("rsa4096_sha256", "4096", "sha256"),
 ]
 TIMEOUT_RUN = 300  # seconds per QEMU run (4096-bit can take a while)
 TIMEOUT_BUILD = 600  # seconds for cargo build
@@ -137,34 +143,21 @@ def delta(verify_row, baseline_row, key, formatter=str):
 
 
 def main():
-    results = {}  # example -> {accepted, stack, cycles, text_size}
+    results = {}  # (backend, variant) -> {accepted, stack, cycles, text_size}
     failures = []
 
-    print("Building for RISC-V...", file=sys.stderr)
-    feature_variants = {}
-    for _, _, variant, features in EXAMPLES:
-        feature_key = tuple(features)
-        feature_variants.setdefault(feature_key, []).append(variant)
-
-    build_status = {}
-    for feature_key, variants in feature_variants.items():
-        feature_list = list(feature_key)
-        build_ok = build(feature_list)
-        build_status[feature_key] = build_ok
-        if not build_ok:
-            joined_variants = ", ".join(sorted(set(variants)))
-            failures.append(f"Build failed: {joined_variants}")
-
+    print("Running examples for RISC-V...", file=sys.stderr)
     for example, backend, variant, features in EXAMPLES:
-        feature_key = tuple(features)
-        if not build_status.get(feature_key, False):
-            continue
-        print(f"  Running {example} on QEMU sifive_e...", file=sys.stderr)
+        feat_str = ",".join(features) if features else "no-features"
+        print(f"  {example} [{feat_str}] on QEMU sifive_e...", file=sys.stderr)
         try:
+            # cargo run rebuilds with the specified features. Each
+            # (example, features) combo produces a fresh binary at the
+            # same path, so we run+size for each combo in sequence.
             output = run_qemu(example, features)
         except subprocess.TimeoutExpired:
             print("    TIMEOUT", file=sys.stderr)
-            failures.append(f"Timeout: {example}")
+            failures.append(f"Timeout: {example} [{feat_str}]")
             continue
 
         accepted = "rsa ACCEPT" in output
@@ -176,12 +169,12 @@ def main():
 
         if not metric:
             print("    METRIC line missing", file=sys.stderr)
-            failures.append(f"Missing METRIC: {example}")
+            failures.append(f"Missing METRIC: {example} [{feat_str}]")
         if text_size is None:
             print("    .text size unavailable", file=sys.stderr)
-            failures.append(f"Missing .text size: {example}")
+            failures.append(f"Missing .text size: {example} [{feat_str}]")
         if not accepted:
-            failures.append(f"REJECT: {example}")
+            failures.append(f"REJECT: {example} [{feat_str}]")
 
         results[(backend, variant)] = {
             "accepted": accepted,
@@ -194,15 +187,15 @@ def main():
     print()
     print("Metrics below are verify-minus-baseline deltas: the incremental flash, stack, and approximate cycle cost of RSA verification.")
     print()
-    print("| Target | Key bits | Backend | .text (KiB) | Stack (bytes) | Approx cycles (k) |")
-    print("|--------|----------|---------|-------------|---------------|-------------------|")
+    print("| Target | Key bits | Hash   | Backend | .text (KiB) | Stack (bytes) | Approx cycles (k) |")
+    print("|--------|----------|--------|---------|-------------|---------------|-------------------|")
 
     baseline = results.get(("baseline", "baseline"))
-    for variant, key_label in KEY_VARIANTS:
+    for variant, key_label, hash_label in KEY_VARIANTS:
         for backend in ("u8", "u32"):
             verify = results.get((backend, variant))
             if verify is None or baseline is None:
-                print(f"| sifive_e (RV32) | {key_label} | {backend} | - | - | - |")
+                print(f"| sifive_e (RV32) | {key_label} | {hash_label} | {backend} | - | - | - |")
                 continue
             delta_text = delta(
                 verify,
@@ -217,7 +210,7 @@ def main():
                 "cycles",
                 formatter=lambda value: f"{value / 1000:.1f}",
             )
-            print(f"| sifive_e (RV32) | {key_label} | {backend} | {delta_text} | {delta_stack} | {delta_cycles} |")
+            print(f"| sifive_e (RV32) | {key_label} | {hash_label} | {backend} | {delta_text} | {delta_stack} | {delta_cycles} |")
 
     print()
     print("Approx cycles are derived from the demo harness counters and should be treated as a rough instruction-cost proxy, not a precise benchmark.")

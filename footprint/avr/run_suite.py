@@ -11,19 +11,24 @@ import sys
 import tempfile
 
 EXAMPLES = [
-    ("baseline", "baseline", ["baseline"]),
-    ("test_verify", "rsa512", []),
-    ("rsa768_verify", "rsa768", []),
-    ("rsa1024_verify", "rsa1024", []),
-    ("rsa1536_verify", "rsa1536", []),
+    # (example, variant, [features])
+    ("baseline",   "baseline",        ["baseline"]),
+    # SHA-1 + e=3 at 512-bit — the lightest workload cell in the matrix.
+    ("rsa_verify", "rsa512_sha1",     ["key_512",  "hash_sha1"]),
+    # SHA-256 + e=65537 sweep.
+    ("rsa_verify", "rsa512_sha256",   ["key_512",  "hash_sha256"]),
+    ("rsa_verify", "rsa768_sha256",   ["key_768",  "hash_sha256"]),
+    ("rsa_verify", "rsa1024_sha256",  ["key_1024", "hash_sha256"]),
+    ("rsa_verify", "rsa1536_sha256",  ["key_1536", "hash_sha256"]),
     # Sizes >= 2048 take >300s wall-clock under simavr — disabled for CI sanity.
 ]
-# Variant -> (column label for table) in render order.
+# Variant -> (key bits label, hash label) in render order.
 KEY_VARIANTS = [
-    ("rsa512", "512"),
-    ("rsa768", "768"),
-    ("rsa1024", "1024"),
-    ("rsa1536", "1536"),
+    ("rsa512_sha1",    "512",  "sha1"),
+    ("rsa512_sha256",  "512",  "sha256"),
+    ("rsa768_sha256",  "768",  "sha256"),
+    ("rsa1024_sha256", "1024", "sha256"),
+    ("rsa1536_sha256", "1536", "sha256"),
 ]
 TIMEOUT_RUN = 600  # seconds per simavr run (4096-bit AVR takes ~minute)
 TIMEOUT_BUILD = 600  # seconds for cargo build
@@ -128,18 +133,17 @@ def delta(verify_row, baseline_row, key, formatter=str):
 
 
 def main():
-    print("Building for AVR...", file=sys.stderr)
-    for example, variant, features in EXAMPLES:
-        if not build(example, features):
-            print("\nFailures: 1", file=sys.stderr)
-            print(f"  Build failed: {variant}", file=sys.stderr)
-            return 1
+    # `cargo run` rebuilds with the specified features. Since each combo
+    # writes to the same example binary path, we build+run+size in sequence
+    # per combo rather than batch-building up-front.
+    print("Running examples for AVR...", file=sys.stderr)
 
     results = {}
     failures = []
     for example, variant, features in EXAMPLES:
+        feat_str = ",".join(features) if features else "no-features"
         example_variant = f"{example}:{variant}"
-        print(f"  Running {example_variant} on simavr...", file=sys.stderr)
+        print(f"  {example} [{feat_str}] on simavr...", file=sys.stderr)
         try:
             output = run_simavr(example, features)
         except subprocess.TimeoutExpired:
@@ -178,12 +182,12 @@ def main():
     print()
     print("Metrics below are verify-minus-baseline deltas: the incremental flash, stack, and approximate runtime cost of RSA verification.")
     print()
-    print("| Target | Key bits | Backend | .text (KiB) | Stack (bytes) | Approx time (ms) |")
-    print("|--------|----------|---------|-------------|---------------|------------------|")
-    for variant, key_label in KEY_VARIANTS:
+    print("| Target | Key bits | Hash   | Backend | .text (KiB) | Stack (bytes) | Approx time (ms) |")
+    print("|--------|----------|--------|---------|-------------|---------------|------------------|")
+    for variant, key_label, hash_label in KEY_VARIANTS:
         verify = results.get(variant)
         if not (baseline and verify):
-            print(f"| ATmega2560 | {key_label} | u8 | - | - | - |")
+            print(f"| ATmega2560 | {key_label} | {hash_label} | u8 | - | - | - |")
             continue
         delta_text = delta(
             verify,
@@ -193,7 +197,7 @@ def main():
         )
         delta_stack = delta(verify, baseline, "stack")
         delta_time = delta(verify, baseline, "time_ms")
-        print(f"| ATmega2560 | {key_label} | u8 | {delta_text} | {delta_stack} | {delta_time} |")
+        print(f"| ATmega2560 | {key_label} | {hash_label} | u8 | {delta_text} | {delta_stack} | {delta_time} |")
 
     print()
     print("Approx time is measured by the demo harness timer and should be treated as a rough runtime proxy, not a precise benchmark.")

@@ -40,6 +40,7 @@ fn non_zero_random_bytes<R: TryCryptoRng + ?Sized>(
 /// Applied the padding scheme from PKCS#1 v1.5 for encryption.  The message must be no longer than
 /// the length of the public modulus minus 11 bytes.
 #[cfg(feature = "alloc")]
+#[allow(dead_code)] // used by in-module tests; kept as the Vec-returning convenience wrapper
 pub(crate) fn pkcs1v15_encrypt_pad<R>(
     rng: &mut R,
     msg: &[u8],

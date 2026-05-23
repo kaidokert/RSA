@@ -10,6 +10,15 @@ autobenches = false
 
 [features]
 baseline = []
+# Key-size selectors for the unified `rsa_verify` example. Pick exactly one.
+# (AVR is u8-only; no limb_* feature here.)
+key_512 = []
+key_768 = []
+key_1024 = []
+key_1536 = []
+# Hash-algorithm selectors. Pick exactly one. SHA-1 only paired with key_512.
+hash_sha1 = []
+hash_sha256 = []
 
 [dependencies]
 avr-device = { version = "0.7", features = ["atmega2560", "rt"] }

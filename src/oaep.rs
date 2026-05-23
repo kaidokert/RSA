@@ -203,6 +203,7 @@ impl<D, MGD> fmt::Debug for Oaep<D, MGD> {
 ///
 /// [PKCS#1 OAEP]: https://datatracker.ietf.org/doc/html/rfc8017#section-7.1
 #[inline]
+#[allow(dead_code)] // OAEP encrypt helper; trait-driven entry points are preferred but this is kept.
 fn encrypt<R, D, MGD>(
     rng: &mut R,
     pub_key: &RsaPublicKey,

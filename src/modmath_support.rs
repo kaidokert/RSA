@@ -1,12 +1,16 @@
 //! Generic `modmath` backend adapters for fixed-width RSA public-key paths.
 
+// TODO: docs polish. CLAUDE.md "Known Limits #3" tracks this — the trait surface
+// is still moving; revisit once the abstraction settles.
+#![allow(missing_docs)]
+
 #[cfg(feature = "alloc")]
 use alloc::boxed::Box;
 use core::ops::{Rem, Shr, ShrAssign};
 
 use modmath::{
-    compute_n_prime_newton, compute_r2_mod_n, compute_r_mod_n, type_bit_width, CiosMontMul,
-    Parity, WideMul,
+    compute_n_prime_newton, compute_r2_mod_n, compute_r_mod_n, type_bit_width, CiosMontMul, Parity,
+    WideMul,
 };
 use num_traits::ops::overflowing::OverflowingAdd;
 use num_traits::ops::wrapping::{WrappingAdd, WrappingMul, WrappingSub};
@@ -245,7 +249,9 @@ where
 {
     let n = wrap_value(<T as FixedWidthUnsignedInt>::from_be_bytes_vartime(modulus));
     let exponent = exponent.to_be_bytes();
-    let e = wrap_value(<T as FixedWidthUnsignedInt>::from_be_bytes_vartime(&exponent));
+    let e = wrap_value(<T as FixedWidthUnsignedInt>::from_be_bytes_vartime(
+        &exponent,
+    ));
     GenericRsaPublicKey::from_components(n, e, ModMathParams::new(unwrap_value(&n))?)
 }
 
@@ -304,12 +310,12 @@ impl<T: ModMathInt> ModMathForm<T> {
             }
             base_mont = T::cios_mont_mul(&base_mont, &base_mont, modulus, n_prime)
                 .expect("CIOS Montgomery mul requires non-empty word array");
-            e = e >> 1;
+            e >>= 1;
         }
         result_mont
     }
 
-    fn from_montgomery(&self) -> T {
+    fn to_reduced(&self) -> T {
         // a_mont * 1 * R^-1 mod N = a (regular form).
         let one = <T as From<u8>>::from(1u8);
         T::cios_mont_mul(
@@ -332,7 +338,7 @@ impl<T: ModMathInt> Pow<ModMathParams<T>> for ModMathForm<T> {
     }
 
     fn retrieve(&self) -> ModMathValue<T> {
-        wrap_value(self.from_montgomery())
+        wrap_value(self.to_reduced())
     }
 }
 
@@ -348,7 +354,7 @@ impl<T: ModMathInt> PowBoundedExp<ModMathParams<T>> for ModMathForm<T> {
     }
 
     fn retrieve(&self) -> ModMathValue<T> {
-        wrap_value(self.from_montgomery())
+        wrap_value(self.to_reduced())
     }
 }
 

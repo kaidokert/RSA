@@ -3,8 +3,15 @@
 #![feature(asm_experimental_arch)]
 
 use rsa_footprint_avr as _;
+use rsa_footprint_avr::fake_verify;
 use rsa_footprint_avr::stack_measurement::*;
-use rsa_footprint_avr::{fake_verify, MESSAGE, MODULUS, SIGNATURE};
+
+mod fixture {
+    include!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../fixtures/rsa512_sha1.rs"
+    ));
+}
 
 #[arduino_hal::entry]
 fn main() -> ! {
@@ -14,7 +21,7 @@ fn main() -> ! {
 
     unsafe { fill_stack_with_watermark() };
     let counter = rsa_footprint_avr::cyclecount::CycleCounter::start(&dp.TC1);
-    let result = fake_verify(MODULUS, MESSAGE, SIGNATURE);
+    let result = fake_verify(fixture::MODULUS, fixture::MESSAGE, fixture::SIGNATURE);
     let ticks = counter.elapsed_ticks(&dp.TC1);
     let ms = counter.elapsed_ms(&dp.TC1);
     let stack_used = unsafe { measure_stack_usage() };

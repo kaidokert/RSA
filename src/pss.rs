@@ -154,6 +154,7 @@ impl<D> Debug for Pss<D> {
     }
 }
 
+#[allow(dead_code)] // PSS verify helper kept alongside the trait-method entry points.
 pub(crate) fn verify<D>(
     pub_key: &RsaPublicKey,
     hashed: &[u8],

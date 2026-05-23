@@ -59,6 +59,8 @@ where
     n_params: M,
 }
 
+/// Boxed RSA public key alias used by the `alloc` code path. Equivalent to
+/// `GenericRsaPublicKey<BoxedUint, BoxedMontyParams>`.
 #[cfg(feature = "alloc")]
 pub type RsaPublicKey = GenericRsaPublicKey<BoxedUint, BoxedMontyParams>;
 

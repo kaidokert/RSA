@@ -108,6 +108,7 @@ impl Pkcs1v15Encrypt {
 /// length of the public modulus minus 11 bytes.
 #[cfg(feature = "alloc")]
 #[inline]
+#[allow(dead_code)] // Vec-returning convenience wrapper; kept alongside the buffer-taking `encrypt_into`.
 fn encrypt<R: TryCryptoRng + ?Sized, K, T>(rng: &mut R, pub_key: &K, msg: &[u8]) -> Result<Vec<u8>>
 where
     T: UnsignedModularInt,

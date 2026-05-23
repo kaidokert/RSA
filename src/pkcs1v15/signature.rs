@@ -28,11 +28,13 @@ where
     pub(super) inner: T,
 }
 
+/// Owned signature byte buffer sized to match the underlying integer type `T`.
 #[derive(Clone)]
 pub struct SignatureBytes<T>(T::Bytes)
 where
     T: UnsignedModularInt;
 
+/// Boxed PKCS#1 v1.5 signature alias used by the `alloc` code path.
 #[cfg(feature = "alloc")]
 pub type Signature = GenericSignature<BoxedUint>;
 

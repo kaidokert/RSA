@@ -8,6 +8,20 @@ autobenches = false
 
 [features]
 baseline = []
+# Key-size selectors for the unified `rsa_verify` example. Pick exactly one.
+key_512 = []
+key_768 = []
+key_1024 = []
+key_1536 = []
+key_2048 = []
+key_3072 = []
+key_4096 = []
+# Limb-size selectors for the unified `rsa_verify` example. Pick exactly one.
+limb_u8 = []
+limb_u32 = []
+# Hash-algorithm selectors. Pick exactly one. SHA-1 only paired with key_512.
+hash_sha1 = []
+hash_sha256 = []
 
 [dependencies]
 cortex-m = "0.7"
