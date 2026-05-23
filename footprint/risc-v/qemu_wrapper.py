@@ -9,7 +9,7 @@ import subprocess
 import sys
 import threading
 
-TIMEOUT = 60  # seconds
+TIMEOUT = 300  # seconds (large RSA sizes take a while)
 
 
 def main():

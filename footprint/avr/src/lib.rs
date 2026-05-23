@@ -1,8 +1,10 @@
 #![no_std]
+#![feature(abi_avr_interrupt)]
 #![feature(asm_experimental_arch)]
 
 use core::hint::black_box;
 
+pub mod cyclecount;
 pub mod stack_measurement;
 
 pub const MODULUS: [u8; 64] = [

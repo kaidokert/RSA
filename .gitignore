@@ -1,5 +1,3 @@
 /target
 **/*.rs.bk
-integrate_thumb/target/
-integrate_thumb/Cargo.lock
-footprint/cortex-m/target/
+Cargo.lock

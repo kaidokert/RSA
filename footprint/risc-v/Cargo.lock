@@ -133,9 +133,8 @@ checksum = "b5b646652bf6661599e1da8901b3b9522896f01e736bad5f723fe7a3a27f899d"
 [[package]]
 name = "modmath"
 version = "0.1.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "09affa2336723fa147077af3ad9cb540419782a88ea9ee91476a84da273797e6"
 dependencies = [
+ "fixed-bigint",
  "num-traits",
 ]
 

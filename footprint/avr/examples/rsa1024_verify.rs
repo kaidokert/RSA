@@ -23,12 +23,8 @@ fn main() -> ! {
     let pins = arduino_hal::pins!(dp);
     let mut serial = arduino_hal::default_serial!(dp, pins, 57600);
 
-    let tc1 = &dp.TC1;
-    tc1.tccr1b.write(|w| w.cs1().prescale_1024());
-
     unsafe { fill_stack_with_watermark() };
-
-    let start: u16 = tc1.tcnt1.read().bits();
+    let counter = rsa_footprint_avr::cyclecount::CycleCounter::start(&dp.TC1);
     let result = {
         type U1024 = FixedUInt<u8, 128>;
         let key = public_key_from_be_bytes::<U1024>(
@@ -42,11 +38,9 @@ fn main() -> ! {
             .verify(fixture::RSA1024_MESSAGE, &signature)
             .is_ok()
     };
-    let end: u16 = tc1.tcnt1.read().bits();
-
+    let ticks = counter.elapsed_ticks(&dp.TC1);
+    let ms = counter.elapsed_ms(&dp.TC1);
     let stack_used = unsafe { measure_stack_usage() };
-    let ticks = end.wrapping_sub(start);
-    let ms = (ticks as u32) * 8 / 125;
 
     if result {
         ufmt::uwriteln!(&mut serial, "rsa ACCEPT").ok();

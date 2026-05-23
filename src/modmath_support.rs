@@ -4,8 +4,12 @@
 use alloc::boxed::Box;
 use core::ops::{Rem, Shr, ShrAssign};
 
-use modmath::{basic_mod_exp, Parity};
-use num_traits::ops::wrapping::{WrappingAdd, WrappingSub};
+use modmath::{
+    compute_n_prime_newton, compute_r2_mod_n, compute_r_mod_n, type_bit_width, CiosMontMul,
+    Parity, WideMul,
+};
+use num_traits::ops::overflowing::OverflowingAdd;
+use num_traits::ops::wrapping::{WrappingAdd, WrappingMul, WrappingSub};
 use num_traits::{One, Zero};
 use zeroize::Zeroize;
 
@@ -29,7 +33,11 @@ pub trait ModMathInt:
     + One
     + Zero
     + Parity
+    + OverflowingAdd
+    + WideMul
+    + CiosMontMul
     + WrappingAdd
+    + WrappingMul
     + WrappingSub
     + Rem<Output = Self>
     + Shr<usize, Output = Self>
@@ -44,7 +52,11 @@ impl<T> ModMathInt for T where
         + One
         + Zero
         + Parity
+        + OverflowingAdd
+        + WideMul
+        + CiosMontMul
         + WrappingAdd
+        + WrappingMul
         + WrappingSub
         + Rem<Output = Self>
         + Shr<usize, Output = Self>
@@ -65,6 +77,16 @@ fn wrap_value<T>(value: T) -> ModMathValue<T> {
 #[cfg(feature = "alloc")]
 fn unwrap_value<T: Copy>(value: &ModMathValue<T>) -> T {
     value.0
+}
+
+#[cfg(feature = "alloc")]
+fn unwrap_value_ref<T>(value: &ModMathValue<T>) -> &T {
+    &value.0
+}
+
+#[cfg(not(feature = "alloc"))]
+fn unwrap_value_ref<T>(value: &ModMathValue<T>) -> &T {
+    value
 }
 
 #[cfg(not(feature = "alloc"))]
@@ -186,13 +208,29 @@ pub type ModMathValue<T> = T;
 #[derive(Clone, Debug)]
 pub struct ModMathParams<T: ModMathInt> {
     modulus: Odd<ModMathValue<T>>,
+    // Montgomery constants for R = 2^W, where W = type_bit_width::<T>().
+    // n_prime satisfies modulus * n_prime ≡ -1 (mod R).
+    n_prime: T,
+    // r_mod_n = R mod modulus = 2^W mod modulus.  Also serves as 1 in Montgomery form.
+    r_mod_n: T,
+    // r2_mod_n = R^2 mod modulus.  Used by wide_montgomery_mul to convert into Montgomery form.
+    r2_mod_n: T,
 }
 
 impl<T: ModMathInt> ModMathParams<T> {
     /// Create modular arithmetic parameters for an odd, non-zero modulus.
     pub fn new(modulus: T) -> Result<Self> {
-        let modulus = Odd::new(wrap_value(modulus)).ok_or(Error::InvalidModulus)?;
-        Ok(Self { modulus })
+        let modulus_odd = Odd::new(wrap_value(modulus)).ok_or(Error::InvalidModulus)?;
+        let w = type_bit_width::<T>();
+        let n_prime = compute_n_prime_newton(modulus, w);
+        let r_mod_n = compute_r_mod_n(modulus, w);
+        let r2_mod_n = compute_r2_mod_n(r_mod_n, modulus, w);
+        Ok(Self {
+            modulus: modulus_odd,
+            n_prime,
+            r_mod_n,
+            r2_mod_n,
+        })
     }
 }
 
@@ -225,45 +263,92 @@ where
     Ok(rsa_encrypt(key, &input)?.to_be_bytes())
 }
 
+/// A value held in Montgomery form modulo a `ModMathParams` modulus.
+///
+/// `integer_mont` stores `a * R mod N`, where `R = 2^W` and `W = type_bit_width::<T>()`.
 #[derive(Clone, Debug)]
 pub struct ModMathForm<T: ModMathInt> {
-    integer: ModMathValue<T>,
+    integer_mont: ModMathValue<T>,
     params: ModMathParams<T>,
 }
 
 impl<T: ModMathInt> IntoMontyForm<ModMathParams<T>> for ModMathForm<T> {
     fn from_reduced(integer: ModMathValue<T>, params: &ModMathParams<T>) -> Self {
+        // a_mont = a * R mod N, computed via CIOS as a * R^2 * R^-1 mod N.
+        let a_mont = T::cios_mont_mul(
+            unwrap_value_ref(&integer),
+            &params.r2_mod_n,
+            unwrap_value_ref(params.modulus.as_ref()),
+            &params.n_prime,
+        )
+        .expect("CIOS Montgomery mul requires non-empty word array");
         Self {
-            integer,
+            integer_mont: wrap_value(a_mont),
             params: params.clone(),
         }
     }
 }
 
+impl<T: ModMathInt> ModMathForm<T> {
+    fn pow_loop(&self, exp_raw: T) -> T {
+        let modulus = unwrap_value_ref(self.params.modulus.as_ref());
+        let n_prime = &self.params.n_prime;
+        let mut base_mont = unwrap_value(&self.integer_mont);
+        // 1 in Montgomery form is R mod N.
+        let mut result_mont = self.params.r_mod_n;
+        let mut e = exp_raw;
+        while !e.is_zero() {
+            if e.is_odd() {
+                result_mont = T::cios_mont_mul(&result_mont, &base_mont, modulus, n_prime)
+                    .expect("CIOS Montgomery mul requires non-empty word array");
+            }
+            base_mont = T::cios_mont_mul(&base_mont, &base_mont, modulus, n_prime)
+                .expect("CIOS Montgomery mul requires non-empty word array");
+            e = e >> 1;
+        }
+        result_mont
+    }
+
+    fn from_montgomery(&self) -> T {
+        // a_mont * 1 * R^-1 mod N = a (regular form).
+        let one = <T as From<u8>>::from(1u8);
+        T::cios_mont_mul(
+            unwrap_value_ref(&self.integer_mont),
+            &one,
+            unwrap_value_ref(self.params.modulus.as_ref()),
+            &self.params.n_prime,
+        )
+        .expect("CIOS Montgomery mul requires non-empty word array")
+    }
+}
+
 impl<T: ModMathInt> Pow<ModMathParams<T>> for ModMathForm<T> {
     fn pow(&self, exp: &ModMathValue<T>) -> Self {
+        let result_mont = self.pow_loop(unwrap_value(exp));
         Self {
-            integer: wrap_value(basic_mod_exp(
-                unwrap_value(&self.integer),
-                unwrap_value(exp),
-                unwrap_value(self.params.modulus.as_ref()),
-            )),
+            integer_mont: wrap_value(result_mont),
             params: self.params.clone(),
         }
     }
 
     fn retrieve(&self) -> ModMathValue<T> {
-        self.integer
+        wrap_value(self.from_montgomery())
     }
 }
 
 impl<T: ModMathInt> PowBoundedExp<ModMathParams<T>> for ModMathForm<T> {
     fn pow_bounded_exp(&self, exp: &ModMathValue<T>, _exp_bits: u32) -> Self {
-        self.pow(exp)
+        // The LSB-first loop exits naturally when the exponent reaches zero,
+        // so the `_exp_bits` hint is unused here.
+        let result_mont = self.pow_loop(unwrap_value(exp));
+        Self {
+            integer_mont: wrap_value(result_mont),
+            params: self.params.clone(),
+        }
     }
 
     fn retrieve(&self) -> ModMathValue<T> {
-        self.integer
+        wrap_value(self.from_montgomery())
     }
 }
 

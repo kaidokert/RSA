@@ -12,6 +12,7 @@ autobenches = false
 baseline = []
 
 [dependencies]
+avr-device = { version = "0.7", features = ["atmega2560", "rt"] }
 fixed-bigint = { version = "0.2.5", default-features = false, features = ["zeroize", "use-unsafe"] }
 rsa = { path = "../..", package = "rsa", default-features = false, features = ["modmath"] }
 sha1 = { version = "0.11.0-rc.5", default-features = false, features = ["oid"] }

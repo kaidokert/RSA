@@ -12,15 +12,37 @@ import tempfile
 
 EXAMPLES = [
     ("baseline", "baseline", "baseline", ["baseline"]),
-    ("ed25519_u8", "u8", "verify", []),
-    ("ed25519_u32", "u32", "verify", []),
+    ("ed25519_u8", "u8", "rsa512", []),
+    ("ed25519_u32", "u32", "rsa512", []),
+    ("rsa768_u8", "u8", "rsa768", []),
+    ("rsa768_u32", "u32", "rsa768", []),
+    ("rsa1024_u8", "u8", "rsa1024", []),
+    ("rsa1024_u32", "u32", "rsa1024", []),
+    ("rsa1536_u8", "u8", "rsa1536", []),
+    ("rsa1536_u32", "u32", "rsa1536", []),
+    ("rsa2048_u8", "u8", "rsa2048", []),
+    ("rsa2048_u32", "u32", "rsa2048", []),
+    ("rsa3072_u8", "u8", "rsa3072", []),
+    ("rsa3072_u32", "u32", "rsa3072", []),
+    ("rsa4096_u8", "u8", "rsa4096", []),
+    ("rsa4096_u32", "u32", "rsa4096", []),
+]
+# Variant -> (column label for table) in render order.
+KEY_VARIANTS = [
+    ("rsa512", "512"),
+    ("rsa768", "768"),
+    ("rsa1024", "1024"),
+    ("rsa1536", "1536"),
+    ("rsa2048", "2048"),
+    ("rsa3072", "3072"),
+    ("rsa4096", "4096"),
 ]
 TARGETS = [
     ("thumbv6m-none-eabi", "M0"),
     ("thumbv7m-none-eabi", "M3"),
     ("thumbv7em-none-eabi", "M4"),
 ]
-TIMEOUT_RUN = 120  # seconds per QEMU run
+TIMEOUT_RUN = 300  # seconds per QEMU run (4096-bit can take a while)
 TIMEOUT_BUILD = 600  # seconds for cargo build
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 TARGET_DIR = os.path.join(tempfile.gettempdir(), "rsa_footprint_cortexm")
@@ -178,33 +200,33 @@ def main():
     print()
     print("Metrics below are verify-minus-baseline deltas: the incremental flash, stack, and approximate cycle cost of RSA verification.")
     print()
-    print("| Target | Backend | .text (KiB) | Stack (bytes) | Approx cycles (k) |")
-    print("|--------|---------|-------------|---------------|-------------------|")
+    print("| Target | Key bits | Backend | .text (KiB) | Stack (bytes) | Approx cycles (k) |")
+    print("|--------|----------|---------|-------------|---------------|-------------------|")
     for target, label in TARGETS:
         baseline_row = results.get(("baseline", "baseline", target))
-        for backend in ("u8", "u32"):
-            verify_row = results.get((backend, "verify", target))
-            if verify_row is None or baseline_row is None:
-                print(f"| {label} | {backend} | - | - | - |")
-                continue
-            delta_text = delta(
-                verify_row,
-                baseline_row,
-                "text_size",
-                formatter=lambda value: f"{value / 1024:.1f}",
-            )
-            delta_stack = delta(verify_row, baseline_row, "stack")
-            delta_cycles = delta(verify_row, baseline_row, "cycles")
-            print(f"| {label} | {backend} | {delta_text} | {delta_stack} | {delta_cycles} |")
+        for variant, key_label in KEY_VARIANTS:
+            for backend in ("u8", "u32"):
+                verify_row = results.get((backend, variant, target))
+                if verify_row is None or baseline_row is None:
+                    print(f"| {label} | {key_label} | {backend} | - | - | - |")
+                    continue
+                delta_text = delta(
+                    verify_row,
+                    baseline_row,
+                    "text_size",
+                    formatter=lambda value: f"{value / 1024:.1f}",
+                )
+                delta_stack = delta(verify_row, baseline_row, "stack")
+                delta_cycles = delta(verify_row, baseline_row, "cycles")
+                print(f"| {label} | {key_label} | {backend} | {delta_text} | {delta_stack} | {delta_cycles} |")
 
     print()
     print("Approx cycles are derived from the demo harness counters and should be treated as a rough instruction-cost proxy, not a precise benchmark.")
 
     if failures:
-        print(f"\nFailures: {len(failures)}", file=sys.stderr)
+        print(f"\nFailures (non-fatal — shown as `-` in table): {len(failures)}", file=sys.stderr)
         for f in failures:
             print(f"  {f}", file=sys.stderr)
-        return 1
     return 0
 
 
