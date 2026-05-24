@@ -1,0 +1,48 @@
+[package]
+name = "rsa_footprint_cortex_m"
+version = "0.1.0"
+edition = "2024"
+autobins = false
+autotests = false
+autobenches = false
+
+[features]
+baseline = []
+# Key-size selectors for the unified `rsa_verify` example. Pick exactly one.
+key_512 = []
+key_768 = []
+key_1024 = []
+key_1536 = []
+key_2048 = []
+key_3072 = []
+key_4096 = []
+# Limb-size selectors for the unified `rsa_verify` example. Pick exactly one.
+limb_u8 = []
+limb_u32 = []
+# Hash-algorithm selectors. Pick exactly one. SHA-1 only paired with key_512.
+hash_sha1 = []
+hash_sha256 = []
+
+[dependencies]
+cortex-m = "0.7"
+cortex-m-rt = "0.7"
+cortex-m-semihosting = "0.5"
+panic-semihosting = { version = "0.6", features = ["exit"] }
+
+fixed-bigint = { version = "0.2.5", default-features = false, features = ["zeroize", "use-unsafe"] }
+rsa = { path = "../..", package = "rsa_heapless", default-features = false, features = ["modmath"] }
+sha1 = { version = "0.11.0-rc.5", default-features = false, features = ["oid"] }
+sha2 = { version = "0.11.0-rc.5", default-features = false, features = ["oid"] }
+
+[profile.release]
+codegen-units = 1
+debug = true
+lto = true
+opt-level = "z"
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = [
+    'cfg(thumbv6m)',
+    'cfg(thumbv7m)',
+    'cfg(thumbv7em)',
+] }

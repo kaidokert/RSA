@@ -26,36 +26,147 @@
 //!
 //! [RFC8017 § 8.2]: https://datatracker.ietf.org/doc/html/rfc8017#section-8.2
 
+#[cfg(feature = "private-key")]
 mod decrypting_key;
 mod encrypting_key;
 mod signature;
+#[cfg(feature = "private-key")]
 mod signing_key;
 mod verifying_key;
 
+#[cfg(feature = "private-key")]
 pub use self::{
-    decrypting_key::DecryptingKey, encrypting_key::EncryptingKey, signature::Signature,
-    signing_key::SigningKey, verifying_key::VerifyingKey,
+    decrypting_key::DecryptingKey,
+    encrypting_key::GenericEncryptingKey,
+    signature::{GenericSignature, SignatureBytes},
+    signing_key::SigningKey,
+    verifying_key::GenericVerifyingKey,
+};
+#[cfg(not(feature = "private-key"))]
+pub use self::{
+    encrypting_key::GenericEncryptingKey,
+    signature::{GenericSignature, SignatureBytes},
+    verifying_key::GenericVerifyingKey,
 };
 
-use alloc::{boxed::Box, vec::Vec};
+#[cfg(feature = "alloc")]
+pub use self::{encrypting_key::EncryptingKey, signature::Signature, verifying_key::VerifyingKey};
+
+#[cfg(feature = "alloc")]
+use alloc::{boxed::Box, vec, vec::Vec};
 use const_oid::AssociatedOid;
 use core::fmt::Debug;
+#[cfg(feature = "alloc")]
 use crypto_bigint::BoxedUint;
 use digest::Digest;
 use rand_core::TryCryptoRng;
 
-use crate::algorithms::pad::{uint_to_be_pad, uint_to_zeroizing_be_pad};
+use crate::algorithms::pad::uint_to_be_pad_into;
+#[cfg(feature = "alloc")]
+use crate::algorithms::pad::uint_to_zeroizing_be_pad;
 use crate::algorithms::pkcs1v15::*;
+#[cfg(not(feature = "private-key"))]
+use crate::algorithms::rsa::rsa_encrypt;
+#[cfg(feature = "private-key")]
 use crate::algorithms::rsa::{rsa_decrypt_and_check, rsa_encrypt};
 use crate::errors::{Error, Result};
-use crate::key::{self, RsaPrivateKey, RsaPublicKey};
-use crate::traits::{PaddingScheme, PublicKeyParts, SignatureScheme};
+#[cfg(feature = "private-key")]
+use crate::key::{self, RsaPrivateKey};
+use crate::traits::{PaddingScheme, PublicKeyParts, SignatureScheme, UnsignedModularInt};
 
 /// Encryption using PKCS#1 v1.5 padding.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct Pkcs1v15Encrypt;
 
+impl Pkcs1v15Encrypt {
+    /// Encrypts the given message with RSA and PKCS#1 v1.5 padding into caller-provided storage.
+    ///
+    /// The message must be no longer than the length of the public modulus minus 11 bytes.
+    pub fn encrypt_into<'a, R, K, T>(
+        self,
+        rng: &mut R,
+        pub_key: &K,
+        msg: &[u8],
+        storage: &'a mut [u8],
+    ) -> Result<&'a [u8]>
+    where
+        R: TryCryptoRng + ?Sized,
+        T: UnsignedModularInt,
+        K: PublicKeyParts<T>,
+    {
+        let padded_len = pub_key.size();
+        let em = pkcs1v15_encrypt_pad_into(rng, msg, padded_len, storage)?;
+        let int = T::from_be_bytes_vartime(em);
+
+        storage[..padded_len].fill(0);
+        uint_to_be_pad_into(rsa_encrypt(pub_key, &int)?, padded_len, storage)
+    }
+}
+
+/// Encrypts the given message with RSA and the padding
+/// scheme from PKCS#1 v1.5. The message must be no longer than the
+/// length of the public modulus minus 11 bytes.
+#[cfg(feature = "alloc")]
+#[inline]
+#[allow(dead_code)] // Vec-returning convenience wrapper; kept alongside the buffer-taking `encrypt_into`.
+fn encrypt<R: TryCryptoRng + ?Sized, K, T>(rng: &mut R, pub_key: &K, msg: &[u8]) -> Result<Vec<u8>>
+where
+    T: UnsignedModularInt,
+    K: PublicKeyParts<T>,
+{
+    let mut storage = vec![0u8; pub_key.size()];
+    let ciphertext = Pkcs1v15Encrypt.encrypt_into(rng, pub_key, msg, &mut storage)?;
+    Ok(ciphertext.to_vec())
+}
+
+#[cfg(not(feature = "alloc"))]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) struct Prefix<const N: usize = 32> {
+    data: [u8; N],
+    len: usize,
+}
+
+#[cfg(not(feature = "alloc"))]
+impl<const N: usize> Prefix<N> {
+    pub const fn new() -> Self {
+        Self {
+            data: [0u8; N],
+            len: 0,
+        }
+    }
+
+    pub fn from_slice(input: &[u8]) -> Result<Self> {
+        if input.len() > N {
+            return Err(Error::OutputBufferTooSmall);
+        }
+
+        let mut out = Self::new();
+        out.data[..input.len()].copy_from_slice(input);
+        out.len = input.len();
+        Ok(out)
+    }
+}
+
+#[cfg(not(feature = "alloc"))]
+impl<const N: usize> AsRef<[u8]> for Prefix<N> {
+    fn as_ref(&self) -> &[u8] {
+        &self.data[..self.len]
+    }
+}
+
+#[cfg(not(feature = "alloc"))]
+pub(super) fn pkcs1v15_generate_prefix_helper<D: Digest>() -> Prefix
+where
+    D: Digest + AssociatedOid,
+{
+    let mut tmp_prefix = [0u8; 64];
+    let prefix =
+        pkcs1v15_generate_prefix_into::<D>(&mut tmp_prefix).expect("prefix buffer is too small");
+    Prefix::from_slice(prefix).expect("prefix buffer is too small")
+}
+
 impl PaddingScheme for Pkcs1v15Encrypt {
+    #[cfg(feature = "private-key")]
     fn decrypt<Rng: TryCryptoRng + ?Sized>(
         self,
         rng: Option<&mut Rng>,
@@ -65,13 +176,16 @@ impl PaddingScheme for Pkcs1v15Encrypt {
         decrypt(rng, priv_key, ciphertext)
     }
 
-    fn encrypt<Rng: TryCryptoRng + ?Sized>(
-        self,
-        rng: &mut Rng,
-        pub_key: &RsaPublicKey,
-        msg: &[u8],
-    ) -> Result<Vec<u8>> {
-        encrypt(rng, pub_key, msg)
+    #[cfg(feature = "alloc")]
+    fn encrypt<Rng, K, T>(self, rng: &mut Rng, pub_key: &K, msg: &[u8]) -> Result<Vec<u8>>
+    where
+        Rng: TryCryptoRng + ?Sized,
+        T: UnsignedModularInt,
+        K: PublicKeyParts<T>,
+    {
+        let mut storage = vec![0u8; pub_key.size()];
+        let ciphertext = self.encrypt_into(rng, pub_key, msg, &mut storage)?;
+        Ok(ciphertext.to_vec())
     }
 }
 
@@ -82,7 +196,10 @@ pub struct Pkcs1v15Sign {
     pub hash_len: Option<usize>,
 
     /// Prefix.
-    pub prefix: Box<[u8]>,
+    #[cfg(feature = "alloc")]
+    prefix: Box<[u8]>,
+    #[cfg(not(feature = "alloc"))]
+    prefix: Prefix,
 }
 
 impl Pkcs1v15Sign {
@@ -96,7 +213,10 @@ impl Pkcs1v15Sign {
     {
         Self {
             hash_len: Some(<D as Digest>::output_size()),
+            #[cfg(feature = "alloc")]
             prefix: pkcs1v15_generate_prefix::<D>().into_boxed_slice(),
+            #[cfg(not(feature = "alloc"))]
+            prefix: pkcs1v15_generate_prefix_helper::<D>(),
         }
     }
 
@@ -106,12 +226,16 @@ impl Pkcs1v15Sign {
     pub fn new_unprefixed() -> Self {
         Self {
             hash_len: None,
+            #[cfg(feature = "alloc")]
             prefix: Box::new([]),
+            #[cfg(not(feature = "alloc"))]
+            prefix: Prefix::new(),
         }
     }
 }
 
 impl SignatureScheme for Pkcs1v15Sign {
+    #[cfg(feature = "private-key")]
     fn sign<Rng: TryCryptoRng + ?Sized>(
         self,
         rng: Option<&mut Rng>,
@@ -127,36 +251,44 @@ impl SignatureScheme for Pkcs1v15Sign {
         sign(rng, priv_key, &self.prefix, hashed)
     }
 
-    fn verify(self, pub_key: &RsaPublicKey, hashed: &[u8], sig: &[u8]) -> Result<()> {
+    fn verify<K, T>(self, pub_key: &K, hashed: &[u8], sig: &[u8]) -> Result<()>
+    where
+        T: UnsignedModularInt,
+        K: PublicKeyParts<T>,
+    {
         if let Some(hash_len) = self.hash_len {
             if hashed.len() != hash_len {
                 return Err(Error::InputNotHashed);
             }
         }
 
-        verify(
+        let mut storage = pub_key.n().as_ref().to_be_bytes();
+        let sig = T::from_be_bytes_vartime(sig);
+        verify_generic(
             pub_key,
             self.prefix.as_ref(),
             hashed,
-            &BoxedUint::from_be_slice_vartime(sig),
+            &sig,
+            storage.as_mut(),
         )
     }
 }
 
-/// Encrypts the given message with RSA and the padding
-/// scheme from PKCS#1 v1.5.  The message must be no longer than the
-/// length of the public modulus minus 11 bytes.
-#[inline]
-fn encrypt<R: TryCryptoRng + ?Sized>(
+/// Encrypts the given message with RSA and PKCS#1 v1.5 padding into caller-provided storage.
+///
+/// The message must be no longer than the length of the public modulus minus 11 bytes.
+pub fn encrypt_into<'a, R, K, T>(
     rng: &mut R,
-    pub_key: &RsaPublicKey,
+    pub_key: &K,
     msg: &[u8],
-) -> Result<Vec<u8>> {
-    key::check_public(pub_key)?;
-
-    let em = pkcs1v15_encrypt_pad(rng, msg, pub_key.size())?;
-    let int = BoxedUint::from_be_slice(&em, pub_key.n_bits_precision())?;
-    uint_to_be_pad(rsa_encrypt(pub_key, &int)?, pub_key.size())
+    storage: &'a mut [u8],
+) -> Result<&'a [u8]>
+where
+    R: TryCryptoRng + ?Sized,
+    T: UnsignedModularInt,
+    K: PublicKeyParts<T>,
+{
+    Pkcs1v15Encrypt.encrypt_into(rng, pub_key, msg, storage)
 }
 
 /// Decrypts a plaintext using RSA and the padding scheme from PKCS#1 v1.5.
@@ -168,6 +300,7 @@ fn encrypt<R: TryCryptoRng + ?Sized>(
 /// learn whether each instance returned an error then they can decrypt and
 /// forge signatures as if they had the private key. See
 /// `decrypt_session_key` for a way of solving this problem.
+#[cfg(feature = "private-key")]
 #[inline]
 fn decrypt<R: TryCryptoRng + ?Sized>(
     rng: Option<&mut R>,
@@ -196,6 +329,7 @@ fn decrypt<R: TryCryptoRng + ?Sized>(
 /// messages is small, an attacker may be able to build a map from
 /// messages to signatures and identify the signed messages. As ever,
 /// signatures provide authenticity, not confidentiality.
+#[cfg(feature = "private-key")]
 #[inline]
 fn sign<R: TryCryptoRng + ?Sized>(
     rng: Option<&mut R>,
@@ -209,17 +343,25 @@ fn sign<R: TryCryptoRng + ?Sized>(
     uint_to_zeroizing_be_pad(rsa_decrypt_and_check(priv_key, rng, &em)?, priv_key.size())
 }
 
-/// Verifies an RSA PKCS#1 v1.5 signature.
-#[inline]
-fn verify(pub_key: &RsaPublicKey, prefix: &[u8], hashed: &[u8], sig: &BoxedUint) -> Result<()> {
+pub(crate) fn verify_generic<K, T>(
+    pub_key: &K,
+    prefix: &[u8],
+    hashed: &[u8],
+    sig: &T,
+    storage: &mut [u8],
+) -> Result<()>
+where
+    T: UnsignedModularInt,
+    K: PublicKeyParts<T>,
+{
     let n = pub_key.n();
     if sig >= n.as_ref() || sig.bits_precision() != pub_key.n_bits_precision() {
         return Err(Error::Verification);
     }
 
-    let em = uint_to_be_pad(rsa_encrypt(pub_key, sig)?, pub_key.size())?;
+    let em = uint_to_be_pad_into(rsa_encrypt(pub_key, sig)?, pub_key.size(), storage)?;
 
-    pkcs1v15_sign_unpad(prefix, hashed, &em, pub_key.size())
+    pkcs1v15_sign_unpad(prefix, hashed, em, pub_key.size())
 }
 
 mod oid {
@@ -265,6 +407,7 @@ mod oid {
 pub use oid::RsaSignatureAssociatedOid;
 
 #[cfg(test)]
+#[cfg(all(feature = "alloc", feature = "private-key"))]
 mod tests {
     use super::*;
     use ::signature::{

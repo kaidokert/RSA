@@ -10,7 +10,7 @@
 //! [RFC8017 § 8.1]: https://datatracker.ietf.org/doc/html/rfc8017#section-8.1
 
 use alloc::vec::Vec;
-use crypto_bigint::{Choice, CtEq, CtSelect};
+use ctutils::{Choice, CtEq, CtSelect};
 use digest::{Digest, FixedOutputReset};
 
 use super::mgf::{mgf1_xor, mgf1_xor_digest};

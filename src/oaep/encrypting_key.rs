@@ -1,9 +1,9 @@
 use super::encrypt_digest;
-use crate::{traits::RandomizedEncryptor, Result, RsaPublicKey};
+use crate::{errors::Error, traits::RandomizedEncryptor, Result, RsaPublicKey};
 use alloc::{boxed::Box, vec::Vec};
 use core::marker::PhantomData;
 use digest::{Digest, FixedOutputReset};
-use rand_core::CryptoRng;
+use rand_core::{CryptoRng, TryCryptoRng};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -54,6 +54,20 @@ where
     D: Digest,
     MGD: Digest + FixedOutputReset,
 {
+    fn encrypt_with_rng_into<'a, R: TryCryptoRng + ?Sized>(
+        &self,
+        rng: &mut R,
+        msg: &[u8],
+        storage: &'a mut [u8],
+    ) -> Result<&'a [u8]> {
+        let ciphertext = encrypt_digest::<_, D, MGD>(rng, &self.inner, msg, self.label.clone())?;
+        let out = storage
+            .get_mut(..ciphertext.len())
+            .ok_or(Error::OutputBufferTooSmall)?;
+        out.copy_from_slice(&ciphertext);
+        Ok(out)
+    }
+
     fn encrypt_with_rng<R: CryptoRng + ?Sized>(&self, rng: &mut R, msg: &[u8]) -> Result<Vec<u8>> {
         encrypt_digest::<_, D, MGD>(rng, &self.inner, msg, self.label.clone())
     }
