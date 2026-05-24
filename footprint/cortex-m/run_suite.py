@@ -53,16 +53,12 @@ TIMEOUT_RUN = 300  # seconds per QEMU run (4096-bit can take a while)
 TIMEOUT_BUILD = 600  # seconds for cargo build
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 TARGET_DIR = os.path.join(tempfile.gettempdir(), "rsa_footprint_cortexm")
-SYSROOT = subprocess.run(
-    ["rustc", "--print", "sysroot"], capture_output=True, text=True, check=True
-).stdout.strip()
 
 
 def run_cmd(args, timeout=TIMEOUT_RUN, **kwargs):
     """Run a command, return (returncode, stdout, stderr)."""
     env = os.environ.copy()
     env.setdefault("CARGO_TARGET_DIR", TARGET_DIR)
-    env["PATH"] = r"C:\Program Files\qemu;" + env.get("PATH", "")
     result = subprocess.run(
         args,
         capture_output=True,
@@ -177,10 +173,10 @@ def main():
             text_size = get_text_size(target, example, features)
 
             if not metric:
-                print(f"    METRIC line missing", file=sys.stderr)
+                print("    METRIC line missing", file=sys.stderr)
                 failures.append(f"Missing METRIC: {example} [{feat_str}] on {label}")
             if text_size is None:
-                print(f"    .text size unavailable", file=sys.stderr)
+                print("    .text size unavailable", file=sys.stderr)
                 failures.append(f"Missing .text size: {example} [{feat_str}] on {label}")
 
             results[key] = {

@@ -1,3 +1,7 @@
+// Test fixture for footprint / runtime measurement only — do not use these
+// values for anything real. RSA-768 was factored in 2009 (RSA-768 challenge,
+// Kleinjung et al.) and provides no meaningful security.
+//
 // Generated locally with OpenSSL:
 // openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:768 -pkeyopt rsa_keygen_pubexp:65537
 // openssl dgst -sha256 -sign key.pem -out signature.bin message.bin

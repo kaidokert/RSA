@@ -10,17 +10,20 @@ unsafe extern "C" {
 }
 
 /// Read the current stack pointer via inline assembly.
-/// Interrupts are disabled around the two-byte read to prevent a race
-/// between SPL and SPH if an ISR fires in between.
+/// Snapshot SREG and restore it after the read so a caller that had IRQs
+/// disabled isn't surprised by them turning back on. Prevents an SPL/SPH
+/// tearing race if an ISR fires between the two `in` instructions.
 #[inline(always)]
 fn read_sp() -> u16 {
+    let sreg: u8;
     let lo: u8;
     let hi: u8;
     unsafe {
-        core::arch::asm!("cli"); // disable interrupts
+        core::arch::asm!("in {}, 0x3F", out(reg) sreg); // save SREG (I bit)
+        core::arch::asm!("cli");
         core::arch::asm!("in {}, 0x3D", out(reg) lo); // SPL
         core::arch::asm!("in {}, 0x3E", out(reg) hi); // SPH
-        core::arch::asm!("sei"); // re-enable interrupts
+        core::arch::asm!("out 0x3F, {}", in(reg) sreg); // restore SREG
     }
     (hi as u16) << 8 | lo as u16
 }
@@ -29,9 +32,15 @@ fn read_sp() -> u16 {
 /// Only paints below the current stack pointer to avoid overwriting live frames.
 pub unsafe fn fill_stack_with_watermark() {
     let stack_start_ptr = &raw mut _end as *mut u8;
-    // Leave a safety margin below SP for this function's own frame
+    // Leave a safety margin below SP for this function's own frame. If SP is
+    // already inside the margin, the stack is essentially full — bail out
+    // rather than wrap and clobber arbitrary memory.
     let sp = read_sp();
-    let safe_end = (sp - 64) as *mut u8; // 64 bytes margin
+    let safe_end_addr = sp.saturating_sub(64);
+    if (safe_end_addr as usize) <= (stack_start_ptr as usize) {
+        return;
+    }
+    let safe_end = safe_end_addr as *mut u8;
 
     unsafe {
         let mut current_ptr = stack_start_ptr;
@@ -53,7 +62,9 @@ pub unsafe fn measure_stack_usage() -> u16 {
         let mut current_ptr = stack_start_ptr;
         while current_ptr <= stack_end_ptr {
             if core::ptr::read_volatile(current_ptr) != STACK_WATERMARK {
-                return (stack_end_ptr as u16) - (current_ptr as u16);
+                // +1 because both endpoints are inclusive — a single used
+                // byte at RAMEND should report 1, not 0.
+                return (stack_end_ptr as u16) - (current_ptr as u16) + 1;
             }
             current_ptr = current_ptr.add(1);
         }

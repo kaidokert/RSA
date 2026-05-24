@@ -48,16 +48,12 @@ TIMEOUT_RUN = 300  # seconds per QEMU run (4096-bit can take a while)
 TIMEOUT_BUILD = 600  # seconds for cargo build
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 TARGET_DIR = os.path.join(tempfile.gettempdir(), "rsa_footprint_riscv")
-SYSROOT = subprocess.run(
-    ["rustc", "--print", "sysroot"], capture_output=True, text=True, check=True
-).stdout.strip()
 
 
 def run_cmd(args, timeout=TIMEOUT_RUN, **kwargs):
     """Run a command, return (returncode, stdout, stderr)."""
     env = os.environ.copy()
     env.setdefault("CARGO_TARGET_DIR", TARGET_DIR)
-    env["PATH"] = r"C:\Program Files\qemu;E:\m\depot_tools;" + env.get("PATH", "")
     result = subprocess.run(
         args,
         capture_output=True,
@@ -209,12 +205,9 @@ def main():
                 formatter=lambda value: f"{value / 1024:.1f}",
             )
             delta_stack = delta(verify, baseline, "stack")
-            delta_cycles = delta(
-                verify,
-                baseline,
-                "cycles",
-                formatter=lambda value: f"{value / 1000:.1f}",
-            )
+            # Wire format from lib.rs already pre-scales cycles by 1000 so the
+            # METRIC value is in "k" units, matching cortex-m. Don't divide again.
+            delta_cycles = delta(verify, baseline, "cycles")
             print(f"| sifive_e (RV32) | {key_label} | {hash_label} | {backend} | {delta_text} | {delta_stack} | {delta_cycles} |")
 
     print()

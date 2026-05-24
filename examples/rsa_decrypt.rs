@@ -1,3 +1,11 @@
+//! Host-side companion to the `rsa512_sha1` footprint fixture — the
+//! lightest cell in our measurement matrix: RSA-512 + SHA-1 + e=3.
+//! Intended only to exercise and demonstrate the generic public-key path on
+//! a workload small enough to read end-to-end. Not for production use:
+//! RSA-512 was factored in 1999 and SHA-1 is NIST-disallowed for signature
+//! generation. The companion `rsa1024_verify` / `rsa2048_verify` /
+//! `rsa3072_verify` examples show the SHA-256 path at realistic key sizes.
+
 use fixed_bigint::FixedUInt;
 use rsa::pkcs1v15::{GenericSignature, GenericVerifyingKey};
 use rsa::signature::hazmat::PrehashVerifier;

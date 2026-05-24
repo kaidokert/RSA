@@ -52,16 +52,12 @@ TIMEOUT_RUN = 600  # seconds per simavr run (4096-bit AVR takes ~minute)
 TIMEOUT_BUILD = 600  # seconds for cargo build
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 TARGET_DIR = os.path.join(tempfile.gettempdir(), "rsa_footprint_avr")
-SYSROOT = subprocess.run(
-    ["rustc", "--print", "sysroot"], capture_output=True, text=True, check=True
-).stdout.strip()
 
 
 def run_cmd(args, timeout=TIMEOUT_RUN, **kwargs):
     """Run a command, return (returncode, stdout, stderr)."""
     env = os.environ.copy()
     env.setdefault("CARGO_TARGET_DIR", TARGET_DIR)
-    env["PATH"] = r"E:\m\depot_tools;" + env.get("PATH", "")
     result = subprocess.run(
         args,
         capture_output=True,
