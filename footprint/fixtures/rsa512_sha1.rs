@@ -3,7 +3,6 @@
 // smaller exponent means fewer Montgomery multiplications, and SHA-1 is
 // cheaper than SHA-256.
 
-pub const KEY_BITS: usize = 512;
 pub const PUBLIC_EXPONENT: u32 = 3;
 pub const MESSAGE: &[u8] = b"hello world!";
 

@@ -16,7 +16,7 @@ use crypto_bigint::{modular::BoxedMontyParams, BoxedUint};
 use digest::{Digest, FixedOutput, HashMarker, Update};
 use signature::{hazmat::PrehashVerifier, DigestVerifier, Verifier};
 
-#[cfg(feature = "alloc")]
+#[cfg(all(feature = "alloc", feature = "encoding"))]
 use crate::key::RsaPublicKey;
 #[cfg(feature = "encoding")]
 use {

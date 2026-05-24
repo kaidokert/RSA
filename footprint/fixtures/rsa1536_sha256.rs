@@ -2,7 +2,6 @@
 // openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:1536 -pkeyopt rsa_keygen_pubexp:65537
 // openssl dgst -sha256 -sign key.pem -out signature.bin message.bin
 
-pub const KEY_BITS: usize = 1536;
 pub const PUBLIC_EXPONENT: u32 = 65537;
 pub const MESSAGE: &[u8] = b"hello world!";
 
