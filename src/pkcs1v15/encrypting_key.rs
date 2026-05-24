@@ -17,6 +17,13 @@ use serde::{Deserialize, Serialize};
 /// [RFC8017 § 7.2]: https://datatracker.ietf.org/doc/html/rfc8017#section-7.2
 #[derive(Debug, Clone, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+#[cfg_attr(
+    feature = "serde",
+    serde(bound(
+        serialize = "GenericRsaPublicKey<T, M>: Serialize",
+        deserialize = "GenericRsaPublicKey<T, M>: serde::de::DeserializeOwned"
+    ))
+)]
 pub struct GenericEncryptingKey<T, M>
 where
     T: UnsignedModularInt,
