@@ -55,7 +55,8 @@
 //! See security notes in the <code><a href="./pkcs1v15/index.html">pkcs1v15</a></code> module.
 //! </div>
 //!
-//! ```
+#![cfg_attr(feature = "private-key", doc = "```")]
+#![cfg_attr(not(feature = "private-key"), doc = "```ignore")]
 //! use rsa::{RsaPrivateKey, RsaPublicKey, Pkcs1v15Encrypt};
 //!
 //! let mut rng = rand::rng();
