@@ -1,9 +1,6 @@
 #![cfg_attr(not(test), no_std)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
-#![cfg_attr(
-    not(all(feature = "alloc", feature = "full", feature = "private-key")),
-    allow(unused)
-)]
+#![cfg_attr(not(all(feature = "alloc", feature = "private-key")), allow(unused))]
 #![doc = include_str!("../README.md")]
 #![doc(html_logo_url = "https://raw.githubusercontent.com/RustCrypto/meta/master/logo_small.png")]
 #![warn(missing_docs)]
@@ -247,10 +244,8 @@ pub use signature;
 
 mod algorithms;
 pub mod errors;
-#[cfg(feature = "full")]
 pub mod oaep;
 pub mod pkcs1v15;
-#[cfg(feature = "full")]
 pub mod pss;
 pub mod traits;
 
@@ -282,9 +277,13 @@ pub use crate::{
 #[cfg(feature = "private-key")]
 pub use crate::key::RsaPrivateKey;
 
-// OAEP / PSS schemes are part of the `full` feature.
-#[cfg(feature = "full")]
-pub use crate::{oaep::Oaep, pss::Pss};
+// Boxed scheme types ride behind `alloc` (they carry Box-typed fields).
+// The no_alloc public-key paths are `rsa::oaep::GenericEncryptingKey` and
+// `rsa::pss::GenericVerifyingKey`.
+#[cfg(feature = "alloc")]
+pub use crate::oaep::Oaep;
+#[cfg(feature = "alloc")]
+pub use crate::pss::Pss;
 
 #[cfg(all(feature = "hazmat", feature = "alloc"))]
 pub mod hazmat;

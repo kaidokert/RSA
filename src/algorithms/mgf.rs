@@ -16,11 +16,12 @@ where
     assert!(out.len() as u64 <= MAX_LEN);
 
     while i < out.len() {
-        let mut digest_input = vec![0u8; seed.len() + 4];
-        digest_input[0..seed.len()].copy_from_slice(seed);
-        digest_input[seed.len()..].copy_from_slice(&counter);
+        // Stream seed and counter into the hasher separately so the function
+        // works in no_alloc contexts (Merkle-Damgård absorption is identical
+        // to feeding a single seed || counter buffer).
+        Digest::update(digest, seed);
+        Digest::update(digest, &counter);
 
-        Digest::update(digest, digest_input.as_slice());
         let digest_output = &*digest.finalize_reset();
         let mut j = 0;
         loop {

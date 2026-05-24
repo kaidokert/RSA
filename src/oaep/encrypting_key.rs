@@ -1,7 +1,11 @@
-use super::encrypt_digest;
-use crate::{errors::Error, traits::RandomizedEncryptor, Result, RsaPublicKey};
+use super::encrypt_digest_into;
+use crate::traits::{modular::ModulusParams, PublicKeyParts, UnsignedModularInt};
+use crate::{traits::RandomizedEncryptor, GenericRsaPublicKey, Result};
+#[cfg(feature = "alloc")]
 use alloc::{boxed::Box, vec::Vec};
 use core::marker::PhantomData;
+#[cfg(feature = "alloc")]
+use crypto_bigint::{modular::BoxedMontyParams, BoxedUint};
 use digest::{Digest, FixedOutputReset};
 use rand_core::{CryptoRng, TryCryptoRng};
 #[cfg(feature = "serde")]
@@ -12,26 +16,44 @@ use serde::{Deserialize, Serialize};
 /// [RFC8017 § 7.1]: https://datatracker.ietf.org/doc/html/rfc8017#section-7.1
 #[derive(Debug, Clone)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
-pub struct EncryptingKey<D, MGD = D>
+#[cfg_attr(
+    feature = "serde",
+    serde(bound(
+        serialize = "GenericRsaPublicKey<T, M>: Serialize",
+        deserialize = "GenericRsaPublicKey<T, M>: serde::de::DeserializeOwned"
+    ))
+)]
+pub struct GenericEncryptingKey<D, MGD, T, M>
 where
-    D: Digest,
-    MGD: Digest + FixedOutputReset,
+    T: UnsignedModularInt,
+    M: ModulusParams<Modulus = T>,
 {
-    inner: RsaPublicKey,
+    inner: GenericRsaPublicKey<T, M>,
+    // TODO: gating `label` on `alloc` is a stopgap so the no_alloc path can
+    // share the same struct — it just gives up label support there. Revisit
+    // with a fixed-capacity buffer type (e.g. a small `[u8; N]` + length, or
+    // a borrowed `&'a [u8]` with a lifetime) so no_alloc OAEP can carry a
+    // label too.
+    #[cfg(feature = "alloc")]
     label: Option<Box<[u8]>>,
     phantom: PhantomData<D>,
     mg_phantom: PhantomData<MGD>,
 }
 
-impl<D, MGD> EncryptingKey<D, MGD>
+/// Boxed OAEP encrypting key alias.
+#[cfg(feature = "alloc")]
+pub type EncryptingKey<D, MGD = D> = GenericEncryptingKey<D, MGD, BoxedUint, BoxedMontyParams>;
+
+impl<D, MGD, T, M> GenericEncryptingKey<D, MGD, T, M>
 where
-    D: Digest,
-    MGD: Digest + FixedOutputReset,
+    T: UnsignedModularInt,
+    M: ModulusParams<Modulus = T>,
 {
     /// Create a new verifying key from an RSA public key.
-    pub fn new(key: RsaPublicKey) -> Self {
+    pub fn new(key: GenericRsaPublicKey<T, M>) -> Self {
         Self {
             inner: key,
+            #[cfg(feature = "alloc")] // TODO: add missing label
             label: None,
             phantom: Default::default(),
             mg_phantom: Default::default(),
@@ -39,7 +61,8 @@ where
     }
 
     /// Create a new verifying key from an RSA public key using provided label
-    pub fn new_with_label<S: Into<Box<[u8]>>>(key: RsaPublicKey, label: S) -> Self {
+    #[cfg(feature = "alloc")]
+    pub fn new_with_label<S: Into<Box<[u8]>>>(key: GenericRsaPublicKey<T, M>, label: S) -> Self {
         Self {
             inner: key,
             label: Some(label.into()),
@@ -49,10 +72,12 @@ where
     }
 }
 
-impl<D, MGD> RandomizedEncryptor for EncryptingKey<D, MGD>
+impl<D, MGD, T, M> RandomizedEncryptor for GenericEncryptingKey<D, MGD, T, M>
 where
     D: Digest,
     MGD: Digest + FixedOutputReset,
+    T: UnsignedModularInt,
+    M: ModulusParams<Modulus = T>,
 {
     fn encrypt_with_rng_into<'a, R: TryCryptoRng + ?Sized>(
         &self,
@@ -60,23 +85,27 @@ where
         msg: &[u8],
         storage: &'a mut [u8],
     ) -> Result<&'a [u8]> {
-        let ciphertext = encrypt_digest::<_, D, MGD>(rng, &self.inner, msg, self.label.clone())?;
-        let out = storage
-            .get_mut(..ciphertext.len())
-            .ok_or(Error::OutputBufferTooSmall)?;
-        out.copy_from_slice(&ciphertext);
-        Ok(out)
+        #[cfg(feature = "alloc")]
+        let label = self.label.as_deref();
+        #[cfg(not(feature = "alloc"))] // TODO: add missing label
+        let label: Option<&[u8]> = None;
+        encrypt_digest_into::<_, D, MGD, _, T>(rng, &self.inner, msg, label, storage)
     }
 
+    #[cfg(feature = "alloc")]
     fn encrypt_with_rng<R: CryptoRng + ?Sized>(&self, rng: &mut R, msg: &[u8]) -> Result<Vec<u8>> {
-        encrypt_digest::<_, D, MGD>(rng, &self.inner, msg, self.label.clone())
+        let mut storage = vec![0u8; self.inner.size()];
+        let ciphertext = self.encrypt_with_rng_into(rng, msg, &mut storage)?;
+        Ok(ciphertext.to_vec())
     }
 }
 
-impl<D, MGD> PartialEq for EncryptingKey<D, MGD>
+#[cfg(feature = "alloc")]
+impl<D, MGD, T, M> PartialEq for GenericEncryptingKey<D, MGD, T, M>
 where
-    D: Digest,
-    MGD: Digest + FixedOutputReset,
+    T: UnsignedModularInt,
+    M: ModulusParams<Modulus = T>,
+    GenericRsaPublicKey<T, M>: PartialEq,
 {
     fn eq(&self, other: &Self) -> bool {
         self.inner == other.inner && self.label == other.label
@@ -87,7 +116,7 @@ where
 mod tests {
 
     #[test]
-    #[cfg(all(feature = "hazmat", feature = "serde"))]
+    #[cfg(all(feature = "hazmat", feature = "serde", feature = "private-key"))]
     fn test_serde() {
         use super::*;
         use rand::rngs::ChaCha8Rng;
@@ -101,7 +130,7 @@ mod tests {
 
         let tokens = [
             Token::Struct {
-                name: "EncryptingKey",
+                name: "GenericEncryptingKey",
                 len: 4,
             },
             Token::Str("inner"),

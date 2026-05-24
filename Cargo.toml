@@ -83,7 +83,7 @@ name = "rsa_decrypt"
 required-features = ["modmath", "alloc"]
 
 [features]
-default = ["std", "encoding", "full", "modmath" ]
+default = ["std", "encoding", "modmath"]
 encoding = ["alloc", "private-key", "dep:pkcs1", "dep:pkcs8", "dep:spki"]
 hazmat = []
 getrandom = ["dep:crypto-bigint", "crypto-bigint/getrandom", "crypto-common"]
@@ -92,8 +92,6 @@ pkcs5 = ["pkcs8/encryption"]
 std = ["alloc", "pkcs1?/std", "pkcs8?/std"]
 alloc = ["dep:crypto-bigint", "crypto-bigint/alloc", "pkcs8/alloc", "spki/alloc", "digest/alloc", "signature/alloc", "zeroize/alloc"]
 
-# Full feature set has all padding formats, and private key generation
-full = ["private-key"]
 # Enable private key support, doesn't work with no-alloc
 private-key = ["alloc", "dep:crypto-primes"]
 modmath = ["dep:modmath"]
