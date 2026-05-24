@@ -4,6 +4,7 @@
 Generates a markdown metrics table from the results.
 """
 
+import json
 import os
 import re
 import subprocess
@@ -106,21 +107,25 @@ def run_qemu(target, example, features):
 
 
 def get_text_size(target, example, features):
-    """Get .text section size via cargo-size output."""
+    """Get .text section size via cargo-bloat JSON output."""
     try:
-        args = ["cargo", "size", "--target", target, "--release", "--example", example]
+        args = [
+            "cargo", "bloat", "--release", "--target", target,
+            "--example", example, "--message-format=json",
+        ]
         if features:
             args.extend(["--features", ",".join(features)])
-        args.extend(["--", "-A"])
         rc, out, err = run_cmd(args, timeout=TIMEOUT_BUILD)
         if rc == 0:
-            match = re.search(r"^\.text\s+(\d+)\s", out, re.MULTILINE)
-            if match:
-                return int(match.group(1))
+            json_line = out.strip().split("\n")[-1]
+            data = json.loads(json_line)
+            return data.get("text-section-size")
         else:
-            print(f"    cargo size failed (rc={rc}): {err.strip()}", file=sys.stderr)
+            print(f"    cargo-bloat failed (rc={rc}): {err.strip()}", file=sys.stderr)
     except (subprocess.TimeoutExpired, FileNotFoundError) as e:
-        print(f"    cargo size not available: {e}", file=sys.stderr)
+        print(f"    cargo-bloat not available: {e}", file=sys.stderr)
+    except (json.JSONDecodeError, IndexError) as e:
+        print(f"    cargo-bloat JSON parse error: {e}", file=sys.stderr)
     return None
 
 

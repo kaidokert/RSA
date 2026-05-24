@@ -1,0 +1,55 @@
+name: AVR
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 6 * * 1'  # Weekly on Monday at 06:00 UTC
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  avr:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    # AVR pin comes from footprint/avr/rust-toolchain.toml (nightly with
+    # build-std support). Listing it here too keeps the action self-explanatory.
+    - uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: nightly-2025-11-01
+        components: rust-src, llvm-tools
+
+    - name: Install simavr and AVR toolchain
+      run: sudo apt-get update && sudo apt-get install -y simavr gcc-avr avr-libc
+
+    - name: Cache cargo binaries
+      uses: actions/cache@v4
+      with:
+        path: ~/.cargo/bin/cargo-bloat
+        key: ${{ runner.os }}-cargo-bloat-v1
+
+    - name: Install cargo-bloat
+      run: |
+        if ! command -v cargo-bloat &> /dev/null; then
+          cargo install cargo-bloat --locked
+        fi
+
+    - uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          footprint/avr/target
+        key: avr-${{ hashFiles('footprint/avr/Cargo.toml', 'Cargo.toml') }}
+        restore-keys: avr-
+
+    - name: Run AVR suite
+      run: |
+        set -o pipefail
+        python3 run_suite.py | tee -a "$GITHUB_STEP_SUMMARY"
+      working-directory: footprint/avr
