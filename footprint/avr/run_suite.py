@@ -11,7 +11,9 @@ import subprocess
 import sys
 import tempfile
 
-EXAMPLES = [
+# Full local sweep. Sizes >= 2048 take >300s wall-clock under simavr so they
+# are not even listed here; the chip itself can do them, simavr is the limit.
+EXAMPLES_FULL = [
     # (example, variant, [features])
     ("baseline",   "baseline",        ["baseline"]),
     # SHA-1 + e=3 at 512-bit — the lightest workload cell in the matrix.
@@ -21,16 +23,31 @@ EXAMPLES = [
     ("rsa_verify", "rsa768_sha256",   ["key_768",  "hash_sha256"]),
     ("rsa_verify", "rsa1024_sha256",  ["key_1024", "hash_sha256"]),
     ("rsa_verify", "rsa1536_sha256",  ["key_1536", "hash_sha256"]),
-    # Sizes >= 2048 take >300s wall-clock under simavr — disabled for CI sanity.
 ]
+# CI ("fast") sweep — only 512-bit cells. Anything above that pushes the
+# GitHub-runner wall-clock past patience. Trigger via --fast or RSA_FOOTPRINT_FAST=1.
+EXAMPLES_FAST = [
+    ("baseline",   "baseline",        ["baseline"]),
+    ("rsa_verify", "rsa512_sha1",     ["key_512",  "hash_sha1"]),
+    ("rsa_verify", "rsa512_sha256",   ["key_512",  "hash_sha256"]),
+]
+
+FAST = "--fast" in sys.argv or os.environ.get("RSA_FOOTPRINT_FAST") == "1"
+EXAMPLES = EXAMPLES_FAST if FAST else EXAMPLES_FULL
+
 # Variant -> (key bits label, hash label) in render order.
-KEY_VARIANTS = [
+KEY_VARIANTS_FULL = [
     ("rsa512_sha1",    "512",  "sha1"),
     ("rsa512_sha256",  "512",  "sha256"),
     ("rsa768_sha256",  "768",  "sha256"),
     ("rsa1024_sha256", "1024", "sha256"),
     ("rsa1536_sha256", "1536", "sha256"),
 ]
+KEY_VARIANTS_FAST = [
+    ("rsa512_sha1",    "512",  "sha1"),
+    ("rsa512_sha256",  "512",  "sha256"),
+]
+KEY_VARIANTS = KEY_VARIANTS_FAST if FAST else KEY_VARIANTS_FULL
 TIMEOUT_RUN = 600  # seconds per simavr run (4096-bit AVR takes ~minute)
 TIMEOUT_BUILD = 600  # seconds for cargo build
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))

@@ -48,8 +48,10 @@ jobs:
         key: avr-${{ hashFiles('footprint/avr/Cargo.toml', 'Cargo.toml') }}
         restore-keys: avr-
 
-    - name: Run AVR suite
+    - name: Run AVR suite (CI fast subset — 512-bit only)
+      # Full sweep up to 1536-bit is available locally via `python3 run_suite.py`
+      # without --fast; simavr is too slow on GitHub runners for the larger cells.
       run: |
         set -o pipefail
-        python3 run_suite.py | tee -a "$GITHUB_STEP_SUMMARY"
+        python3 run_suite.py --fast | tee -a "$GITHUB_STEP_SUMMARY"
       working-directory: footprint/avr
