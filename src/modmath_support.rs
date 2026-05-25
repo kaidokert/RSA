@@ -1,7 +1,6 @@
 //! Generic `modmath` backend adapters for fixed-width RSA public-key paths.
 
-// TODO: docs polish. CLAUDE.md "Known Limits #3" tracks this — the trait surface
-// is still moving; revisit once the abstraction settles.
+// TODO: document the public surface once the trait shape settles.
 #![allow(missing_docs)]
 
 #[cfg(feature = "alloc")]

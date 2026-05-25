@@ -10,12 +10,9 @@ repository = "https://github.com/RustCrypto/RSA"
 keywords = ["rsa", "encryption", "security", "crypto"]
 categories = ["cryptography"]
 readme = "README.md"
-rust-version = "1.85"
+rust-version = "1.87"
 exclude = ["marvin_toolkit/", "thirdparty/"]
 
-# Keep the import name as `rsa` even though the package is published as
-# `rsa_heapless`. Lets every upstream-mirrored `use rsa::...` site (examples,
-# tests, src/ doctests, README) stay byte-identical to upstream.
 [lib]
 name = "rsa"
 
@@ -42,6 +39,7 @@ serde = { version = "1.0.184", optional = true, default-features = false, featur
 # Big integer backend
 crypto-bigint = { version = "0.7.1", optional = true, default-features = false, features = ["zeroize","rand_core"] }
 modmath = { version = "0.1.5", optional = true, default-features = false, features = ["wide-mul"] }
+heapless = "0.9"
 
 [dev-dependencies]
 base64ct = { version = "1", features = ["alloc"] }
@@ -83,7 +81,7 @@ name = "rsa_decrypt"
 required-features = ["modmath", "alloc"]
 
 [features]
-default = ["std", "encoding", "full", "modmath" ]
+default = ["std", "encoding", "modmath"]
 encoding = ["alloc", "private-key", "dep:pkcs1", "dep:pkcs8", "dep:spki"]
 hazmat = []
 getrandom = ["dep:crypto-bigint", "crypto-bigint/getrandom", "crypto-common"]
@@ -92,8 +90,6 @@ pkcs5 = ["pkcs8/encryption"]
 std = ["alloc", "pkcs1?/std", "pkcs8?/std"]
 alloc = ["dep:crypto-bigint", "crypto-bigint/alloc", "pkcs8/alloc", "spki/alloc", "digest/alloc", "signature/alloc", "zeroize/alloc"]
 
-# Full feature set has all padding formats, and private key generation
-full = ["private-key"]
 # Enable private key support, doesn't work with no-alloc
 private-key = ["alloc", "dep:crypto-primes"]
 modmath = ["dep:modmath"]

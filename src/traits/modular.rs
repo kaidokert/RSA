@@ -1,5 +1,4 @@
-// TODO: docs polish. Trait surface is still moving; revisit once the abstraction
-// settles. CLAUDE.md "Known Limits #3" tracks this.
+// TODO: document the public surface once the trait shape settles.
 #![allow(missing_docs)]
 
 use core::borrow::Borrow;

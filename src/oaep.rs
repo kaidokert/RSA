@@ -4,24 +4,43 @@
 //!
 //! See [code example in the toplevel rustdoc](../index.html#oaep-encryption).
 
+#[cfg(feature = "private-key")]
 mod decrypting_key;
 mod encrypting_key;
+#[cfg(not(feature = "alloc"))]
+mod label;
 
-pub use self::{decrypting_key::DecryptingKey, encrypting_key::EncryptingKey};
+#[cfg(feature = "private-key")]
+pub use self::decrypting_key::DecryptingKey;
+#[cfg(feature = "alloc")]
+pub use self::encrypting_key::EncryptingKey;
+pub use self::encrypting_key::GenericEncryptingKey;
+#[cfg(not(feature = "alloc"))]
+pub use self::label::{Label, MAX_LABEL_LEN};
 
+#[cfg(feature = "alloc")]
 use alloc::boxed::Box;
+#[cfg(feature = "alloc")]
 use alloc::{vec, vec::Vec};
 use core::fmt;
+#[cfg(feature = "alloc")]
 use crypto_bigint::BoxedUint;
 
 use digest::{Digest, FixedOutputReset};
 use rand_core::TryCryptoRng;
 
 use crate::algorithms::oaep::*;
+#[cfg(feature = "alloc")]
 use crate::algorithms::pad::{uint_to_be_pad, uint_to_be_pad_into, uint_to_zeroizing_be_pad};
-use crate::algorithms::rsa::{rsa_decrypt_and_check, rsa_encrypt};
+#[cfg(feature = "private-key")]
+use crate::algorithms::rsa::rsa_decrypt_and_check;
+#[cfg(feature = "alloc")]
+use crate::algorithms::rsa::rsa_encrypt;
 use crate::errors::{Error, Result};
-use crate::key::{self, RsaPrivateKey, RsaPublicKey};
+#[cfg(feature = "private-key")]
+use crate::key::RsaPrivateKey;
+#[cfg(feature = "alloc")]
+use crate::key::{self, RsaPublicKey};
 use crate::traits::{PaddingScheme, PublicKeyParts, UnsignedModularInt};
 
 /// Encryption and Decryption using [OAEP padding](https://datatracker.ietf.org/doc/html/rfc8017#section-7.1).
@@ -35,6 +54,7 @@ use crate::traits::{PaddingScheme, PublicKeyParts, UnsignedModularInt};
 ///
 /// A prominent example is the [`AndroidKeyStore`](https://developer.android.com/guide/topics/security/cryptography#oaep-mgf1-digest).
 /// It uses SHA-1 for `mgf_digest` and a user-chosen SHA flavour for `digest`.
+#[cfg(feature = "alloc")]
 pub struct Oaep<D, MGD = D> {
     /// Digest type to use.
     pub digest: D,
@@ -46,6 +66,7 @@ pub struct Oaep<D, MGD = D> {
     pub label: Option<Box<[u8]>>,
 }
 
+#[cfg(feature = "alloc")]
 impl<D> Default for Oaep<D>
 where
     D: Digest + FixedOutputReset,
@@ -55,6 +76,7 @@ where
     }
 }
 
+#[cfg(feature = "alloc")]
 impl<D> Oaep<D>
 where
     D: Digest + FixedOutputReset,
@@ -97,6 +119,7 @@ where
     }
 }
 
+#[cfg(feature = "alloc")]
 impl<D, MGD> Oaep<D, MGD>
 where
     D: Digest + FixedOutputReset,
@@ -141,6 +164,7 @@ where
     }
 }
 
+#[cfg(feature = "alloc")]
 impl<D, MGD> PaddingScheme for Oaep<D, MGD>
 where
     D: Digest + FixedOutputReset,
@@ -185,6 +209,7 @@ where
     }
 }
 
+#[cfg(feature = "alloc")]
 impl<D, MGD> fmt::Debug for Oaep<D, MGD> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("OAEP")
@@ -202,8 +227,9 @@ impl<D, MGD> fmt::Debug for Oaep<D, MGD> {
 /// `2 + (2 * hash.size())`.
 ///
 /// [PKCS#1 OAEP]: https://datatracker.ietf.org/doc/html/rfc8017#section-7.1
+#[cfg(feature = "alloc")]
 #[inline]
-#[allow(dead_code)] // OAEP encrypt helper; trait-driven entry points are preferred but this is kept.
+#[allow(dead_code)]
 fn encrypt<R, D, MGD>(
     rng: &mut R,
     pub_key: &RsaPublicKey,
@@ -232,6 +258,8 @@ where
 /// `2 + (2 * hash.size())`.
 ///
 /// [PKCS#1 OAEP]: https://datatracker.ietf.org/doc/html/rfc8017#section-7.1
+#[cfg(feature = "alloc")]
+#[allow(dead_code)]
 fn encrypt_digest<R, D, MGD>(
     rng: &mut R,
     pub_key: &RsaPublicKey,
@@ -251,6 +279,33 @@ where
     uint_to_be_pad(rsa_encrypt(pub_key, &int)?, pub_key.size())
 }
 
+/// Does not call `key::check_public` — that validator is `alloc`-only.
+pub fn encrypt_digest_into<'a, R, D, MGD, K, T>(
+    rng: &mut R,
+    pub_key: &K,
+    msg: &[u8],
+    label: Option<&[u8]>,
+    storage: &'a mut [u8],
+) -> crate::Result<&'a [u8]>
+where
+    R: rand_core::TryCryptoRng + ?Sized,
+    D: digest::Digest,
+    MGD: digest::Digest + digest::FixedOutputReset,
+    K: crate::traits::PublicKeyParts<T>,
+    T: crate::traits::UnsignedModularInt,
+{
+    let padded_len = pub_key.size();
+    let em = crate::algorithms::oaep::oaep_encrypt_digest_into::<_, D, MGD>(
+        rng, msg, label, padded_len, storage,
+    )?;
+    let int = T::from_be_bytes_vartime(em);
+    crate::algorithms::pad::uint_to_be_pad_into(
+        crate::algorithms::rsa::rsa_encrypt(pub_key, &int)?,
+        padded_len,
+        storage,
+    )
+}
+
 /// Decrypts a plaintext using RSA and the padding scheme from [PKCS#1 OAEP].
 ///
 /// If an `rng` is passed, it uses RSA blinding to avoid timing side-channel attacks.
@@ -263,6 +318,7 @@ where
 /// See `decrypt_session_key` for a way of solving this problem.
 ///
 /// [PKCS#1 OAEP]: https://datatracker.ietf.org/doc/html/rfc8017#section-7.1
+#[cfg(feature = "private-key")]
 #[inline]
 fn decrypt<R, D, MGD>(
     rng: Option<&mut R>,
@@ -301,6 +357,7 @@ where
 /// See `decrypt_session_key` for a way of solving this problem.
 ///
 /// [PKCS#1 OAEP]: https://datatracker.ietf.org/doc/html/rfc8017#section-7.1
+#[cfg(feature = "private-key")]
 #[inline]
 fn decrypt_digest<R, D, MGD>(
     rng: Option<&mut R>,
@@ -327,6 +384,7 @@ where
 }
 
 #[cfg(test)]
+#[cfg(all(feature = "alloc", feature = "private-key"))]
 mod tests {
     use crate::key::{RsaPrivateKey, RsaPublicKey};
     use crate::oaep::{DecryptingKey, EncryptingKey, Oaep};

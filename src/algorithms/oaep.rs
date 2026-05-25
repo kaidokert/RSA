@@ -1,6 +1,8 @@
 //! Encryption and Decryption using [OAEP padding](https://datatracker.ietf.org/doc/html/rfc8017#section-7.1).
 //!
+#[cfg(feature = "alloc")]
 use alloc::boxed::Box;
+#[cfg(feature = "alloc")]
 use alloc::vec::Vec;
 
 use ctutils::{Choice, CtAssign, CtEq, CtOption};
@@ -19,19 +21,24 @@ use crate::errors::{Error, Result};
 const MAX_LABEL_LEN: u64 = 1 << 61;
 
 #[inline]
-fn encrypt_internal<R: TryCryptoRng + ?Sized, MGF: FnMut(&mut [u8], &mut [u8])>(
+fn encrypt_internal_into<R, MGF>(
     rng: &mut R,
     msg: &[u8],
     p_hash: &[u8],
     h_size: usize,
     k: usize,
-    mut mgf: MGF,
-) -> Result<Zeroizing<Vec<u8>>> {
+    em: &mut [u8],
+    mgf: &mut MGF,
+) -> Result<()>
+where
+    R: TryCryptoRng + ?Sized,
+    MGF: FnMut(&mut [u8], &mut [u8]),
+{
     if msg.len() + 2 * h_size + 2 > k {
         return Err(Error::MessageTooLong);
     }
-
-    let mut em = Zeroizing::new(vec![0u8; k]);
+    let em = em.get_mut(..k).ok_or(Error::OutputBufferTooSmall)?;
+    em.fill(0);
 
     let (_, payload) = em.split_at_mut(1);
     let (seed, db) = payload.split_at_mut(h_size);
@@ -46,7 +53,7 @@ fn encrypt_internal<R: TryCryptoRng + ?Sized, MGF: FnMut(&mut [u8], &mut [u8])>(
 
     mgf(seed, db);
 
-    Ok(em)
+    Ok(())
 }
 
 /// Encrypts the given message with RSA and the padding scheme from
@@ -56,6 +63,7 @@ fn encrypt_internal<R: TryCryptoRng + ?Sized, MGF: FnMut(&mut [u8], &mut [u8])>(
 /// `2 + (2 * hash.size())`.
 ///
 /// [PKCS#1 OAEP]: https://datatracker.ietf.org/doc/html/rfc8017#section-7.1
+#[cfg(feature = "alloc")]
 #[inline]
 pub(crate) fn oaep_encrypt<R, D, MGD>(
     rng: &mut R,
@@ -70,20 +78,42 @@ where
     D: Digest + FixedOutputReset,
     MGD: Digest + FixedOutputReset,
 {
+    let mut em = Zeroizing::new(vec![0u8; k]);
+    oaep_encrypt_into(rng, msg, digest, mgf_digest, label.as_deref(), k, &mut em)?;
+    Ok(em)
+}
+
+#[inline]
+pub(crate) fn oaep_encrypt_into<'a, R, D, MGD>(
+    rng: &mut R,
+    msg: &[u8],
+    digest: &mut D,
+    mgf_digest: &mut MGD,
+    label: Option<&[u8]>,
+    k: usize,
+    em: &'a mut [u8],
+) -> Result<&'a [u8]>
+where
+    R: TryCryptoRng + ?Sized,
+    D: Digest + FixedOutputReset,
+    MGD: Digest + FixedOutputReset,
+{
     let h_size = <D as Digest>::output_size();
 
-    let label = label.unwrap_or_default();
+    let label = label.unwrap_or(&[]);
     if label.len() as u64 >= MAX_LABEL_LEN {
         return Err(Error::LabelTooLong);
     }
 
-    Digest::update(digest, &label);
+    Digest::update(digest, label);
     let p_hash = digest.finalize_reset();
 
-    encrypt_internal(rng, msg, &p_hash, h_size, k, |seed, db| {
+    let mut mgf = |seed: &mut [u8], db: &mut [u8]| {
         mgf1_xor(db, mgf_digest, seed);
         mgf1_xor(seed, mgf_digest, db);
-    })
+    };
+    encrypt_internal_into(rng, msg, &p_hash, h_size, k, em, &mut mgf)?;
+    Ok(&em[..k])
 }
 
 /// Encrypts the given message with RSA and the padding scheme from
@@ -93,7 +123,9 @@ where
 /// `2 + (2 * hash.size())`.
 ///
 /// [PKCS#1 OAEP]: https://datatracker.ietf.org/doc/html/rfc8017#section-7.1
+#[cfg(feature = "alloc")]
 #[inline]
+#[allow(dead_code)]
 pub(crate) fn oaep_encrypt_digest<R, D, MGD>(
     rng: &mut R,
     msg: &[u8],
@@ -105,20 +137,40 @@ where
     D: Digest,
     MGD: Digest + FixedOutputReset,
 {
+    let mut em = Zeroizing::new(vec![0u8; k]);
+    oaep_encrypt_digest_into::<R, D, MGD>(rng, msg, label.as_deref(), k, &mut em)?;
+    Ok(em)
+}
+
+#[inline]
+pub(crate) fn oaep_encrypt_digest_into<'a, R, D, MGD>(
+    rng: &mut R,
+    msg: &[u8],
+    label: Option<&[u8]>,
+    k: usize,
+    em: &'a mut [u8],
+) -> Result<&'a [u8]>
+where
+    R: TryCryptoRng + ?Sized,
+    D: Digest,
+    MGD: Digest + FixedOutputReset,
+{
     let h_size = <D as Digest>::output_size();
 
-    let label = label.unwrap_or_default();
+    let label = label.unwrap_or(&[]);
     if label.len() as u64 >= MAX_LABEL_LEN {
         return Err(Error::LabelTooLong);
     }
 
-    let p_hash = D::digest(&label);
+    let p_hash = D::digest(label);
 
-    encrypt_internal(rng, msg, &p_hash, h_size, k, |seed, db| {
+    let mut mgf = |seed: &mut [u8], db: &mut [u8]| {
         let mut mgf_digest = MGD::new();
         mgf1_xor_digest(db, &mut mgf_digest, seed);
         mgf1_xor_digest(seed, &mut mgf_digest, db);
-    })
+    };
+    encrypt_internal_into(rng, msg, &p_hash, h_size, k, em, &mut mgf)?;
+    Ok(&em[..k])
 }
 
 ///Decrypts OAEP padding.
@@ -131,6 +183,7 @@ where
 /// See `decrypt_session_key` for a way of solving this problem.
 ///
 /// [PKCS#1 OAEP]: https://datatracker.ietf.org/doc/html/rfc8017#section-7.1
+#[cfg(feature = "alloc")]
 #[inline]
 pub(crate) fn oaep_decrypt<D, MGD>(
     em: &mut [u8],
@@ -177,6 +230,7 @@ where
 /// See `decrypt_session_key` for a way of solving this problem.
 ///
 /// [PKCS#1 OAEP]: https://datatracker.ietf.org/doc/html/rfc8017#section-7.1
+#[cfg(feature = "alloc")]
 #[inline]
 pub(crate) fn oaep_decrypt_digest<D, MGD>(
     em: &mut [u8],
@@ -212,6 +266,7 @@ where
 
 /// Decrypts OAEP padding. It returns one or zero in valid that indicates whether the
 /// plaintext was correctly structured.
+#[cfg(feature = "alloc")]
 #[inline]
 fn decrypt_inner<MGF: FnMut(&mut [u8], &mut [u8])>(
     em: &mut [u8],
