@@ -13,12 +13,17 @@ This is a proof of concept focused on shrinking code size and stack usage. Publi
 
 #### Resource usage (as of version 0.10.0-rc.18)
 
-| Target | Key | Operation | Backend | .text (KiB) | Stack (bytes) |
-| ------ | --- | --------- | ------- | ----------: | ------------: |
-| AVR ATmega2560 | RSA-2048 | PSS verify (SHA-256) | u8×256 |   |   |
-| Cortex-M0      | RSA-2048 | PSS verify (SHA-256) | u8×256 |   |   |
-| Cortex-M3      | RSA-2048 | PSS verify (SHA-256) | u8×256 |   |   |
-| RV32IMAC       | RSA-2048 | PSS verify (SHA-256) | u32×64 |   |   |
+PSS signature verification. The `u8` backend uses 8-bit limbs (more portable, works on 8-bit AVR); the `u32` backend uses 32-bit limbs (natural on 32-bit cores). Full sweeps across key sizes, operations, and targets live under [`footprint/`](footprint/).
+
+| Target          |  Key | Hash    | Backend | .text (KiB) | Stack (bytes) |
+| --------------- | ---: | ------- | ------- | ----------: | ------------: |
+| ATmega2560      |  512 | SHA-1   | u8      |        27.2 |          2198 |
+| Cortex-M0       |  512 | SHA-1   | u32     |         8.9 |          3760 |
+| Cortex-M0       | 2048 | SHA-256 | u32     |        15.6 |          9256 |
+| Cortex-M3       |  512 | SHA-1   | u32     |         9.2 |          3776 |
+| Cortex-M3       | 2048 | SHA-256 | u32     |        13.0 |          9144 |
+| sifive_e (RV32) |  512 | SHA-1   | u32     |        11.1 |          2036 |
+| sifive_e (RV32) | 2048 | SHA-256 | u32     |        21.2 |          8436 |
 
 #### Example (host, alloc)
 
