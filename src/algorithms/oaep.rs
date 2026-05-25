@@ -96,12 +96,12 @@ where
 {
     let h_size = <D as Digest>::output_size();
 
-    let label = label.unwrap_or(&[]);
+    let label = label.unwrap_or_default();
     if label.len() as u64 >= MAX_LABEL_LEN {
         return Err(Error::LabelTooLong);
     }
 
-    Digest::update(digest, label);
+    Digest::update(digest, &label);
     let p_hash = digest.finalize_reset();
 
     let mgf = |seed: &mut [u8], db: &mut [u8]| {
@@ -153,12 +153,12 @@ where
 {
     let h_size = <D as Digest>::output_size();
 
-    let label = label.unwrap_or(&[]);
+    let label = label.unwrap_or_default();
     if label.len() as u64 >= MAX_LABEL_LEN {
         return Err(Error::LabelTooLong);
     }
 
-    let p_hash = D::digest(label);
+    let p_hash = D::digest(&label);
 
     let mgf = |seed: &mut [u8], db: &mut [u8]| {
         let mut mgf_digest = MGD::new();

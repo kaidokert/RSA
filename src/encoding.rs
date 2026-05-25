@@ -92,7 +92,7 @@ impl pkcs1::EncodeRsaPrivateKey for RsaPrivateKey {
             return Err(pkcs1::Error::Crypto);
         }
 
-        let modulus = self.n().as_ref().to_be_bytes();
+        let modulus = self.n().to_be_bytes();
         let public_exponent = self.e().to_be_bytes();
         let private_exponent = Zeroizing::new(self.d().to_be_bytes());
         let prime1 = Zeroizing::new(self.primes[0].to_be_bytes());
@@ -137,7 +137,7 @@ impl pkcs1::EncodeRsaPrivateKey for RsaPrivateKey {
 
 impl pkcs1::EncodeRsaPublicKey for RsaPublicKey {
     fn to_pkcs1_der(&self) -> pkcs1::Result<Document> {
-        let modulus = self.n().as_ref().to_be_bytes();
+        let modulus = self.n().to_be_bytes();
         let public_exponent = self.e().to_be_bytes();
 
         Ok(Document::encode_msg(&pkcs1::RsaPublicKey {

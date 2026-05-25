@@ -174,8 +174,6 @@ where
     where
         S: serdect::serde::Serializer,
     {
-        // Pass the sized `T::Bytes` directly; `serialize_hex_lower_or_bin`
-        // needs `&T: AsRef<[u8]>` with `T: Sized`.
         let bytes = self.inner.to_be_bytes();
         serdect::slice::serialize_hex_lower_or_bin(&bytes, serializer)
     }

@@ -273,9 +273,10 @@ impl SignatureScheme for Pkcs1v15Sign {
     }
 }
 
-/// Encrypts the given message with RSA and PKCS#1 v1.5 padding into caller-provided storage.
-///
-/// The message must be no longer than the length of the public modulus minus 11 bytes.
+/// Encrypts the given message with RSA and the padding
+/// scheme from PKCS#1 v1.5.  The message must be no longer than the
+/// length of the public modulus minus 11 bytes
+#[inline]
 pub fn encrypt_into<'a, R, K, T>(
     rng: &mut R,
     pub_key: &K,
@@ -342,6 +343,8 @@ fn sign<R: TryCryptoRng + ?Sized>(
     uint_to_zeroizing_be_pad(rsa_decrypt_and_check(priv_key, rng, &em)?, priv_key.size())
 }
 
+/// Verifies an RSA PKCS#1 v1.5 signature.
+#[inline]
 pub(crate) fn verify_generic<K, T>(
     pub_key: &K,
     prefix: &[u8],

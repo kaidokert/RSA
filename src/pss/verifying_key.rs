@@ -54,7 +54,7 @@ where
         Self::new_with_salt_len(key, <D as Digest>::output_size())
     }
 
-    /// Create a new RSASSA-PSS verifying key with the given salt length.
+    /// Create a new RSASSA-PSS verifying key.
     pub fn new_with_salt_len(key: GenericRsaPublicKey<T, M>, salt_len: usize) -> Self {
         Self {
             inner: key,

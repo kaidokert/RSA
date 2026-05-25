@@ -90,6 +90,7 @@ where
     fn hash<H: Hasher>(&self, state: &mut H) {
         // Domain separator for RSA private keys
         state.write(b"RsaPublicKey");
+        // TODO(tarcieri): to match the `PartialEq` impl we should strip leading zeros
         state.write(self.n.as_ref().to_be_bytes().as_ref());
         state.write(self.e.to_be_bytes().as_ref());
     }
