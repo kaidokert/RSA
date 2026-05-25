@@ -8,7 +8,6 @@ use alloc::vec::Vec;
 use ctutils::{Choice, CtAssign, CtEq, CtOption};
 use digest::{Digest, FixedOutputReset};
 use rand_core::TryCryptoRng;
-#[cfg(feature = "alloc")]
 use zeroize::Zeroizing;
 
 use super::mgf::{mgf1_xor, mgf1_xor_digest};
@@ -21,9 +20,6 @@ use crate::errors::{Error, Result};
 /// for all hash functions.
 const MAX_LABEL_LEN: u64 = 1 << 61;
 
-/// In-place core of OAEP message construction. Writes the encoded message
-/// into `em` (which must be exactly `k` bytes), then applies the supplied
-/// MGF to mix seed and DB. No allocation.
 #[inline]
 fn encrypt_internal_into<R, MGF>(
     rng: &mut R,
@@ -87,8 +83,6 @@ where
     Ok(em)
 }
 
-/// no_alloc variant of `oaep_encrypt` — writes the OAEP-encoded message into
-/// caller-supplied `em` (length `k`). Returns a view into that buffer.
 #[inline]
 pub(crate) fn oaep_encrypt_into<'a, R, D, MGD>(
     rng: &mut R,
@@ -131,7 +125,7 @@ where
 /// [PKCS#1 OAEP]: https://datatracker.ietf.org/doc/html/rfc8017#section-7.1
 #[cfg(feature = "alloc")]
 #[inline]
-#[allow(dead_code)] // Vec-returning convenience kept alongside oaep_encrypt_digest_into.
+#[allow(dead_code)]
 pub(crate) fn oaep_encrypt_digest<R, D, MGD>(
     rng: &mut R,
     msg: &[u8],
@@ -148,7 +142,6 @@ where
     Ok(em)
 }
 
-/// no_alloc variant of `oaep_encrypt_digest` — type-driven hash, caller-owned `em`.
 #[inline]
 pub(crate) fn oaep_encrypt_digest_into<'a, R, D, MGD>(
     rng: &mut R,

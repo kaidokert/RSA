@@ -7,14 +7,16 @@
 #[cfg(feature = "private-key")]
 mod decrypting_key;
 mod encrypting_key;
+#[cfg(not(feature = "alloc"))]
+mod label;
 
-// GenericEncryptingKey is available on the no_alloc surface; the boxed
-// EncryptingKey alias and the private-key DecryptingKey are alloc-only.
 #[cfg(feature = "private-key")]
 pub use self::decrypting_key::DecryptingKey;
 #[cfg(feature = "alloc")]
 pub use self::encrypting_key::EncryptingKey;
 pub use self::encrypting_key::GenericEncryptingKey;
+#[cfg(not(feature = "alloc"))]
+pub use self::label::{Label, MAX_LABEL_LEN};
 
 #[cfg(feature = "alloc")]
 use alloc::boxed::Box;
@@ -31,10 +33,14 @@ use crate::algorithms::oaep::*;
 #[cfg(feature = "alloc")]
 use crate::algorithms::pad::{uint_to_be_pad, uint_to_be_pad_into, uint_to_zeroizing_be_pad};
 #[cfg(feature = "alloc")]
-use crate::algorithms::rsa::{rsa_decrypt_and_check, rsa_encrypt};
+use crate::algorithms::rsa::rsa_encrypt;
+#[cfg(feature = "private-key")]
+use crate::algorithms::rsa::rsa_decrypt_and_check;
 use crate::errors::{Error, Result};
 #[cfg(feature = "alloc")]
-use crate::key::{self, RsaPrivateKey, RsaPublicKey};
+use crate::key::{self, RsaPublicKey};
+#[cfg(feature = "private-key")]
+use crate::key::RsaPrivateKey;
 use crate::traits::{PaddingScheme, PublicKeyParts, UnsignedModularInt};
 
 /// Encryption and Decryption using [OAEP padding](https://datatracker.ietf.org/doc/html/rfc8017#section-7.1).
@@ -223,7 +229,7 @@ impl<D, MGD> fmt::Debug for Oaep<D, MGD> {
 /// [PKCS#1 OAEP]: https://datatracker.ietf.org/doc/html/rfc8017#section-7.1
 #[cfg(feature = "alloc")]
 #[inline]
-#[allow(dead_code)] // OAEP encrypt helper; trait-driven entry points are preferred but this is kept.
+#[allow(dead_code)]
 fn encrypt<R, D, MGD>(
     rng: &mut R,
     pub_key: &RsaPublicKey,
@@ -253,7 +259,7 @@ where
 ///
 /// [PKCS#1 OAEP]: https://datatracker.ietf.org/doc/html/rfc8017#section-7.1
 #[cfg(feature = "alloc")]
-#[allow(dead_code)] // Vec-returning OAEP encrypt helper; GenericEncryptingKey now goes straight to _into.
+#[allow(dead_code)]
 fn encrypt_digest<R, D, MGD>(
     rng: &mut R,
     pub_key: &RsaPublicKey,
@@ -273,14 +279,7 @@ where
     uint_to_be_pad(rsa_encrypt(pub_key, &int)?, pub_key.size())
 }
 
-/// no_alloc analog of [`encrypt_digest`] — writes the RSA ciphertext into
-/// caller-supplied `storage` and returns a view into it. Generic over the
-/// bigint backend (`T`) and the public-key wrapper (`K`).
-///
-/// Unlike [`encrypt_digest`] this does NOT call `key::check_public`; that
-/// validator is `alloc`-only because it operates on `BoxedUint` internals.
-/// Callers that want the same validation should run it themselves before
-/// invoking this function.
+/// Does not call `key::check_public` — that validator is `alloc`-only.
 pub fn encrypt_digest_into<'a, R, D, MGD, K, T>(
     rng: &mut R,
     pub_key: &K,
@@ -323,7 +322,7 @@ where
 /// See `decrypt_session_key` for a way of solving this problem.
 ///
 /// [PKCS#1 OAEP]: https://datatracker.ietf.org/doc/html/rfc8017#section-7.1
-#[cfg(feature = "alloc")]
+#[cfg(feature = "private-key")]
 #[inline]
 fn decrypt<R, D, MGD>(
     rng: Option<&mut R>,
@@ -362,7 +361,7 @@ where
 /// See `decrypt_session_key` for a way of solving this problem.
 ///
 /// [PKCS#1 OAEP]: https://datatracker.ietf.org/doc/html/rfc8017#section-7.1
-#[cfg(feature = "alloc")]
+#[cfg(feature = "private-key")]
 #[inline]
 fn decrypt_digest<R, D, MGD>(
     rng: Option<&mut R>,

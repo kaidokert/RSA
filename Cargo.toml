@@ -13,9 +13,6 @@ readme = "README.md"
 rust-version = "1.85"
 exclude = ["marvin_toolkit/", "thirdparty/"]
 
-# Keep the import name as `rsa` even though the package is published as
-# `rsa_heapless`. Lets every upstream-mirrored `use rsa::...` site (examples,
-# tests, src/ doctests, README) stay byte-identical to upstream.
 [lib]
 name = "rsa"
 
@@ -42,6 +39,7 @@ serde = { version = "1.0.184", optional = true, default-features = false, featur
 # Big integer backend
 crypto-bigint = { version = "0.7.1", optional = true, default-features = false, features = ["zeroize","rand_core"] }
 modmath = { version = "0.1.5", optional = true, default-features = false, features = ["wide-mul"] }
+heapless = { version = "0.9", optional = true }
 
 [dev-dependencies]
 base64ct = { version = "1", features = ["alloc"] }
@@ -94,7 +92,7 @@ alloc = ["dep:crypto-bigint", "crypto-bigint/alloc", "pkcs8/alloc", "spki/alloc"
 
 # Enable private key support, doesn't work with no-alloc
 private-key = ["alloc", "dep:crypto-primes"]
-modmath = ["dep:modmath"]
+modmath = ["dep:modmath", "dep:heapless"]
 
 [package.metadata.docs.rs]
 features = ["std", "serde", "hazmat", "sha2"]

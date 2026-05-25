@@ -1,4 +1,6 @@
 use super::encrypt_digest_into;
+#[cfg(not(feature = "alloc"))]
+use super::Label;
 use crate::traits::{modular::ModulusParams, PublicKeyParts, UnsignedModularInt};
 use crate::{traits::RandomizedEncryptor, GenericRsaPublicKey, Result};
 #[cfg(feature = "alloc")]
@@ -29,13 +31,10 @@ where
     M: ModulusParams<Modulus = T>,
 {
     inner: GenericRsaPublicKey<T, M>,
-    // TODO: gating `label` on `alloc` is a stopgap so the no_alloc path can
-    // share the same struct — it just gives up label support there. Revisit
-    // with a fixed-capacity buffer type (e.g. a small `[u8; N]` + length, or
-    // a borrowed `&'a [u8]` with a lifetime) so no_alloc OAEP can carry a
-    // label too.
     #[cfg(feature = "alloc")]
     label: Option<Box<[u8]>>,
+    #[cfg(not(feature = "alloc"))]
+    label: Option<Label>,
     phantom: PhantomData<D>,
     mg_phantom: PhantomData<MGD>,
 }
@@ -53,7 +52,6 @@ where
     pub fn new(key: GenericRsaPublicKey<T, M>) -> Self {
         Self {
             inner: key,
-            #[cfg(feature = "alloc")] // TODO: add missing label
             label: None,
             phantom: Default::default(),
             mg_phantom: Default::default(),
@@ -66,6 +64,18 @@ where
         Self {
             inner: key,
             label: Some(label.into()),
+            phantom: Default::default(),
+            mg_phantom: Default::default(),
+        }
+    }
+
+    /// Create a new verifying key from an RSA public key using provided label.
+    /// no_alloc counterpart that accepts a fixed-capacity [`Label`].
+    #[cfg(not(feature = "alloc"))]
+    pub fn new_with_label(key: GenericRsaPublicKey<T, M>, label: Label) -> Self {
+        Self {
+            inner: key,
+            label: Some(label),
             phantom: Default::default(),
             mg_phantom: Default::default(),
         }
@@ -85,10 +95,7 @@ where
         msg: &[u8],
         storage: &'a mut [u8],
     ) -> Result<&'a [u8]> {
-        #[cfg(feature = "alloc")]
         let label = self.label.as_deref();
-        #[cfg(not(feature = "alloc"))] // TODO: add missing label
-        let label: Option<&[u8]> = None;
         encrypt_digest_into::<_, D, MGD, _, T>(rng, &self.inner, msg, label, storage)
     }
 

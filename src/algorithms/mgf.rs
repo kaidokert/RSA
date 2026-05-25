@@ -16,11 +16,8 @@ where
     assert!(out.len() as u64 <= MAX_LEN);
 
     while i < out.len() {
-        // Stream seed and counter into the hasher separately so the function
-        // works in no_alloc contexts (Merkle-Damgård absorption is identical
-        // to feeding a single seed || counter buffer).
         Digest::update(digest, seed);
-        Digest::update(digest, &counter);
+        Digest::update(digest, counter);
 
         let digest_output = &*digest.finalize_reset();
         let mut j = 0;
