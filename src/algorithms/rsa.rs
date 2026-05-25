@@ -262,7 +262,7 @@ where
     M::MontgomeryForm: Pow<M>,
 {
     let base = reduce_vartime(base, n_params);
-    Pow::retrieve(&base.pow(exp))
+    base.pow(exp).retrieve()
 }
 
 /// Computes `base.pow_mod(exp, n)` with a bounded exponent and precomputed `n_params`.

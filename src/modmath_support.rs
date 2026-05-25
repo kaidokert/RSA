@@ -341,10 +341,6 @@ impl<T: ModMathInt> Pow<ModMathParams<T>> for ModMathForm<T> {
             params: self.params.clone(),
         }
     }
-
-    fn retrieve(&self) -> ModMathValue<T> {
-        wrap_value(self.to_reduced())
-    }
 }
 
 impl<T: ModMathInt> PowBoundedExp<ModMathParams<T>> for ModMathForm<T> {

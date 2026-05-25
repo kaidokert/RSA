@@ -275,7 +275,7 @@ impl SignatureScheme for Pkcs1v15Sign {
 
 /// Encrypts the given message with RSA and the padding
 /// scheme from PKCS#1 v1.5.  The message must be no longer than the
-/// length of the public modulus minus 11 bytes
+/// length of the public modulus minus 11 bytes.
 #[inline]
 pub fn encrypt_into<'a, R, K, T>(
     rng: &mut R,

@@ -265,17 +265,12 @@ impl PowBoundedExp<BoxedMontyParams> for BoxedMontyForm {
 
 pub trait Pow<M: ModulusParams>: Sized {
     fn pow(&self, exp: &M::Modulus) -> Self;
-    fn retrieve(&self) -> M::Modulus;
 }
 
 #[cfg(feature = "alloc")]
 impl Pow<BoxedMontyParams> for BoxedMontyForm {
     fn pow(&self, exp: &BoxedUint) -> Self {
         self.clone().pow(exp)
-    }
-
-    fn retrieve(&self) -> BoxedUint {
-        self.clone().retrieve()
     }
 }
 
