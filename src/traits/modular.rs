@@ -329,12 +329,7 @@ impl UnsignedModularInt for BoxedUint {
     }
 
     fn to_be_bytes(&self) -> Self::Bytes {
-        self.as_words()
-            .iter()
-            .rev()
-            .flat_map(|word| u64::to_be_bytes(*word))
-            .collect::<alloc::vec::Vec<u8>>()
-            .into_boxed_slice()
+        self.to_be_bytes()
     }
     #[cfg(feature = "alloc")]
     fn to_be_bytes_trimmed_vartime(&self) -> Box<[u8]> {
