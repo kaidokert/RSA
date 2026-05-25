@@ -1,14 +1,14 @@
 [package]
 name = "rsa_heapless"
-version = "0.10.0-rc.18"
-authors = ["RustCrypto Developers", "dignifiedquire <dignifiedquire@gmail.com>"]
+version = "0.2.0"
+authors = ["RustCrypto Developers", "dignifiedquire <dignifiedquire@gmail.com>", "kaidokert@gmail.com"]
 edition = "2021"
-description = "Pure Rust RSA implementation"
+description = "Pure Rust RSA implementation - heapless fork"
 license = "MIT OR Apache-2.0"
-documentation = "https://docs.rs/rsa"
-repository = "https://github.com/RustCrypto/RSA"
-keywords = ["rsa", "encryption", "security", "crypto"]
-categories = ["cryptography"]
+documentation = "https://docs.rs/rsa_heapless"
+repository = "https://github.com/kaidokert/RSA"
+keywords = ["rsa", "encryption", "security", "crypto", "no_std"]
+categories = ["cryptography", "no-std", "no-std::no-alloc"]
 readme = "README.md"
 rust-version = "1.87"
 exclude = ["marvin_toolkit/", "thirdparty/"]
