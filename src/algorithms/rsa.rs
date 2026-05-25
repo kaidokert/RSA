@@ -78,7 +78,7 @@ pub fn rsa_decrypt<R: TryCryptoRng + ?Sized>(
     let c = if let Some(rng) = rng {
         let (blinded, unblinder) = blind(rng, priv_key, c, n_params)?;
         ir = Some(unblinder);
-        crypto_bigint::Resize::try_resize(blinded, bits).ok_or(Error::Internal)?
+        blinded.try_resize(bits).ok_or(Error::Internal)?
     } else {
         c.try_resize(bits).ok_or(Error::Internal)?
     };
@@ -106,18 +106,12 @@ pub fn rsa_decrypt<R: TryCryptoRng + ?Sized>(
 
             // m1 = c^dP mod p
             let p_wide = p_params.modulus().resize_unchecked(c.bits_precision());
-            let c_mod_dp = crypto_bigint::Resize::resize_unchecked(
-                &c % p_wide.as_nz_ref(),
-                dp.bits_precision(),
-            );
+            let c_mod_dp = (&c % p_wide.as_nz_ref()).resize_unchecked(dp.bits_precision());
             let cp = BoxedMontyForm::new(c_mod_dp, p_params);
             let mut m1 = cp.pow(dp);
             // m2 = c^dQ mod q
             let q_wide = q_params.modulus().resize_unchecked(c.bits_precision());
-            let c_mod_dq = crypto_bigint::Resize::resize_unchecked(
-                &c % q_wide.as_nz_ref(),
-                dq.bits_precision(),
-            );
+            let c_mod_dq = (&c % q_wide.as_nz_ref()).resize_unchecked(dq.bits_precision());
             let cq = BoxedMontyForm::new(c_mod_dq, q_params);
             let m2 = cq.pow(dq).retrieve();
 
@@ -127,11 +121,10 @@ pub fn rsa_decrypt<R: TryCryptoRng + ?Sized>(
             // (m1 - m2) mod p = (m1 mod p) - (m2 mod p) mod p
             let m2_mod_p = match p_params.bits_precision().cmp(&q_params.bits_precision()) {
                 Ordering::Less => {
-                    let p_wide = crypto_bigint::Resize::resize_unchecked(
-                        CryptoNonZero::new(p.clone()).expect("`p` is non-zero"),
-                        q_params.bits_precision(),
-                    );
-                    crypto_bigint::Resize::resize_unchecked(&m2 % p_wide, p_params.bits_precision())
+                    let p_wide = CryptoNonZero::new(p.clone())
+                        .expect("`p` is non-zero")
+                        .resize_unchecked(q_params.bits_precision());
+                    (&m2 % p_wide).resize_unchecked(p_params.bits_precision())
                 }
                 Ordering::Greater => (&m2).resize_unchecked(p_params.bits_precision()),
                 Ordering::Equal => m2.clone(),
@@ -145,9 +138,10 @@ pub fn rsa_decrypt<R: TryCryptoRng + ?Sized>(
             let h = (qinv * m1).retrieve();
 
             // m = m2 + h.q
-            let m2 =
-                crypto_bigint::Resize::try_resize(m2, n.bits_precision()).ok_or(Error::Internal)?;
-            let hq = crypto_bigint::Resize::try_resize(h.concatenating_mul(&q), n.bits_precision())
+            let m2 = m2.try_resize(n.bits_precision()).ok_or(Error::Internal)?;
+            let hq = h
+                .concatenating_mul(&q)
+                .try_resize(n.bits_precision())
                 .ok_or(Error::Internal)?;
             m2.wrapping_add(&hq)
         }

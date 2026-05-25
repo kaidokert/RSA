@@ -492,7 +492,7 @@ impl RsaPrivateKey {
             .into_iter()
             .map(|p| {
                 let p_bits = p.bits();
-                crypto_bigint::Resize::resize_unchecked(p, p_bits)
+                p.resize_unchecked(p_bits)
             })
             .collect();
 
@@ -670,13 +670,12 @@ impl RsaPrivateKey {
         // Note that since `p` and `q` may have different `bits_precision`,
         // so we have to equalize them to calculate the remainder.
         let q_mod_p = match p.bits_precision().cmp(&q.bits_precision()) {
-            Ordering::Less => crypto_bigint::Resize::resize_unchecked(
-                &q % crypto_bigint::Resize::resize_unchecked(
-                    CryptoNonZero::new(p.clone()).expect("`p` is non-zero"),
-                    q.bits_precision(),
-                ),
-                p.bits_precision(),
-            ),
+            Ordering::Less => {
+                let p_wide = CryptoNonZero::new(p.clone())
+                    .expect("`p` is non-zero")
+                    .resize_unchecked(q.bits_precision());
+                (&q % p_wide).resize_unchecked(p.bits_precision())
+            }
             Ordering::Greater => {
                 (&q).resize_unchecked(p.bits_precision())
                     % &CryptoNonZero::new(p.clone()).expect("`p` is non-zero")

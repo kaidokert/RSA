@@ -66,6 +66,7 @@ where
     if msg.len() + 11 > k {
         return Err(Error::MessageTooLong);
     }
+
     // EM = 0x00 || 0x02 || PS || 0x00 || M
     let em = storage.get_mut(..k).ok_or(Error::OutputBufferTooSmall)?;
     em[0] = 0;

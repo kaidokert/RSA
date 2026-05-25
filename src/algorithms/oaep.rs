@@ -21,19 +21,15 @@ use crate::errors::{Error, Result};
 const MAX_LABEL_LEN: u64 = 1 << 61;
 
 #[inline]
-fn encrypt_internal_into<R, MGF>(
+fn encrypt_internal_into<R: TryCryptoRng + ?Sized, MGF: FnMut(&mut [u8], &mut [u8])>(
     rng: &mut R,
     msg: &[u8],
     p_hash: &[u8],
     h_size: usize,
     k: usize,
+    mut mgf: MGF,
     em: &mut [u8],
-    mgf: &mut MGF,
-) -> Result<()>
-where
-    R: TryCryptoRng + ?Sized,
-    MGF: FnMut(&mut [u8], &mut [u8]),
-{
+) -> Result<()> {
     if msg.len() + 2 * h_size + 2 > k {
         return Err(Error::MessageTooLong);
     }
@@ -108,11 +104,11 @@ where
     Digest::update(digest, label);
     let p_hash = digest.finalize_reset();
 
-    let mut mgf = |seed: &mut [u8], db: &mut [u8]| {
+    let mgf = |seed: &mut [u8], db: &mut [u8]| {
         mgf1_xor(db, mgf_digest, seed);
         mgf1_xor(seed, mgf_digest, db);
     };
-    encrypt_internal_into(rng, msg, &p_hash, h_size, k, em, &mut mgf)?;
+    encrypt_internal_into(rng, msg, &p_hash, h_size, k, mgf, em)?;
     Ok(&em[..k])
 }
 
@@ -164,12 +160,12 @@ where
 
     let p_hash = D::digest(label);
 
-    let mut mgf = |seed: &mut [u8], db: &mut [u8]| {
+    let mgf = |seed: &mut [u8], db: &mut [u8]| {
         let mut mgf_digest = MGD::new();
         mgf1_xor_digest(db, &mut mgf_digest, seed);
         mgf1_xor_digest(seed, &mut mgf_digest, db);
     };
-    encrypt_internal_into(rng, msg, &p_hash, h_size, k, em, &mut mgf)?;
+    encrypt_internal_into(rng, msg, &p_hash, h_size, k, mgf, em)?;
     Ok(&em[..k])
 }
 
