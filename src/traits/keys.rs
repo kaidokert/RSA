@@ -1,19 +1,26 @@
 //! Traits related to the key components
 
+#[cfg(feature = "alloc")]
 use alloc::boxed::Box;
+#[cfg(feature = "private-key")]
 use crypto_bigint::{
     modular::{BoxedMontyForm, BoxedMontyParams},
-    BoxedUint, NonZero,
+    BoxedUint,
 };
 use zeroize::Zeroize;
 
+use crate::traits::{modular::ModulusParams, NonZero, UnsignedModularInt};
+
 /// Components of an RSA public key.
-pub trait PublicKeyParts {
+pub trait PublicKeyParts<T: UnsignedModularInt> {
+    /// Montgomery parameter type matching this modulus type.
+    type MontyParams: ModulusParams<Modulus = T>;
+
     /// Returns the modulus of the key.
-    fn n(&self) -> &NonZero<BoxedUint>;
+    fn n(&self) -> &NonZero<T>;
 
     /// Returns the public exponent of the key.
-    fn e(&self) -> &BoxedUint;
+    fn e(&self) -> &T;
 
     /// Returns the modulus size in bytes. Raw signatures and ciphertexts for
     /// or by this public key will have the same size.
@@ -22,7 +29,7 @@ pub trait PublicKeyParts {
     }
 
     /// Returns the parameters for montgomery operations.
-    fn n_params(&self) -> &BoxedMontyParams;
+    fn n_params(&self) -> &Self::MontyParams;
 
     /// Returns precision (in bits) of `n`.
     fn n_bits_precision(&self) -> u32 {
@@ -30,18 +37,21 @@ pub trait PublicKeyParts {
     }
 
     /// Returns the big endian serialization of the modulus of the key
+    #[cfg(feature = "alloc")]
     fn n_bytes(&self) -> Box<[u8]> {
         self.n().to_be_bytes_trimmed_vartime()
     }
 
     /// Returns the big endian serialization of the public exponent of the key
+    #[cfg(feature = "alloc")]
     fn e_bytes(&self) -> Box<[u8]> {
         self.e().to_be_bytes_trimmed_vartime()
     }
 }
 
 /// Components of an RSA private key.
-pub trait PrivateKeyParts: PublicKeyParts {
+#[cfg(feature = "private-key")]
+pub trait PrivateKeyParts: PublicKeyParts<BoxedUint> {
     /// Returns the private exponent of the key.
     fn d(&self) -> &BoxedUint;
 
@@ -68,6 +78,7 @@ pub trait PrivateKeyParts: PublicKeyParts {
 }
 
 /// Contains the precomputed Chinese remainder theorem values.
+#[cfg(feature = "private-key")]
 #[derive(Debug, Clone)]
 pub struct CrtValue {
     /// D mod (prime - 1)
@@ -78,6 +89,7 @@ pub struct CrtValue {
     pub(crate) r: BoxedUint,
 }
 
+#[cfg(feature = "private-key")]
 impl Zeroize for CrtValue {
     fn zeroize(&mut self) {
         self.exp.zeroize();
@@ -86,6 +98,7 @@ impl Zeroize for CrtValue {
     }
 }
 
+#[cfg(feature = "private-key")]
 impl Drop for CrtValue {
     fn drop(&mut self) {
         self.zeroize();

@@ -9,13 +9,15 @@
 //! [Probabilistic Signature Scheme]: https://en.wikipedia.org/wiki/Probabilistic_signature_scheme
 //! [RFC8017 § 8.1]: https://datatracker.ietf.org/doc/html/rfc8017#section-8.1
 
+#[cfg(feature = "alloc")]
 use alloc::vec::Vec;
-use crypto_bigint::{Choice, CtEq, CtSelect};
+use ctutils::{Choice, CtEq, CtSelect};
 use digest::{Digest, FixedOutputReset};
 
 use super::mgf::{mgf1_xor, mgf1_xor_digest};
 use crate::errors::{Error, Result};
 
+#[cfg(feature = "alloc")]
 pub(crate) fn emsa_pss_encode<D>(
     m_hash: &[u8],
     em_bits: usize,
@@ -92,6 +94,7 @@ where
     Ok(em)
 }
 
+#[cfg(feature = "alloc")]
 pub(crate) fn emsa_pss_encode_digest<D>(
     m_hash: &[u8],
     em_bits: usize,

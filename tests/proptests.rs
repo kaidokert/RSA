@@ -1,6 +1,6 @@
 //! Property-based tests.
 
-#![cfg(feature = "hazmat")]
+#![cfg(all(feature = "hazmat", feature = "private-key"))]
 
 use proptest::prelude::*;
 use rand::rngs::ChaCha8Rng;

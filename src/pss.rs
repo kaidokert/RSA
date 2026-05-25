@@ -9,30 +9,45 @@
 //! [Probabilistic Signature Scheme]: https://en.wikipedia.org/wiki/Probabilistic_signature_scheme
 //! [RFC8017 § 8.1]: https://datatracker.ietf.org/doc/html/rfc8017#section-8.1
 
+#[cfg(feature = "private-key")]
 mod blinded_signing_key;
 mod signature;
+#[cfg(feature = "private-key")]
 mod signing_key;
 mod verifying_key;
 
+#[cfg(feature = "private-key")]
+pub use self::{blinded_signing_key::BlindedSigningKey, signing_key::SigningKey};
+
+#[cfg(feature = "alloc")]
+pub use self::{signature::Signature, verifying_key::VerifyingKey};
 pub use self::{
-    blinded_signing_key::BlindedSigningKey, signature::Signature, signing_key::SigningKey,
-    verifying_key::VerifyingKey,
+    signature::{GenericSignature, SignatureBytes},
+    verifying_key::GenericVerifyingKey,
 };
 
-use alloc::vec::Vec;
+#[cfg(feature = "alloc")]
+use alloc::{vec, vec::Vec};
 use core::fmt::{self, Debug};
+#[cfg(feature = "alloc")]
 use crypto_bigint::BoxedUint;
 
 use digest::{Digest, FixedOutputReset};
 use rand_core::TryCryptoRng;
 
-use crate::algorithms::pad::{uint_to_be_pad, uint_to_zeroizing_be_pad};
+#[cfg(feature = "alloc")]
+use crate::algorithms::pad::{uint_to_be_pad, uint_to_be_pad_into, uint_to_zeroizing_be_pad};
 use crate::algorithms::pss::*;
-use crate::algorithms::rsa::{rsa_decrypt_and_check, rsa_encrypt};
+#[cfg(feature = "private-key")]
+use crate::algorithms::rsa::rsa_decrypt_and_check;
+#[cfg(feature = "alloc")]
+use crate::algorithms::rsa::rsa_encrypt;
 use crate::errors::{Error, Result};
-use crate::traits::PublicKeyParts;
-use crate::traits::SignatureScheme;
-use crate::{RsaPrivateKey, RsaPublicKey};
+use crate::traits::{PublicKeyParts, SignatureScheme, UnsignedModularInt};
+#[cfg(feature = "private-key")]
+use crate::RsaPrivateKey;
+#[cfg(feature = "alloc")]
+use crate::RsaPublicKey;
 
 #[cfg(feature = "encoding")]
 use {
@@ -100,10 +115,12 @@ where
     }
 }
 
+#[cfg(feature = "alloc")]
 impl<D> SignatureScheme for Pss<D>
 where
     D: Digest + FixedOutputReset,
 {
+    #[cfg(feature = "private-key")]
     fn sign<Rng: TryCryptoRng + ?Sized>(
         mut self,
         rng: Option<&mut Rng>,
@@ -120,14 +137,29 @@ where
         )
     }
 
-    fn verify(mut self, pub_key: &RsaPublicKey, hashed: &[u8], sig: &[u8]) -> Result<()> {
-        verify(
-            pub_key,
+    fn verify<K, T>(mut self, pub_key: &K, hashed: &[u8], sig: &[u8]) -> Result<()>
+    where
+        T: UnsignedModularInt,
+        K: PublicKeyParts<T>,
+    {
+        if sig.len() != pub_key.size() {
+            return Err(Error::Verification);
+        }
+        let sig = T::try_from_be_bytes_vartime(sig).map_err(|_| Error::Verification)?;
+        if sig >= *pub_key.n().as_ref() || sig.bits_precision() != pub_key.n_bits_precision() {
+            return Err(Error::Verification);
+        }
+
+        let mut em = vec![0u8; pub_key.size()];
+        let em_len =
+            uint_to_be_pad_into(rsa_encrypt(pub_key, &sig)?, pub_key.size(), &mut em)?.len();
+
+        emsa_pss_verify(
             hashed,
-            &BoxedUint::from_be_slice_vartime(sig),
-            sig.len(),
-            &mut self.digest,
+            &mut em[..em_len],
             self.salt_len,
+            &mut self.digest,
+            pub_key.n().bits() as _,
         )
     }
 }
@@ -142,6 +174,8 @@ impl<D> Debug for Pss<D> {
     }
 }
 
+#[cfg(feature = "alloc")]
+#[allow(dead_code)]
 pub(crate) fn verify<D>(
     pub_key: &RsaPublicKey,
     hashed: &[u8],
@@ -162,6 +196,8 @@ where
     emsa_pss_verify(hashed, &mut em, salt_len, digest, pub_key.n().bits() as _)
 }
 
+#[cfg(feature = "alloc")]
+#[allow(dead_code)]
 pub(crate) fn verify_digest<D>(
     pub_key: &RsaPublicKey,
     hashed: &[u8],
@@ -171,14 +207,41 @@ pub(crate) fn verify_digest<D>(
 where
     D: Digest + FixedOutputReset,
 {
-    let n = pub_key.n();
-    if sig >= n.as_ref() || sig.bits_precision() != pub_key.n_bits_precision() {
-        return Err(Error::Verification);
+    let mut storage = vec![0u8; pub_key.size()];
+    verify_digest_into::<D, _, BoxedUint>(pub_key, hashed, sig, salt_len, &mut storage)
+}
+
+/// `storage` must be at least `pub_key.size()` bytes.
+pub fn verify_digest_into<D, K, T>(
+    pub_key: &K,
+    hashed: &[u8],
+    sig: &T,
+    salt_len: Option<usize>,
+    storage: &mut [u8],
+) -> crate::Result<()>
+where
+    D: digest::Digest + digest::FixedOutputReset,
+    K: crate::traits::PublicKeyParts<T>,
+    T: crate::traits::UnsignedModularInt,
+{
+    if sig >= pub_key.n().as_ref() || sig.bits_precision() != pub_key.n_bits_precision() {
+        return Err(crate::Error::Verification);
     }
-
-    let mut em = uint_to_be_pad(rsa_encrypt(pub_key, sig)?, pub_key.size())?;
-
-    emsa_pss_verify_digest::<D>(hashed, &mut em, salt_len, pub_key.n().bits() as _)
+    let padded_len = pub_key.size();
+    let em = crate::algorithms::pad::uint_to_be_pad_into(
+        crate::algorithms::rsa::rsa_encrypt(pub_key, sig)?,
+        padded_len,
+        storage,
+    )?;
+    // `uint_to_be_pad_into` returns an immutable slice into `storage`; PSS
+    // verify wants `&mut [u8]`. Drop the borrow and re-slice mutably.
+    let em_len = em.len();
+    emsa_pss_verify_digest::<D>(
+        hashed,
+        &mut storage[..em_len],
+        salt_len,
+        pub_key.n().bits() as _,
+    )
 }
 
 /// SignPSS calculates the signature of hashed using RSASSA-PSS.
@@ -186,6 +249,7 @@ where
 /// Note that hashed must be the result of hashing the input message using the
 /// given hash function. The opts argument may be nil, in which case sensible
 /// defaults are used.
+#[cfg(feature = "private-key")]
 pub(crate) fn sign<T, D>(
     rng: &mut T,
     blind: bool,
@@ -204,6 +268,7 @@ where
     sign_pss_with_salt(blind.then_some(rng), priv_key, hashed, &salt, digest)
 }
 
+#[cfg(feature = "private-key")]
 pub(crate) fn sign_digest<T, D>(
     rng: &mut T,
     blind: bool,
@@ -226,6 +291,7 @@ where
 /// Note that hashed must be the result of hashing the input message using the
 /// given hash function. salt is a random sequence of bytes whose length will be
 /// later used to verify the signature.
+#[cfg(feature = "private-key")]
 fn sign_pss_with_salt<T, D>(
     blind_rng: Option<&mut T>,
     priv_key: &RsaPrivateKey,
@@ -246,6 +312,7 @@ where
     uint_to_zeroizing_be_pad(raw, priv_key.size())
 }
 
+#[cfg(feature = "private-key")]
 fn sign_pss_with_salt_digest<T, D>(
     blind_rng: Option<&mut T>,
     priv_key: &RsaPrivateKey,

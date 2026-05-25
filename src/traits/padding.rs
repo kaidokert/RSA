@@ -1,11 +1,14 @@
 //! Supported padding schemes.
 
+#[cfg(feature = "alloc")]
 use alloc::vec::Vec;
 
 use rand_core::TryCryptoRng;
 
 use crate::errors::Result;
-use crate::key::{RsaPrivateKey, RsaPublicKey};
+#[cfg(feature = "private-key")]
+use crate::key::RsaPrivateKey;
+use crate::traits::{PublicKeyParts, UnsignedModularInt};
 
 /// Padding scheme used for encryption.
 pub trait PaddingScheme {
@@ -13,6 +16,7 @@ pub trait PaddingScheme {
     ///
     /// If an `rng` is passed, it uses RSA blinding to help mitigate timing
     /// side-channel attacks.
+    #[cfg(feature = "private-key")]
     fn decrypt<Rng: TryCryptoRng + ?Sized>(
         self,
         rng: Option<&mut Rng>,
@@ -21,17 +25,18 @@ pub trait PaddingScheme {
     ) -> Result<Vec<u8>>;
 
     /// Encrypt the given message using the given public key.
-    fn encrypt<Rng: TryCryptoRng + ?Sized>(
-        self,
-        rng: &mut Rng,
-        pub_key: &RsaPublicKey,
-        msg: &[u8],
-    ) -> Result<Vec<u8>>;
+    #[cfg(feature = "alloc")]
+    fn encrypt<Rng, K, T>(self, rng: &mut Rng, pub_key: &K, msg: &[u8]) -> Result<Vec<u8>>
+    where
+        Rng: TryCryptoRng + ?Sized,
+        T: UnsignedModularInt,
+        K: PublicKeyParts<T>;
 }
 
 /// Digital signature scheme.
 pub trait SignatureScheme {
     /// Sign the given digest.
+    #[cfg(feature = "private-key")]
     fn sign<Rng: TryCryptoRng + ?Sized>(
         self,
         rng: Option<&mut Rng>,
@@ -45,5 +50,8 @@ pub trait SignatureScheme {
     /// passed in through `hash`.
     ///
     /// If the message is valid `Ok(())` is returned, otherwise an `Err` indicating failure.
-    fn verify(self, pub_key: &RsaPublicKey, hashed: &[u8], sig: &[u8]) -> Result<()>;
+    fn verify<K, T>(self, pub_key: &K, hashed: &[u8], sig: &[u8]) -> Result<()>
+    where
+        T: UnsignedModularInt,
+        K: PublicKeyParts<T>;
 }

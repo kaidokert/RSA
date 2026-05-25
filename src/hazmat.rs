@@ -11,4 +11,6 @@
 //! We do NOT recommend using it to implement any algorithm which has not
 //! received extensive peer review by cryptographers.
 
-pub use crate::algorithms::rsa::{rsa_decrypt, rsa_decrypt_and_check, rsa_encrypt};
+pub use crate::algorithms::rsa::rsa_encrypt;
+#[cfg(feature = "private-key")]
+pub use crate::algorithms::rsa::{rsa_decrypt, rsa_decrypt_and_check};

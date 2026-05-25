@@ -4,6 +4,7 @@ use crate::{
     traits::{Decryptor, EncryptingKeypair, RandomizedDecryptor},
     Result, RsaPrivateKey,
 };
+#[cfg(feature = "alloc")]
 use alloc::vec::Vec;
 use rand_core::CryptoRng;
 #[cfg(feature = "serde")]
