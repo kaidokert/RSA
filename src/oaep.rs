@@ -32,15 +32,15 @@ use rand_core::TryCryptoRng;
 use crate::algorithms::oaep::*;
 #[cfg(feature = "alloc")]
 use crate::algorithms::pad::{uint_to_be_pad, uint_to_be_pad_into, uint_to_zeroizing_be_pad};
-#[cfg(feature = "alloc")]
-use crate::algorithms::rsa::rsa_encrypt;
 #[cfg(feature = "private-key")]
 use crate::algorithms::rsa::rsa_decrypt_and_check;
-use crate::errors::{Error, Result};
 #[cfg(feature = "alloc")]
-use crate::key::{self, RsaPublicKey};
+use crate::algorithms::rsa::rsa_encrypt;
+use crate::errors::{Error, Result};
 #[cfg(feature = "private-key")]
 use crate::key::RsaPrivateKey;
+#[cfg(feature = "alloc")]
+use crate::key::{self, RsaPublicKey};
 use crate::traits::{PaddingScheme, PublicKeyParts, UnsignedModularInt};
 
 /// Encryption and Decryption using [OAEP padding](https://datatracker.ietf.org/doc/html/rfc8017#section-7.1).
