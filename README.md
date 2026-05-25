@@ -32,7 +32,8 @@ PSS signature verification. The `u8` backend uses 8-bit limbs (more portable, wo
 ```rust,ignore
 use rsa::{Pkcs1v15Encrypt, RsaPublicKey};
 let pub_key: RsaPublicKey = /* parse from DER/PEM via pkcs1/pkcs8 */;
-let enc = pub_key.encrypt(&mut rand::rng(), Pkcs1v15Encrypt, b"hello").unwrap();
+let mut rng = rand::rng();
+let enc = pub_key.encrypt(&mut rng, Pkcs1v15Encrypt, b"hello").unwrap();
 ```
 
 For no-alloc usage (embedded), see the [`examples/`](examples/) and [`footprint/`](footprint/) directories.
