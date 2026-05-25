@@ -132,6 +132,7 @@ fn generate_prime_with_rng<R: CryptoRng + ?Sized>(rng: &mut R, bit_length: u32) 
 }
 
 #[cfg(test)]
+#[cfg(feature = "private-key")]
 mod tests {
     use super::*;
     use rand::rngs::ChaCha8Rng;

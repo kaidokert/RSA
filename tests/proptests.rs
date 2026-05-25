@@ -1,6 +1,6 @@
 //! Property-based tests.
 
-#![cfg(feature = "hazmat")]
+#![cfg(all(feature = "hazmat", feature = "private-key"))]
 
 use proptest::prelude::*;
 use rand::rngs::ChaCha8Rng;
@@ -27,7 +27,7 @@ proptest! {
         let signature_bytes = signing_key.sign(&msg).to_bytes();
 
         let verifying_key = signing_key.verifying_key();
-        let signature = pkcs1v15::Signature::try_from(&*signature_bytes).unwrap();
+        let signature = pkcs1v15::Signature::try_from(signature_bytes.as_ref()).unwrap();
         prop_assert!(verifying_key.verify(&msg, &signature).is_ok());
     }
 

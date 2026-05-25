@@ -1,0 +1,14 @@
+# Pinned to last known good nightly before AVR DEV build panic regression
+# Regression: nightly-2025-12-23 introduced spurious panic symbols in DEV profile
+[toolchain]
+channel = "nightly-2025-11-01"
+components = [
+    "rustc",
+    "cargo",
+    "clippy",
+    "rustfmt",
+    "rust-src",
+    "rust-analyzer",
+    "llvm-tools"
+]
+profile = "minimal"

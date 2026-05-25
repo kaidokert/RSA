@@ -1,5 +1,6 @@
 #![cfg_attr(not(test), no_std)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
+#![cfg_attr(not(all(feature = "alloc", feature = "private-key")), allow(unused))]
 #![doc = include_str!("../README.md")]
 #![doc(html_logo_url = "https://raw.githubusercontent.com/RustCrypto/meta/master/logo_small.png")]
 #![warn(missing_docs)]
@@ -51,7 +52,8 @@
 //! See security notes in the <code><a href="./pkcs1v15/index.html">pkcs1v15</a></code> module.
 //! </div>
 //!
-//! ```
+#![cfg_attr(feature = "private-key", doc = "```")]
+#![cfg_attr(not(feature = "private-key"), doc = "```ignore")]
 //! use rsa::{RsaPrivateKey, RsaPublicKey, Pkcs1v15Encrypt};
 //!
 //! let mut rng = rand::rng();
@@ -229,11 +231,13 @@
 #[cfg(doctest)]
 pub struct ReadmeDoctests;
 
+#[cfg(feature = "alloc")]
 #[macro_use]
 extern crate alloc;
 #[cfg(feature = "std")]
 extern crate std;
 
+#[cfg(feature = "alloc")]
 pub use crypto_bigint::BoxedUint;
 pub use rand_core;
 pub use signature;
@@ -248,7 +252,11 @@ pub mod traits;
 mod dummy_rng;
 mod encoding;
 mod key;
+#[cfg(feature = "modmath")]
+pub mod modmath_support;
 
+#[cfg(feature = "modmath")]
+pub use crate::modmath_support::{ModMathForm, ModMathInt, ModMathParams, ModMathValue};
 #[cfg(feature = "encoding")]
 pub use pkcs1;
 #[cfg(feature = "encoding")]
@@ -256,14 +264,23 @@ pub use pkcs8;
 #[cfg(feature = "sha2")]
 pub use sha2;
 
+#[cfg(feature = "alloc")]
+pub use crate::key::RsaPublicKey;
+#[cfg(all(feature = "alloc", feature = "private-key"))]
+pub use crate::traits::keys::CrtValue;
 pub use crate::{
     errors::{Error, Result},
-    key::{RsaPrivateKey, RsaPublicKey},
-    oaep::Oaep,
+    key::GenericRsaPublicKey,
     pkcs1v15::{Pkcs1v15Encrypt, Pkcs1v15Sign},
-    pss::Pss,
-    traits::keys::CrtValue,
 };
 
-#[cfg(feature = "hazmat")]
+#[cfg(feature = "private-key")]
+pub use crate::key::RsaPrivateKey;
+
+#[cfg(feature = "alloc")]
+pub use crate::oaep::Oaep;
+#[cfg(feature = "alloc")]
+pub use crate::pss::Pss;
+
+#[cfg(all(feature = "hazmat", feature = "alloc"))]
 pub mod hazmat;

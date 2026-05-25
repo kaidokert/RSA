@@ -1,5 +1,5 @@
 [package]
-name = "rsa"
+name = "rsa_heapless"
 version = "0.10.0-rc.18"
 authors = ["RustCrypto Developers", "dignifiedquire <dignifiedquire@gmail.com>"]
 edition = "2021"
@@ -10,17 +10,21 @@ repository = "https://github.com/RustCrypto/RSA"
 keywords = ["rsa", "encryption", "security", "crypto"]
 categories = ["cryptography"]
 readme = "README.md"
-rust-version = "1.85"
+rust-version = "1.87"
 exclude = ["marvin_toolkit/", "thirdparty/"]
+
+[lib]
+name = "rsa"
 
 [dependencies]
 const-oid = { version = "0.10", default-features = false }
-crypto-bigint = { version = "0.7", default-features = false, features = ["zeroize", "alloc"] }
-crypto-primes = { version = "0.7", default-features = false }
-digest = { version = "0.11", default-features = false, features = ["alloc", "oid"] }
+crypto-primes = { version = "0.7", optional = true, default-features = false }
+digest = { version = "0.11", default-features = false, features = ["oid"] }
 rand_core = { version = "0.10", default-features = false }
-signature = { version = "3", default-features = false, features = ["alloc", "digest", "rand_core"] }
-zeroize = { version = "1.8", features = ["alloc"] }
+signature = { version = "3", default-features = false, features = ["digest", "rand_core"] }
+zeroize = { version = "1.8", default-features = false }
+ctutils = { version = "0.4", default-features = false }
+num-traits = { version = "0.2", default-features = false }
 
 # optional dependencies
 crypto-common = { version = "0.2", optional = true, features = ["getrandom"] }
@@ -31,6 +35,11 @@ sha1 = { version = "0.11", optional = true, default-features = false, features =
 sha2 = { version = "0.11", optional = true, default-features = false, features = ["oid"] }
 spki = { version = "0.8", optional = true, default-features = false, features = ["alloc"] }
 serde = { version = "1.0.184", optional = true, default-features = false, features = ["derive"] }
+
+# Big integer backend
+crypto-bigint = { version = "0.7.1", optional = true, default-features = false, features = ["zeroize","rand_core"] }
+modmath = { version = "0.1.5", optional = true, default-features = false, features = ["wide-mul"] }
+heapless = "0.9"
 
 [dev-dependencies]
 base64ct = { version = "1", features = ["alloc"] }
@@ -46,19 +55,44 @@ hex = { version = "0.4.3", features = ["serde"] }
 serde_json = "1.0.138"
 serde = { version = "1.0.184", features = ["derive"] }
 rstest = "0.26.1"
+crypto-bigint = { version = "0.7", default-features = false, features = ["zeroize", "alloc"] }
+fixed-bigint = { version = "0.2.5", default-features = false, features = ["zeroize", "use-unsafe"] }
 
 [[bench]]
 name = "key"
 
-[features]
-default = ["std", "encoding"]
-std = ["pkcs1?/std", "pkcs8?/std"]
+# Host examples that demonstrate the generic `modmath` backend. They use the
+# alloc-only `ModMathValue::from_inner` wrapper, so the powerset of features
+# must include both `modmath` and `alloc`.
+[[example]]
+name = "rsa1024_verify"
+required-features = ["modmath", "alloc"]
 
-encoding = ["dep:pkcs1", "dep:pkcs8", "dep:spki"]
+[[example]]
+name = "rsa2048_verify"
+required-features = ["modmath", "alloc"]
+
+[[example]]
+name = "rsa3072_verify"
+required-features = ["modmath", "alloc"]
+
+[[example]]
+name = "rsa_decrypt"
+required-features = ["modmath", "alloc"]
+
+[features]
+default = ["std", "encoding", "modmath"]
+encoding = ["alloc", "private-key", "dep:pkcs1", "dep:pkcs8", "dep:spki"]
 hazmat = []
-getrandom = ["crypto-bigint/getrandom", "crypto-common"]
-serde = ["encoding", "dep:serde", "dep:serdect", "crypto-bigint/serde"]
+getrandom = ["dep:crypto-bigint", "crypto-bigint/getrandom", "crypto-common"]
+serde = ["encoding", "dep:serde", "dep:serdect", "dep:crypto-bigint", "crypto-bigint/serde"]
 pkcs5 = ["pkcs8/encryption"]
+std = ["alloc", "pkcs1?/std", "pkcs8?/std"]
+alloc = ["dep:crypto-bigint", "crypto-bigint/alloc", "pkcs8/alloc", "spki/alloc", "digest/alloc", "signature/alloc", "zeroize/alloc"]
+
+# Enable private key support, doesn't work with no-alloc
+private-key = ["alloc", "dep:crypto-primes"]
+modmath = ["dep:modmath"]
 
 [package.metadata.docs.rs]
 features = ["std", "serde", "hazmat", "sha2"]
