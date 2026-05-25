@@ -148,8 +148,8 @@ where
         }
 
         let mut em = vec![0u8; pub_key.size()];
-        let em_len = uint_to_be_pad_into(rsa_encrypt(pub_key, &sig)?, pub_key.size(), &mut em)?
-            .len();
+        let em_len =
+            uint_to_be_pad_into(rsa_encrypt(pub_key, &sig)?, pub_key.size(), &mut em)?.len();
 
         emsa_pss_verify(
             hashed,

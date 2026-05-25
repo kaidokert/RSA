@@ -22,8 +22,8 @@ use crate::{
     key::GenericRsaPublicKey,
     traits::{
         modular::{
-            IntegerResize, IntoMontyForm, ModulusParams, NonZero, Odd, Pow, TryFromBeBytes,
-            PowBoundedExp, UnsignedModularInt,
+            IntegerResize, IntoMontyForm, ModulusParams, NonZero, Odd, Pow, PowBoundedExp,
+            TryFromBeBytes, UnsignedModularInt,
         },
         FixedWidthUnsignedInt,
     },
@@ -201,9 +201,9 @@ where
     T: ModMathInt,
 {
     fn try_from_be_bytes_vartime(bytes: &[u8]) -> Result<Self> {
-        Ok(Self(<T as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(
-            bytes,
-        )?))
+        Ok(Self(
+            <T as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(bytes)?,
+        ))
     }
 }
 
