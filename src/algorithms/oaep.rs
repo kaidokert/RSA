@@ -101,7 +101,7 @@ where
         return Err(Error::LabelTooLong);
     }
 
-    Digest::update(digest, &label);
+    Digest::update(digest, label);
     let p_hash = digest.finalize_reset();
 
     let mgf = |seed: &mut [u8], db: &mut [u8]| {
@@ -158,7 +158,7 @@ where
         return Err(Error::LabelTooLong);
     }
 
-    let p_hash = D::digest(&label);
+    let p_hash = D::digest(label);
 
     let mgf = |seed: &mut [u8], db: &mut [u8]| {
         let mut mgf_digest = MGD::new();
