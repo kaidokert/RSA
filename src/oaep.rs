@@ -299,10 +299,6 @@ where
         rng, msg, label, padded_len, storage,
     )?;
     let int = T::from_be_bytes_vartime(em);
-    storage
-        .get_mut(..padded_len)
-        .ok_or(crate::Error::OutputBufferTooSmall)?
-        .fill(0);
     crate::algorithms::pad::uint_to_be_pad_into(
         crate::algorithms::rsa::rsa_encrypt(pub_key, &int)?,
         padded_len,
