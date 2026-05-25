@@ -2,6 +2,7 @@
 
 mod mgf;
 
+#[cfg(feature = "private-key")]
 pub(crate) mod generate;
 pub(crate) mod oaep;
 pub(crate) mod pad;

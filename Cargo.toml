@@ -1,86 +1,104 @@
 [package]
 name = "rsa_heapless"
-version = "0.1.4"
-authors = ["RustCrypto Developers", "dignifiedquire <dignifiedquire@gmail.com>", "kaidokert@gmail.com"]
-edition = "2024"
-description = "Pure Rust RSA implementation - heapless version"
+version = "0.10.0-rc.18"
+authors = ["RustCrypto Developers", "dignifiedquire <dignifiedquire@gmail.com>"]
+edition = "2021"
+description = "Pure Rust RSA implementation"
 license = "MIT OR Apache-2.0"
-documentation = "https://docs.rs/rsa_heapless"
-repository = "https://github.com/kaidokert/RSA"
+documentation = "https://docs.rs/rsa"
+repository = "https://github.com/RustCrypto/RSA"
 keywords = ["rsa", "encryption", "security", "crypto"]
 categories = ["cryptography"]
 readme = "README.md"
-rust-version = "1.85"
+rust-version = "1.87"
+exclude = ["marvin_toolkit/", "thirdparty/"]
+
+[lib]
+name = "rsa"
 
 [dependencies]
-num-traits = { version = "0.2.19", default-features = false, features = ["i128"] }
-num-integer = { version = "0.1.39", default-features = false }
-rand_core = { version = "0.6.4", default-features = false }
-subtle = { version = "2.6.1", default-features = false }
-zeroize = { version = "1.8.1", default-features=false }
-heapless = { version = "0.8.0", default-features = false }
-modmath = { version = "0.1.0", default-features = false }
-# modmath = { path = "../modmath" }
-
-# Exact pins for RustCrypto pre-release crates: newer versions use edition 2024
-# (requires Rust 1.85+) which breaks MSRV 1.83, and have incompatible API changes.
-const-oid = { version = "=0.10.0-rc.3", default-features = false }
-der = { version = "=0.8.0-rc.1", default-features = false }
-crypto-common = { version = "=0.2.0-rc.1", default-features = false }
-block-buffer = { version = "=0.11.0-rc.3", default-features = false }
-digest = { version = "=0.11.0-pre.9", default-features = false, features = ["oid"] }
-pkcs1 = { version = "=0.8.0-rc.1", default-features = false, features = ["pkcs8"] }
-pkcs8 = { version = "=0.11.0-rc.1", default-features = false }
-signature = { version = "=2.3.0-pre.4", default-features = false, features = ["digest", "rand_core"] }
-spki = { version = "=0.8.0-rc.1", default-features = false }
+const-oid = { version = "0.10", default-features = false }
+crypto-primes = { version = "0.7", optional = true, default-features = false }
+digest = { version = "0.11", default-features = false, features = ["oid"] }
+rand_core = { version = "0.10", default-features = false }
+signature = { version = "3", default-features = false, features = ["digest", "rand_core"] }
+zeroize = { version = "1.8", default-features = false }
+ctutils = { version = "0.4", default-features = false }
+num-traits = { version = "0.2", default-features = false }
 
 # optional dependencies
-sha1 = { version = "=0.11.0-pre.4", optional = true, default-features = false, features = ["oid"] }
-serdect = { version = "0.3.0", optional = true, default-features = false, features = ["derive"] }
-sha2 = { version = "=0.11.0-pre.4", optional = true, default-features = false, features = ["oid"] }
+crypto-common = { version = "0.2", optional = true, features = ["getrandom"] }
+pkcs1 = { version = "0.8.0-rc.4", optional = true, default-features = false, features = ["alloc", "pem"] }
+pkcs8 = { version = "0.11", optional = true, default-features = false, features = ["alloc", "pem"] }
+serdect = { version = "0.4", optional = true }
+sha1 = { version = "0.11", optional = true, default-features = false, features = ["oid"] }
+sha2 = { version = "0.11", optional = true, default-features = false, features = ["oid"] }
+spki = { version = "0.8", optional = true, default-features = false, features = ["alloc"] }
 serde = { version = "1.0.184", optional = true, default-features = false, features = ["derive"] }
 
+# Big integer backend
+crypto-bigint = { version = "0.7.1", optional = true, default-features = false, features = ["zeroize","rand_core"] }
+modmath = { version = "0.1.5", optional = true, default-features = false, features = ["wide-mul"] }
+heapless = "0.9"
 
 [dev-dependencies]
-base64ct = { version = "1.7", features = ["alloc"] }
-hex-literal = "0.4.1"
-proptest = "1.9"
+base64ct = { version = "1", features = ["alloc"] }
+hex-literal = "1"
+proptest = "1"
 serde_test = "1.0.89"
-rand_xorshift = "0.3"
-rand_chacha = "0.3"
-rand = "0.8"
-rand_core = { version = "0.6", default-features = false }
-sha1 = { version = "=0.11.0-pre.4", default-features = false, features = ["oid"] }
-sha2 = { version = "=0.11.0-pre.4", default-features = false, features = ["oid"] }
-sha3 = { version = "=0.11.0-pre.4", default-features = false, features = ["oid"] }
-num-bigint = { version = "0.8.2", features = ["i128", "prime", "zeroize"], default-features = false, package = "num-bigint-dig" }
+rand = { version = "0.10", features = ["chacha"] }
+rand_core = { version = "0.10", default-features = false }
+sha1 = { version = "0.11", default-features = false, features = ["oid"] }
+sha2 = { version = "0.11", default-features = false, features = ["oid"] }
+sha3 = { version = "0.11", default-features = false, features = ["oid"] }
 hex = { version = "0.4.3", features = ["serde"] }
 serde_json = "1.0.138"
 serde = { version = "1.0.184", features = ["derive"] }
-crypto-bigint = { package = "crypto-bigint", git = "https://github.com/kaidokert/crypto-bigint.git", tag = "v0.6.1_rsa_patch_3", default-features = false, features = ["zeroize"] }
-# crypto-bigint = { path = "../bn/crypto-bigint", default-features = false, features = ["zeroize"] }
-fixed-bigint = { version = "0.1.15", features=["zeroize","use-unsafe"] }
-# fixed-bigint = { path = "../fixed-bigint-rs", version = "0.1.15", features=["zeroize","use-unsafe"] }
-bnum = { package = "bnum",features = ["numtraits","zeroize"]  , git = "https://github.com/kaidokert/bnum.git", tag = "v0.12.1_rsa_patch_1" }
-#bnum = { path = "../bn/bnum", features= ["numtraits","zeroize"] }
+rstest = "0.26.1"
+crypto-bigint = { version = "0.7", default-features = false, features = ["zeroize", "alloc"] }
+fixed-bigint = { version = "0.2.5", default-features = false, features = ["zeroize", "use-unsafe"] }
+
+[[bench]]
+name = "key"
+
+# Host examples that demonstrate the generic `modmath` backend. They use the
+# alloc-only `ModMathValue::from_inner` wrapper, so the powerset of features
+# must include both `modmath` and `alloc`.
+[[example]]
+name = "rsa1024_verify"
+required-features = ["modmath", "alloc"]
+
+[[example]]
+name = "rsa2048_verify"
+required-features = ["modmath", "alloc"]
+
+[[example]]
+name = "rsa3072_verify"
+required-features = ["modmath", "alloc"]
+
+[[example]]
+name = "rsa_decrypt"
+required-features = ["modmath", "alloc"]
 
 [features]
-default = [ "std" ]
+default = ["std", "encoding", "modmath"]
+encoding = ["alloc", "private-key", "dep:pkcs1", "dep:pkcs8", "dep:spki"]
 hazmat = []
-getrandom = ["rand_core/getrandom"]
-serde = ["dep:serde", "dep:serdect"]
-pem = []
-pkcs5 = []
-std = ["digest/std", "pkcs1/std", "pkcs8/std", "rand_core/std", "signature/std"]
-wycheproof = []
+getrandom = ["dep:crypto-bigint", "crypto-bigint/getrandom", "crypto-common"]
+serde = ["encoding", "dep:serde", "dep:serdect", "dep:crypto-bigint", "crypto-bigint/serde"]
+pkcs5 = ["pkcs8/encryption"]
+std = ["alloc", "pkcs1?/std", "pkcs8?/std"]
+alloc = ["dep:crypto-bigint", "crypto-bigint/alloc", "pkcs8/alloc", "spki/alloc", "digest/alloc", "signature/alloc", "zeroize/alloc"]
+
+# Enable private key support, doesn't work with no-alloc
+private-key = ["alloc", "dep:crypto-primes"]
+modmath = ["dep:modmath"]
 
 [package.metadata.docs.rs]
-features = ["std", "pem", "serde", "hazmat", "sha2"]
-rustdoc-args = ["--cfg", "docsrs"]
+features = ["std", "serde", "hazmat", "sha2"]
 
 [profile.dev]
-debug = true
-# opt-level = 2
+opt-level = 2
 
 [profile.bench]
 debug = true

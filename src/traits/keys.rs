@@ -1,18 +1,23 @@
 //! Traits related to the key components
 
-use num_traits::{Num, One, PrimInt, Signed, Unsigned, Zero};
+#[cfg(feature = "alloc")]
+use alloc::boxed::Box;
+#[cfg(feature = "private-key")]
+use crypto_bigint::{
+    modular::{BoxedMontyForm, BoxedMontyParams},
+    BoxedUint,
+};
 use zeroize::Zeroize;
 
-use crate::traits::modular::UnsignedModularInt;
-use crate::traits::modular::{MontyParams, MontyForm};
+use crate::traits::{modular::ModulusParams, NonZero, UnsignedModularInt};
 
 /// Components of an RSA public key.
-pub trait PublicKeyParts<T>
-where
-    T: UnsignedModularInt,
-{
+pub trait PublicKeyParts<T: UnsignedModularInt> {
+    /// Montgomery parameter type matching this modulus type.
+    type MontyParams: ModulusParams<Modulus = T>;
+
     /// Returns the modulus of the key.
-    fn n(&self) -> &T;
+    fn n(&self) -> &NonZero<T>;
 
     /// Returns the public exponent of the key.
     fn e(&self) -> &T;
@@ -20,67 +25,72 @@ where
     /// Returns the modulus size in bytes. Raw signatures and ciphertexts for
     /// or by this public key will have the same size.
     fn size(&self) -> usize {
-        (self.n().bits() as usize + 7) / 8
+        (self.n().bits() as usize).div_ceil(8)
     }
 
     /// Returns the parameters for montgomery operations.
-    fn n_params(&self) -> &MontyParams<T>;
+    fn n_params(&self) -> &Self::MontyParams;
 
     /// Returns precision (in bits) of `n`.
     fn n_bits_precision(&self) -> u32 {
         self.n().bits_precision()
     }
+
+    /// Returns the big endian serialization of the modulus of the key
+    #[cfg(feature = "alloc")]
+    fn n_bytes(&self) -> Box<[u8]> {
+        self.n().to_be_bytes_trimmed_vartime()
+    }
+
+    /// Returns the big endian serialization of the public exponent of the key
+    #[cfg(feature = "alloc")]
+    fn e_bytes(&self) -> Box<[u8]> {
+        self.e().to_be_bytes_trimmed_vartime()
+    }
 }
 
 /// Components of an RSA private key.
-pub trait PrivateKeyParts<T>: PublicKeyParts<T>
-where
-    T: UnsignedModularInt,
-{
+#[cfg(feature = "private-key")]
+pub trait PrivateKeyParts: PublicKeyParts<BoxedUint> {
     /// Returns the private exponent of the key.
-    fn d(&self) -> &T;
+    fn d(&self) -> &BoxedUint;
 
     /// Returns the prime factors.
-    fn primes(&self) -> &[T];
+    fn primes(&self) -> &[BoxedUint];
 
     /// Returns the precomputed dp value, D mod (P-1)
-    fn dp(&self) -> Option<&T>;
+    fn dp(&self) -> Option<&BoxedUint>;
 
     /// Returns the precomputed dq value, D mod (Q-1)
-    fn dq(&self) -> Option<&T>;
+    fn dq(&self) -> Option<&BoxedUint>;
 
     /// Returns the precomputed qinv value, Q^-1 mod P
-    fn qinv(&self) -> Option<&MontyForm<T>>;
+    fn qinv(&self) -> Option<&BoxedMontyForm>;
 
     /// Returns an iterator over the CRT Values
-    fn crt_values(&self) -> Option<&[CrtValue<T>]>;
+    fn crt_values(&self) -> Option<&[CrtValue]>;
 
-    /// Returns the params for `p` if precomupted.
-    fn p_params(&self) -> Option<&MontyParams<T>>;
+    /// Returns the params for `p` if precomputed.
+    fn p_params(&self) -> Option<&BoxedMontyParams>;
 
-    /// Returns the params for `q` if precomupted.
-    fn q_params(&self) -> Option<&MontyParams<T>>;
+    /// Returns the params for `q` if precomputed.
+    fn q_params(&self) -> Option<&BoxedMontyParams>;
 }
 
 /// Contains the precomputed Chinese remainder theorem values.
-// TODO : THIS CAN BE NEGATIVE / SIGNED
+#[cfg(feature = "private-key")]
 #[derive(Debug, Clone)]
-pub struct CrtValue<T>
-where
-    T: UnsignedModularInt + Clone,
-{
+pub struct CrtValue {
     /// D mod (prime - 1)
-    pub(crate) exp: T,
+    pub(crate) exp: BoxedUint,
     /// R·Coeff ≡ 1 mod Prime.
-    pub(crate) coeff: T,
+    pub(crate) coeff: BoxedUint,
     /// product of primes prior to this (inc p and q)
-    pub(crate) r: T,
+    pub(crate) r: BoxedUint,
 }
 
-impl<T> Zeroize for CrtValue<T>
-where
-    T: UnsignedModularInt + Clone,
-{
+#[cfg(feature = "private-key")]
+impl Zeroize for CrtValue {
     fn zeroize(&mut self) {
         self.exp.zeroize();
         self.coeff.zeroize();
@@ -88,25 +98,9 @@ where
     }
 }
 
-impl<T> Drop for CrtValue<T>
-where
-    T: UnsignedModularInt + Clone,
-{
+#[cfg(feature = "private-key")]
+impl Drop for CrtValue {
     fn drop(&mut self) {
         self.zeroize();
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_count_bits() {
-        let _crt = CrtValue::<u64> {
-            exp: 0,
-            coeff: 0,
-            r: 0,
-        };
     }
 }
