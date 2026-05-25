@@ -98,7 +98,7 @@ where
 
     fn try_from(bytes: &[u8]) -> signature::Result<Self> {
         Ok(Self {
-            inner: T::from_be_bytes_vartime(bytes),
+            inner: T::try_from_be_bytes_vartime(bytes).map_err(signature::Error::from_source)?,
         })
     }
 }

@@ -142,18 +142,18 @@ where
         T: UnsignedModularInt,
         K: PublicKeyParts<T>,
     {
-        let sig = T::from_be_bytes_vartime(sig);
+        let sig = T::try_from_be_bytes_vartime(sig).map_err(|_| Error::Verification)?;
         if sig >= *pub_key.n().as_ref() || sig.bits_precision() != pub_key.n_bits_precision() {
             return Err(Error::Verification);
         }
 
         let mut em = vec![0u8; pub_key.size()];
-        let em = uint_to_be_pad_into(rsa_encrypt(pub_key, &sig)?, pub_key.size(), &mut em)?;
-        let mut em = em.to_vec();
+        let em_len = uint_to_be_pad_into(rsa_encrypt(pub_key, &sig)?, pub_key.size(), &mut em)?
+            .len();
 
         emsa_pss_verify(
             hashed,
-            &mut em,
+            &mut em[..em_len],
             self.salt_len,
             &mut self.digest,
             pub_key.n().bits() as _,

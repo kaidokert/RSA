@@ -201,7 +201,7 @@ where
             self.label,
             pub_key.size(),
         )?;
-        let int = T::from_be_bytes_vartime(&em);
+        let int = T::try_from_be_bytes_vartime(&em)?;
         let mut storage = vec![0u8; pub_key.size()];
         let ciphertext =
             uint_to_be_pad_into(rsa_encrypt(pub_key, &int)?, pub_key.size(), &mut storage)?;
@@ -298,7 +298,7 @@ where
     let em = crate::algorithms::oaep::oaep_encrypt_digest_into::<_, D, MGD>(
         rng, msg, label, padded_len, storage,
     )?;
-    let int = T::from_be_bytes_vartime(em);
+    let int = T::try_from_be_bytes_vartime(em)?;
     crate::algorithms::pad::uint_to_be_pad_into(
         crate::algorithms::rsa::rsa_encrypt(pub_key, &int)?,
         padded_len,

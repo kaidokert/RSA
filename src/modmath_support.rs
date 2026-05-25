@@ -22,7 +22,7 @@ use crate::{
     key::GenericRsaPublicKey,
     traits::{
         modular::{
-            FromBeBytes, IntegerResize, IntoMontyForm, ModulusParams, NonZero, Odd, Pow,
+            IntegerResize, IntoMontyForm, ModulusParams, NonZero, Odd, Pow, TryFromBeBytes,
             PowBoundedExp, UnsignedModularInt,
         },
         FixedWidthUnsignedInt,
@@ -196,12 +196,14 @@ where
 }
 
 #[cfg(feature = "alloc")]
-impl<T> FromBeBytes for ModMathValue<T>
+impl<T> TryFromBeBytes for ModMathValue<T>
 where
     T: ModMathInt,
 {
-    fn from_be_bytes_vartime(bytes: &[u8]) -> Self {
-        Self(<T as FixedWidthUnsignedInt>::from_be_bytes_vartime(bytes))
+    fn try_from_be_bytes_vartime(bytes: &[u8]) -> Result<Self> {
+        Ok(Self(<T as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(
+            bytes,
+        )?))
     }
 }
 
@@ -246,11 +248,13 @@ pub fn public_key_from_be_bytes<T>(
 where
     T: ModMathInt,
 {
-    let n = wrap_value(<T as FixedWidthUnsignedInt>::from_be_bytes_vartime(modulus));
+    let n = wrap_value(<T as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(
+        modulus,
+    )?);
     let exponent = exponent.to_be_bytes();
-    let e = wrap_value(<T as FixedWidthUnsignedInt>::from_be_bytes_vartime(
+    let e = wrap_value(<T as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(
         &exponent,
-    ));
+    )?);
     GenericRsaPublicKey::from_components(n, e, ModMathParams::new(unwrap_value(&n))?)
 }
 
@@ -264,7 +268,9 @@ pub fn rsa_decrypt<T>(
 where
     T: ModMathInt,
 {
-    let input = wrap_value(<T as FixedWidthUnsignedInt>::from_be_bytes_vartime(input));
+    let input = wrap_value(<T as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(
+        input,
+    )?);
     Ok(rsa_encrypt(key, &input)?.to_be_bytes())
 }
 

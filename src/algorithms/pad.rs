@@ -35,9 +35,7 @@ pub fn left_pad_into<'a>(
     }
 
     let start = padded_len - input.len();
-    for byte in &mut storage[..start] {
-        *byte = 0;
-    }
+    storage[..start].fill(0);
     storage[start..start + input.len()].copy_from_slice(input);
     Ok(&storage[..padded_len])
 }

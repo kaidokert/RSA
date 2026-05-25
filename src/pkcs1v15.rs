@@ -96,9 +96,8 @@ impl Pkcs1v15Encrypt {
     {
         let padded_len = pub_key.size();
         let em = pkcs1v15_encrypt_pad_into(rng, msg, padded_len, storage)?;
-        let int = T::from_be_bytes_vartime(em);
+        let int = T::try_from_be_bytes_vartime(em)?;
 
-        storage[..padded_len].fill(0);
         uint_to_be_pad_into(rsa_encrypt(pub_key, &int)?, padded_len, storage)
     }
 }
@@ -263,7 +262,7 @@ impl SignatureScheme for Pkcs1v15Sign {
         }
 
         let mut storage = pub_key.n().as_ref().to_be_bytes();
-        let sig = T::from_be_bytes_vartime(sig);
+        let sig = T::try_from_be_bytes_vartime(sig).map_err(|_| Error::Verification)?;
         verify_generic(
             pub_key,
             self.prefix.as_ref(),

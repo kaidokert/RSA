@@ -68,6 +68,7 @@ where
     }
     // EM = 0x00 || 0x02 || PS || 0x00 || M
     let em = storage.get_mut(..k).ok_or(Error::OutputBufferTooSmall)?;
+    em[0] = 0;
     em[1] = 2;
     non_zero_random_bytes(rng, &mut em[2..k - msg.len() - 1]).map_err(|_: R::Error| Error::Rng)?;
     em[k - msg.len() - 1] = 0;
@@ -169,9 +170,9 @@ pub fn pkcs1v15_sign_pad_into<'a>(
 
     // EM = 0x00 || 0x01 || PS || 0x00 || T
     let em = storage.get_mut(..k).ok_or(Error::OutputBufferTooSmall)?;
-    em.fill(0xff);
     em[0] = 0;
     em[1] = 1;
+    em[2..k - t_len - 1].fill(0xff);
     em[k - t_len - 1] = 0;
     em[k - t_len..k - hash_len].copy_from_slice(prefix);
     em[k - hash_len..k].copy_from_slice(hashed);

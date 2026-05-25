@@ -15,6 +15,8 @@ use crypto_bigint::{NonZero as CryptoNonZero, Odd as CryptoOdd};
 use num_traits::{FromBytes as NumFromBytes, PrimInt, ToBytes as NumToBytes, Zero};
 use zeroize::Zeroize;
 
+use crate::errors::{Error, Result};
+
 pub trait NumBytes: Borrow<[u8]> + AsRef<[u8]> {}
 
 impl<T> NumBytes for T where T: Borrow<[u8]> + AsRef<[u8]> {}
@@ -39,7 +41,7 @@ pub trait FixedWidthUnsignedInt: Zeroize + Clone + Copy {
 
     fn leading_zeros(&self) -> u32;
     fn to_be_bytes(&self) -> Self::Bytes;
-    fn from_be_bytes_vartime(bytes: &[u8]) -> Self;
+    fn try_from_be_bytes_vartime(bytes: &[u8]) -> Result<Self>;
     fn bits_precision(&self) -> u32;
 }
 
@@ -59,14 +61,15 @@ where
         NumToBytes::to_be_bytes(self)
     }
 
-    fn from_be_bytes_vartime(bytes: &[u8]) -> Self {
+    fn try_from_be_bytes_vartime(bytes: &[u8]) -> Result<Self> {
         let mut repr = <T as NumFromBytes>::Bytes::default();
         let out = repr.as_mut();
         let out_len = out.len();
-        let copy_len = bytes.len().min(out_len);
-        out.fill(0);
-        out[out_len - copy_len..].copy_from_slice(&bytes[bytes.len() - copy_len..]);
-        NumFromBytes::from_be_bytes(&repr)
+        if bytes.len() > out_len {
+            return Err(Error::InvalidArguments);
+        }
+        out[out_len - bytes.len()..].copy_from_slice(bytes);
+        Ok(NumFromBytes::from_be_bytes(&repr))
     }
 
     fn bits_precision(&self) -> u32 {
@@ -132,21 +135,21 @@ where
 }
 
 #[cfg(not(feature = "alloc"))]
-impl<T> FromBeBytes for T
+impl<T> TryFromBeBytes for T
 where
     T: FixedWidthUnsignedInt + core::ops::Rem<Output = T>,
 {
-    fn from_be_bytes_vartime(bytes: &[u8]) -> Self {
-        FixedWidthUnsignedInt::from_be_bytes_vartime(bytes)
+    fn try_from_be_bytes_vartime(bytes: &[u8]) -> Result<Self> {
+        FixedWidthUnsignedInt::try_from_be_bytes_vartime(bytes)
     }
 }
 
-pub trait FromBeBytes {
-    fn from_be_bytes_vartime(bytes: &[u8]) -> Self;
+pub trait TryFromBeBytes: Sized {
+    fn try_from_be_bytes_vartime(bytes: &[u8]) -> Result<Self>;
 }
 
 pub trait UnsignedModularInt:
-    Zeroize + Clone + PartialOrd + IntegerResize<Output = Self> + FromBeBytes
+    Zeroize + Clone + PartialOrd + IntegerResize<Output = Self> + TryFromBeBytes
 {
     type Bytes: NumBytes + AsMut<[u8]>;
     fn leading_zeros(&self) -> u32;
@@ -288,7 +291,18 @@ impl ModulusParams for BoxedMontyParams {
     type Modulus = BoxedUint;
     type MontgomeryForm = BoxedMontyForm;
     fn modulus(&self) -> &Odd<Self::Modulus> {
-        // Safety: both wrappers are transparent newtypes over the same `BoxedUint`.
+        // Our `Odd<T>` is `#[repr(transparent)]` over `T`. `crypto_bigint::Odd<T>`
+        // is a single-field tuple struct around `T`, not formally
+        // `#[repr(transparent)]` — verify layout at compile time so a future
+        // crypto_bigint version that changes representation fails to build
+        // instead of producing silent UB.
+        const _: () = assert!(
+            core::mem::size_of::<CryptoOdd<BoxedUint>>() == core::mem::size_of::<Odd<BoxedUint>>()
+        );
+        const _: () = assert!(
+            core::mem::align_of::<CryptoOdd<BoxedUint>>()
+                == core::mem::align_of::<Odd<BoxedUint>>()
+        );
         unsafe {
             &*(self.modulus() as *const CryptoOdd<Self::Modulus> as *const Odd<Self::Modulus>)
         }
@@ -346,8 +360,8 @@ impl UnsignedModularInt for BoxedUint {
 }
 
 #[cfg(feature = "alloc")]
-impl FromBeBytes for BoxedUint {
-    fn from_be_bytes_vartime(bytes: &[u8]) -> Self {
-        BoxedUint::from_be_slice_vartime(bytes)
+impl TryFromBeBytes for BoxedUint {
+    fn try_from_be_bytes_vartime(bytes: &[u8]) -> Result<Self> {
+        Ok(BoxedUint::from_be_slice_vartime(bytes))
     }
 }
