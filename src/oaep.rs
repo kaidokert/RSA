@@ -4,27 +4,44 @@
 //!
 //! See [code example in the toplevel rustdoc](../index.html#oaep-encryption).
 
+#[cfg(feature = "private-key")]
 mod decrypting_key;
 mod encrypting_key;
+#[cfg(not(feature = "alloc"))]
+mod label;
 
-pub use self::{decrypting_key::DecryptingKey, encrypting_key::EncryptingKey};
+#[cfg(feature = "private-key")]
+pub use self::decrypting_key::DecryptingKey;
+#[cfg(feature = "alloc")]
+pub use self::encrypting_key::EncryptingKey;
+pub use self::encrypting_key::GenericEncryptingKey;
+#[cfg(not(feature = "alloc"))]
+pub use self::label::{Label, MAX_LABEL_LEN};
 
+#[cfg(feature = "alloc")]
+use alloc::boxed::Box;
+#[cfg(feature = "alloc")]
+use alloc::{vec, vec::Vec};
 use core::fmt;
+#[cfg(feature = "alloc")]
+use crypto_bigint::BoxedUint;
 
-use digest::{Digest, DynDigest, FixedOutputReset};
-use rand_core::CryptoRngCore;
+use digest::{Digest, FixedOutputReset};
+use rand_core::TryCryptoRng;
 
 use crate::algorithms::oaep::*;
-use crate::algorithms::pad::{uint_to_be_pad, uint_to_zeroizing_be_pad};
-use crate::algorithms::rsa::{rsa_decrypt_and_check, rsa_encrypt};
+#[cfg(feature = "alloc")]
+use crate::algorithms::pad::{uint_to_be_pad, uint_to_be_pad_into, uint_to_zeroizing_be_pad};
+#[cfg(feature = "private-key")]
+use crate::algorithms::rsa::rsa_decrypt_and_check;
+#[cfg(feature = "alloc")]
+use crate::algorithms::rsa::rsa_encrypt;
 use crate::errors::{Error, Result};
-use crate::key::{self, RsaPrivateKey, RsaPublicKey};
-use crate::traits::{PaddingScheme, PublicKeyParts};
-
-use crate::traits::UnsignedModularInt;
-use heapless::String;
-
-use core::marker::PhantomData;
+#[cfg(feature = "private-key")]
+use crate::key::RsaPrivateKey;
+#[cfg(feature = "alloc")]
+use crate::key::{self, RsaPublicKey};
+use crate::traits::{PaddingScheme, PublicKeyParts, UnsignedModularInt};
 
 /// Encryption and Decryption using [OAEP padding](https://datatracker.ietf.org/doc/html/rfc8017#section-7.1).
 ///
@@ -37,96 +54,163 @@ use core::marker::PhantomData;
 ///
 /// A prominent example is the [`AndroidKeyStore`](https://developer.android.com/guide/topics/security/cryptography#oaep-mgf1-digest).
 /// It uses SHA-1 for `mgf_digest` and a user-chosen SHA flavour for `digest`.
-pub struct Oaep {
+#[cfg(feature = "alloc")]
+pub struct Oaep<D, MGD = D> {
     /// Digest type to use.
-    pub digest: PhantomData<u8>, // Box<dyn DynDigest + Send + Sync>,
+    pub digest: D,
 
     /// Digest to use for Mask Generation Function (MGF).
-    pub mgf_digest: PhantomData<u8>, //Box<dyn DynDigest + Send + Sync>,
+    pub mgf_digest: MGD,
 
     /// Optional label.
-    pub label: Option<Label>,
+    pub label: Option<Box<[u8]>>,
 }
 
-impl Oaep {
+#[cfg(feature = "alloc")]
+impl<D> Default for Oaep<D>
+where
+    D: Digest + FixedOutputReset,
+{
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(feature = "alloc")]
+impl<D> Oaep<D>
+where
+    D: Digest + FixedOutputReset,
+{
     /// Create a new OAEP `PaddingScheme`, using `T` as the hash function for both the default (empty) label and for MGF1.
     ///
-    pub fn new<T: 'static + Digest + DynDigest + Send + Sync>() -> Self {
+    /// # Example
+    /// ```
+    /// use sha1::Sha1;
+    /// use sha2::Sha256;
+    /// use rsa::{RsaPublicKey, Oaep};
+    /// use base64ct::{Base64, Encoding};
+    /// use crypto_bigint::BoxedUint;
+    ///
+    /// let n_bytes = Base64::decode_vec("seAOhmYFAjH6NOaB54dboqw86uPXV/oK9ayJGV4mVClbvsDBJmF3bVkOaVMp9ogcFJTFFSy5g2HsTZIfHyuQVUJADb+BeRnkYrYhRvNJOKj2pcDbkxYe9XGMx8pIvxkDFnIpusb3gUsuzMUAU5qIstjwQKzuD51c6uJi0HAtQkr6Wmlt34SX7xkD/MfRuTu9uqmHmkiiJaCDHB2reYTPguetSWfuvp1qBJDNgSsp7BjwYANWldyrmZ8cLXEXYMUG5vtsWMxUzl8ertEr6kbnGM0OJghNuEtittW/dfTPvk683R1jj0hNaMzvHK8xYldUlLuwmWCYIIvpHBaA/w+FwQ==").unwrap();
+    /// let e_bytes = Base64::decode_vec("AQAB").unwrap();
+    /// let n = BoxedUint::from_be_slice(&n_bytes, 2048).unwrap();
+    /// let e = BoxedUint::from_be_slice(&e_bytes, 32).unwrap();
+    ///
+    /// let mut rng = rand::rng();
+    /// let key = RsaPublicKey::new(n, e).unwrap();
+    /// let padding = Oaep::<Sha256>::new();
+    /// let encrypted_data = key.encrypt(&mut rng, padding, b"secret").unwrap();
+    /// ```
+    pub fn new() -> Self {
         Self {
-            digest: Default::default(),     //Box::new(T::new()),
-            mgf_digest: Default::default(), //Box::new(T::new()),
+            digest: D::new(),
+            mgf_digest: D::new(),
             label: None,
         }
     }
 
     /// Create a new OAEP `PaddingScheme` with an associated `label`, using `T` as the hash function for both the label and for MGF1.
-    pub fn new_with_label<T: 'static + Digest + DynDigest + Send + Sync, S: AsRef<str>>(
-        label: S,
-    ) -> Self {
+    pub fn new_with_label<S: Into<Box<[u8]>>>(label: S) -> Self {
         Self {
-            digest: Default::default(),     // Box::new(T::new()),
-            mgf_digest: Default::default(), //Box::new(T::new()),
-            label: None,                    // Some(label.as_ref().to_string()),
+            digest: D::new(),
+            mgf_digest: D::new(),
+            label: Some(label.into()),
         }
     }
+}
 
+#[cfg(feature = "alloc")]
+impl<D, MGD> Oaep<D, MGD>
+where
+    D: Digest + FixedOutputReset,
+    MGD: Digest + FixedOutputReset,
+{
     /// Create a new OAEP `PaddingScheme`, using `T` as the hash function for the default (empty) label, and `U` as the hash function for MGF1.
     /// If a label is needed use `PaddingScheme::new_oaep_with_label` or `PaddingScheme::new_oaep_with_mgf_hash_with_label`.
     ///
-    pub fn new_with_mgf_hash<
-        T: 'static + Digest + DynDigest + Send + Sync,
-        U: 'static + Digest + DynDigest + Send + Sync,
-    >() -> Self {
+    /// # Example
+    /// ```
+    /// use sha1::Sha1;
+    /// use sha2::Sha256;
+    /// use rsa::{RsaPublicKey, Oaep};
+    /// use base64ct::{Base64, Encoding};
+    /// use crypto_bigint::BoxedUint;
+    ///
+    /// let n_bytes = Base64::decode_vec("seAOhmYFAjH6NOaB54dboqw86uPXV/oK9ayJGV4mVClbvsDBJmF3bVkOaVMp9ogcFJTFFSy5g2HsTZIfHyuQVUJADb+BeRnkYrYhRvNJOKj2pcDbkxYe9XGMx8pIvxkDFnIpusb3gUsuzMUAU5qIstjwQKzuD51c6uJi0HAtQkr6Wmlt34SX7xkD/MfRuTu9uqmHmkiiJaCDHB2reYTPguetSWfuvp1qBJDNgSsp7BjwYANWldyrmZ8cLXEXYMUG5vtsWMxUzl8ertEr6kbnGM0OJghNuEtittW/dfTPvk683R1jj0hNaMzvHK8xYldUlLuwmWCYIIvpHBaA/w+FwQ==").unwrap();
+    /// let e_bytes = Base64::decode_vec("AQAB").unwrap();
+    /// let n = BoxedUint::from_be_slice(&n_bytes, 2048).unwrap();
+    /// let e = BoxedUint::from_be_slice(&e_bytes, 32).unwrap();
+    ///
+    /// let mut rng = rand::rng();
+    /// let key = RsaPublicKey::new(n, e).unwrap();
+    /// let padding = Oaep::<Sha256, Sha1>::new_with_mgf_hash();
+    /// let encrypted_data = key.encrypt(&mut rng, padding, b"secret").unwrap();
+    /// ```
+    pub fn new_with_mgf_hash() -> Self {
         Self {
-            digest: Default::default(),     // Box::new(T::new()),
-            mgf_digest: Default::default(), // Box::new(U::new()),
+            digest: D::new(),
+            mgf_digest: MGD::new(),
             label: None,
         }
     }
 
     /// Create a new OAEP `PaddingScheme` with an associated `label`, using `T` as the hash function for the label, and `U` as the hash function for MGF1.
-    pub fn new_with_mgf_hash_and_label<
-        T: 'static + Digest + DynDigest + Send + Sync,
-        U: 'static + Digest + DynDigest + Send + Sync,
-        S: AsRef<str>,
-    >(
-        label: S,
-    ) -> Self {
+    pub fn new_with_mgf_hash_and_label<S: Into<Box<[u8]>>>(label: S) -> Self {
         Self {
-            digest: Default::default(),     // Box::new(T::new()),
-            mgf_digest: Default::default(), // Box::new(U::new()),
-            label: None,                    //Some(label.as_ref().to_string()),
+            digest: D::new(),
+            mgf_digest: MGD::new(),
+            label: Some(label.into()),
         }
     }
 }
 
-impl<T> PaddingScheme<T> for Oaep
+#[cfg(feature = "alloc")]
+impl<D, MGD> PaddingScheme for Oaep<D, MGD>
 where
-    T: UnsignedModularInt,
+    D: Digest + FixedOutputReset,
+    MGD: Digest + FixedOutputReset,
 {
-    fn encrypt<'a, Rng: CryptoRngCore>(
-        self,
-        rng: &mut Rng,
-        pub_key: &RsaPublicKey<T>,
-        msg: &[u8],
-        storage: &'a mut [u8],
-    ) -> Result<&'a [u8]> {
-        todo!()
-        /*
-        encrypt(
+    #[cfg(feature = "private-key")]
+    fn decrypt<Rng: TryCryptoRng + ?Sized>(
+        mut self,
+        rng: Option<&mut Rng>,
+        priv_key: &RsaPrivateKey,
+        ciphertext: &[u8],
+    ) -> Result<Vec<u8>> {
+        decrypt(
             rng,
-            pub_key,
-            msg,
-            &mut *self.digest,
-            &mut *self.mgf_digest,
+            priv_key,
+            ciphertext,
+            &mut self.digest,
+            &mut self.mgf_digest,
             self.label,
-            storage,
         )
-         */
+    }
+
+    fn encrypt<Rng, K, T>(mut self, rng: &mut Rng, pub_key: &K, msg: &[u8]) -> Result<Vec<u8>>
+    where
+        Rng: TryCryptoRng + ?Sized,
+        T: UnsignedModularInt,
+        K: PublicKeyParts<T>,
+    {
+        let em = oaep_encrypt(
+            rng,
+            msg,
+            &mut self.digest,
+            &mut self.mgf_digest,
+            self.label,
+            pub_key.size(),
+        )?;
+        let int = T::try_from_be_bytes_vartime(&em)?;
+        let mut storage = vec![0u8; pub_key.size()];
+        let ciphertext =
+            uint_to_be_pad_into(rsa_encrypt(pub_key, &int)?, pub_key.size(), &mut storage)?;
+        Ok(ciphertext.to_vec())
     }
 }
 
-impl fmt::Debug for Oaep {
+#[cfg(feature = "alloc")]
+impl<D, MGD> fmt::Debug for Oaep<D, MGD> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("OAEP")
             .field("digest", &"...")
@@ -143,27 +227,28 @@ impl fmt::Debug for Oaep {
 /// `2 + (2 * hash.size())`.
 ///
 /// [PKCS#1 OAEP]: https://datatracker.ietf.org/doc/html/rfc8017#section-7.1
+#[cfg(feature = "alloc")]
 #[inline]
-fn encrypt<'a, T, R: CryptoRngCore + ?Sized, D>(
+#[allow(dead_code)]
+fn encrypt<R, D, MGD>(
     rng: &mut R,
-    pub_key: &RsaPublicKey<T>,
+    pub_key: &RsaPublicKey,
     msg: &[u8],
     digest: &mut D,
-    mgf_digest: &mut D,
-    label: Option<Label>,
-    storage: &'a mut [u8],
-) -> Result<&'a [u8]>
+    mgf_digest: &mut MGD,
+    label: Option<Box<[u8]>>,
+) -> Result<Vec<u8>>
 where
-    T: UnsignedModularInt,
+    R: TryCryptoRng + ?Sized,
     D: Digest + FixedOutputReset,
+    MGD: Digest + FixedOutputReset,
 {
     key::check_public(pub_key)?;
 
-    let em = oaep_encrypt(rng, msg, digest, mgf_digest, label, pub_key.size(), storage)?;
+    let em = oaep_encrypt(rng, msg, digest, mgf_digest, label, pub_key.size())?;
 
-    todo!()
-    //let int = Zeroizing::new(BigUint::from_bytes_be(&em));
-    //uint_to_be_pad(rsa_encrypt(pub_key, &int)?, pub_key.size())
+    let int = BoxedUint::from_be_slice(&em, pub_key.n_bits_precision())?;
+    uint_to_be_pad(rsa_encrypt(pub_key, &int)?, pub_key.size())
 }
 
 /// Encrypts the given message with RSA and the padding scheme from
@@ -173,23 +258,52 @@ where
 /// `2 + (2 * hash.size())`.
 ///
 /// [PKCS#1 OAEP]: https://datatracker.ietf.org/doc/html/rfc8017#section-7.1
-fn encrypt_digest<'a, T, R: CryptoRngCore + ?Sized, D: Digest, MGD: Digest + FixedOutputReset>(
+#[cfg(feature = "alloc")]
+#[allow(dead_code)]
+fn encrypt_digest<R, D, MGD>(
     rng: &mut R,
-    pub_key: &RsaPublicKey<T>,
+    pub_key: &RsaPublicKey,
     msg: &[u8],
-    label: Option<Label>,
-    storage: &'a mut [u8],
-) -> Result<&'a [u8]>
+    label: Option<Box<[u8]>>,
+) -> Result<Vec<u8>>
 where
-    T: UnsignedModularInt,
+    R: TryCryptoRng + ?Sized,
+    D: Digest,
+    MGD: Digest + FixedOutputReset,
 {
     key::check_public(pub_key)?;
 
-    let em = oaep_encrypt_digest::<_, D, MGD>(rng, msg, label, pub_key.size(), storage)?;
+    let em = oaep_encrypt_digest::<_, D, MGD>(rng, msg, label, pub_key.size())?;
 
-    todo!()
-    //let int = Zeroizing::new(BigUint::from_bytes_be(&em));
-    //uint_to_be_pad(rsa_encrypt(pub_key, &int)?, pub_key.size())
+    let int = BoxedUint::from_be_slice(&em, pub_key.n_bits_precision())?;
+    uint_to_be_pad(rsa_encrypt(pub_key, &int)?, pub_key.size())
+}
+
+/// Does not call `key::check_public` — that validator is `alloc`-only.
+pub fn encrypt_digest_into<'a, R, D, MGD, K, T>(
+    rng: &mut R,
+    pub_key: &K,
+    msg: &[u8],
+    label: Option<&[u8]>,
+    storage: &'a mut [u8],
+) -> crate::Result<&'a [u8]>
+where
+    R: rand_core::TryCryptoRng + ?Sized,
+    D: digest::Digest,
+    MGD: digest::Digest + digest::FixedOutputReset,
+    K: crate::traits::PublicKeyParts<T>,
+    T: crate::traits::UnsignedModularInt,
+{
+    let padded_len = pub_key.size();
+    let em = crate::algorithms::oaep::oaep_encrypt_digest_into::<_, D, MGD>(
+        rng, msg, label, padded_len, storage,
+    )?;
+    let int = T::try_from_be_bytes_vartime(em)?;
+    crate::algorithms::pad::uint_to_be_pad_into(
+        crate::algorithms::rsa::rsa_encrypt(pub_key, &int)?,
+        padded_len,
+        storage,
+    )
 }
 
 /// Decrypts a plaintext using RSA and the padding scheme from [PKCS#1 OAEP].
@@ -204,21 +318,31 @@ where
 /// See `decrypt_session_key` for a way of solving this problem.
 ///
 /// [PKCS#1 OAEP]: https://datatracker.ietf.org/doc/html/rfc8017#section-7.1
+#[cfg(feature = "private-key")]
 #[inline]
-fn decrypt<'a, T, R: CryptoRngCore + ?Sized, D>(
+fn decrypt<R, D, MGD>(
     rng: Option<&mut R>,
-    priv_key: &RsaPrivateKey<T>,
+    priv_key: &RsaPrivateKey,
     ciphertext: &[u8],
     digest: &mut D,
-    mgf_digest: &mut D,
-    label: Option<Label>,
-    storage: &'a mut [u8],
-) -> Result<&'a [u8]>
+    mgf_digest: &mut MGD,
+    label: Option<Box<[u8]>>,
+) -> Result<Vec<u8>>
 where
-    T: UnsignedModularInt,
+    R: TryCryptoRng + ?Sized,
     D: Digest + FixedOutputReset,
+    MGD: Digest + FixedOutputReset,
 {
-    todo!()
+    if ciphertext.len() != priv_key.size() {
+        return Err(Error::Decryption);
+    }
+
+    let ciphertext = BoxedUint::from_be_slice(ciphertext, priv_key.n_bits_precision())?;
+
+    let em = rsa_decrypt_and_check(priv_key, rng, &ciphertext)?;
+    let mut em = uint_to_zeroizing_be_pad(em, priv_key.size())?;
+
+    oaep_decrypt(&mut em, digest, mgf_digest, label, priv_key.size())
 }
 
 /// Decrypts a plaintext using RSA and the padding scheme from [PKCS#1 OAEP].
@@ -233,39 +357,49 @@ where
 /// See `decrypt_session_key` for a way of solving this problem.
 ///
 /// [PKCS#1 OAEP]: https://datatracker.ietf.org/doc/html/rfc8017#section-7.1
+#[cfg(feature = "private-key")]
 #[inline]
-fn decrypt_digest<'a, T, R: CryptoRngCore + ?Sized, D, MGD: Digest + FixedOutputReset>(
+fn decrypt_digest<R, D, MGD>(
     rng: Option<&mut R>,
-    priv_key: &RsaPrivateKey<T>,
+    priv_key: &RsaPrivateKey,
     ciphertext: &[u8],
-    label: Option<Label>,
-) -> Result<&'a [u8]>
+    label: Option<Box<[u8]>>,
+) -> Result<Vec<u8>>
 where
-    T: UnsignedModularInt,
-    D: Digest + FixedOutputReset,
+    R: TryCryptoRng + ?Sized,
+    D: Digest,
+    MGD: Digest + FixedOutputReset,
 {
-    todo!()
+    key::check_public(priv_key)?;
+
+    if ciphertext.len() != priv_key.size() {
+        return Err(Error::Decryption);
+    }
+
+    let ciphertext = BoxedUint::from_be_slice(ciphertext, priv_key.n_bits_precision())?;
+    let em = rsa_decrypt_and_check(priv_key, rng, &ciphertext)?;
+    let mut em = uint_to_zeroizing_be_pad(em, priv_key.size())?;
+
+    oaep_decrypt_digest::<D, MGD>(&mut em, label, priv_key.size())
 }
 
 #[cfg(test)]
+#[cfg(all(feature = "alloc", feature = "private-key"))]
 mod tests {
     use crate::key::{RsaPrivateKey, RsaPublicKey};
-    use crate::oaep::{EncryptingKey, Oaep};
+    use crate::oaep::{DecryptingKey, EncryptingKey, Oaep};
+    use crate::traits::PublicKeyParts;
     use crate::traits::{Decryptor, RandomizedDecryptor, RandomizedEncryptor};
-    use crate::traits::{PublicKeyParts, UnsignedModularInt};
 
-    use digest::{Digest, DynDigest, FixedOutputReset};
-    use num_traits::FromPrimitive;
-    use proptest::strategy::NewTree;
-    use rand_chacha::{
-        rand_core::{RngCore, SeedableRng},
-        ChaCha8Rng,
-    };
+    use crypto_bigint::BoxedUint;
+    use digest::{Digest, FixedOutputReset};
+    use rand::rngs::ChaCha8Rng;
+    use rand_core::{Rng, SeedableRng};
     use sha1::Sha1;
     use sha2::{Sha224, Sha256, Sha384, Sha512};
     use sha3::{Sha3_256, Sha3_384, Sha3_512};
 
-    fn get_private_key<T: UnsignedModularInt>() -> RsaPrivateKey<T> {
+    fn get_private_key() -> RsaPrivateKey {
         // -----BEGIN RSA PRIVATE KEY-----
         // MIIEpAIBAAKCAQEA05e4TZikwmE47RtpWoEG6tkdVTvwYEG2LT/cUKBB4iK49FKW
         // icG4LF5xVU9d1p+i9LYVjPDb61eBGg/DJ+HyjnT+dNO8Fmweq9wbi1e5NMqL5bAL
@@ -294,103 +428,250 @@ mod tests {
         // BoB0er/UmDm4Ly/97EO9A0PKMOE5YbMq9s3t3RlWcsdrU7dvw+p2+A==
         // -----END RSA PRIVATE KEY-----
 
-        todo!()
+        RsaPrivateKey::from_components(
+            BoxedUint::from_be_hex("d397b84d98a4c26138ed1b695a8106ead91d553bf06041b62d3fdc50a041e222b8f4529689c1b82c5e71554f5dd69fa2f4b6158cf0dbeb57811a0fc327e1f28e74fe74d3bc166c1eabdc1b8b57b934ca8be5b00b4f29975bcc99acaf415b59bb28a6782bb41a2c3c2976b3c18dbadef62f00c6bb226640095096c0cc60d22fe7ef987d75c6a81b10d96bf292028af110dc7cc1bbc43d22adab379a0cd5d8078cc780ff5cd6209dea34c922cf784f7717e428d75b5aec8ff30e5f0141510766e2e0ab8d473c84e8710b2b98227c3db095337ad3452f19e2b9bfbccdd8148abf6776fa552775e6e75956e45229ae5a9c46949bab1e622f0e48f56524a84ed3483b", 2048).unwrap(),
+            BoxedUint::from(65_537u64),
+            BoxedUint::from_be_hex("c4e70c689162c94c660828191b52b4d8392115df486a9adbe831e458d73958320dc1b755456e93701e9702d76fb0b92f90e01d1fe248153281fe79aa9763a92fae69d8d7ecd144de29fa135bd14f9573e349e45031e3b76982f583003826c552e89a397c1a06bd2163488630d92e8c2bb643d7abef700da95d685c941489a46f54b5316f62b5d2c3a7f1bbd134cb37353a44683fdc9d95d36458de22f6c44057fe74a0a436c4308f73f4da42f35c47ac16a7138d483afc91e41dc3a1127382e0c0f5119b0221b4fc639d6b9c38177a6de9b526ebd88c38d7982c07f98a0efd877d508aae275b946915c02e2e1106d175d74ec6777f5e80d12c053d9c7be1e341", 2048).unwrap(),
+            vec![
+                BoxedUint::from_be_hex("f827bbf3a41877c7cc59aebf42ed4b29c32defcb8ed96863d5b090a05a8930dd624a21c9dcf9838568fdfa0df65b8462a5f2ac913d6c56f975532bd8e78fb07bd405ca99a484bcf59f019bbddcb3933f2bce706300b4f7b110120c5df9018159067c35da3061a56c8635a52b54273b31271b4311f0795df6021e6355e1a42e61", 1024).unwrap(),
+                BoxedUint::from_be_hex("da4817ce0089dd36f2ade6a3ff410c73ec34bf1b4f6bda38431bfede11cef1f7f6efa70e5f8063a3b1f6e17296ffb15feefa0912a0325b8d1fd65a559e717b5b961ec345072e0ec5203d03441d29af4d64054a04507410cf1da78e7b6119d909ec66e6ad625bf995b279a4b3c5be7d895cd7c5b9c4c497fde730916fcdb4e41b", 1024).unwrap()
+            ],
+        ).unwrap()
     }
 
     #[test]
-    #[ignore]
     fn test_encrypt_decrypt_oaep() {
-        let priv_key = get_private_key::<u32>();
-        do_test_encrypt_decrypt_oaep::<_, Sha1>(&priv_key);
-        do_test_encrypt_decrypt_oaep::<_, Sha224>(&priv_key);
-        do_test_encrypt_decrypt_oaep::<_, Sha256>(&priv_key);
-        do_test_encrypt_decrypt_oaep::<_, Sha384>(&priv_key);
-        do_test_encrypt_decrypt_oaep::<_, Sha512>(&priv_key);
-        do_test_encrypt_decrypt_oaep::<_, Sha3_256>(&priv_key);
-        do_test_encrypt_decrypt_oaep::<_, Sha3_384>(&priv_key);
-        do_test_encrypt_decrypt_oaep::<_, Sha3_512>(&priv_key);
+        let priv_key = get_private_key();
+        do_test_encrypt_decrypt_oaep::<Sha1>(&priv_key);
+        do_test_encrypt_decrypt_oaep::<Sha224>(&priv_key);
+        do_test_encrypt_decrypt_oaep::<Sha256>(&priv_key);
+        do_test_encrypt_decrypt_oaep::<Sha384>(&priv_key);
+        do_test_encrypt_decrypt_oaep::<Sha512>(&priv_key);
+        do_test_encrypt_decrypt_oaep::<Sha3_256>(&priv_key);
+        do_test_encrypt_decrypt_oaep::<Sha3_384>(&priv_key);
+        do_test_encrypt_decrypt_oaep::<Sha3_512>(&priv_key);
 
-        do_test_oaep_with_different_hashes::<_, Sha1, Sha1>(&priv_key);
-        do_test_oaep_with_different_hashes::<_, Sha224, Sha1>(&priv_key);
-        do_test_oaep_with_different_hashes::<_, Sha256, Sha1>(&priv_key);
-        do_test_oaep_with_different_hashes::<_, Sha384, Sha1>(&priv_key);
-        do_test_oaep_with_different_hashes::<_, Sha512, Sha1>(&priv_key);
-        do_test_oaep_with_different_hashes::<_, Sha3_256, Sha1>(&priv_key);
-        do_test_oaep_with_different_hashes::<_, Sha3_384, Sha1>(&priv_key);
-        do_test_oaep_with_different_hashes::<_, Sha3_512, Sha1>(&priv_key);
+        do_test_oaep_with_different_hashes::<Sha1, Sha1>(&priv_key);
+        do_test_oaep_with_different_hashes::<Sha224, Sha1>(&priv_key);
+        do_test_oaep_with_different_hashes::<Sha256, Sha1>(&priv_key);
+        do_test_oaep_with_different_hashes::<Sha384, Sha1>(&priv_key);
+        do_test_oaep_with_different_hashes::<Sha512, Sha1>(&priv_key);
+        do_test_oaep_with_different_hashes::<Sha3_256, Sha1>(&priv_key);
+        do_test_oaep_with_different_hashes::<Sha3_384, Sha1>(&priv_key);
+        do_test_oaep_with_different_hashes::<Sha3_512, Sha1>(&priv_key);
     }
 
-    fn get_label(rng: &mut ChaCha8Rng) -> Option<String> {
-        todo!()
+    fn get_label(rng: &mut ChaCha8Rng) -> Option<Box<[u8]>> {
+        let mut buf = [0u8; 32];
+        rng.fill_bytes(&mut buf);
+
+        if rng.next_u32() % 2 == 0 {
+            Some(buf.into())
+        } else {
+            None
+        }
     }
 
-    fn do_test_encrypt_decrypt_oaep<
-        T: UnsignedModularInt,
-        D: 'static + Digest + DynDigest + Send + Sync,
-    >(
-        prk: &RsaPrivateKey<T>,
-    ) {
-        todo!()
+    fn do_test_encrypt_decrypt_oaep<D: Digest + FixedOutputReset>(prk: &RsaPrivateKey) {
+        let mut rng = ChaCha8Rng::from_seed([42; 32]);
+
+        let k = prk.size();
+
+        for i in 1..8 {
+            let mut input = vec![0u8; i * 8];
+            rng.fill_bytes(&mut input);
+
+            if input.len() > k - 11 {
+                input = input[0..k - 11].to_vec();
+            }
+            let label = get_label(&mut rng);
+
+            let pub_key: RsaPublicKey = prk.into();
+
+            let ciphertext = if let Some(ref label) = label {
+                let padding = Oaep::<D>::new_with_label(label.clone());
+                pub_key.encrypt(&mut rng, padding, &input).unwrap()
+            } else {
+                let padding = Oaep::<D>::new();
+                pub_key.encrypt(&mut rng, padding, &input).unwrap()
+            };
+
+            assert_ne!(input, ciphertext);
+            let blind: bool = rng.next_u32() < (1 << 31);
+
+            let padding = if let Some(label) = label {
+                Oaep::<D>::new_with_label::<Box<[u8]>>(label)
+            } else {
+                Oaep::<D>::new()
+            };
+
+            let plaintext = if blind {
+                prk.decrypt(padding, &ciphertext).unwrap()
+            } else {
+                prk.decrypt_blinded(&mut rng, padding, &ciphertext).unwrap()
+            };
+
+            assert_eq!(input, plaintext);
+        }
     }
 
     fn do_test_oaep_with_different_hashes<
-        T: UnsignedModularInt,
-        D: 'static + Digest + DynDigest + Send + Sync,
-        U: 'static + Digest + DynDigest + Send + Sync,
+        D: Digest + FixedOutputReset,
+        U: Digest + FixedOutputReset,
     >(
-        prk: &RsaPrivateKey<T>,
+        prk: &RsaPrivateKey,
     ) {
-        todo!()
+        let mut rng = ChaCha8Rng::from_seed([42; 32]);
+
+        let k = prk.size();
+
+        for i in 1..8 {
+            let mut input = vec![0u8; i * 8];
+            rng.fill_bytes(&mut input);
+
+            if input.len() > k - 11 {
+                input = input[0..k - 11].to_vec();
+            }
+            let label = get_label(&mut rng);
+
+            let pub_key: RsaPublicKey = prk.into();
+
+            let ciphertext = if let Some(ref label) = label {
+                let padding = Oaep::<D, U>::new_with_mgf_hash_and_label::<_>(label.clone());
+                pub_key.encrypt(&mut rng, padding, &input).unwrap()
+            } else {
+                let padding = Oaep::<D, U>::new_with_mgf_hash();
+                pub_key.encrypt(&mut rng, padding, &input).unwrap()
+            };
+
+            assert_ne!(input, ciphertext);
+            let blind: bool = rng.next_u32() < (1 << 31);
+
+            let padding = if let Some(label) = label {
+                Oaep::<D, U>::new_with_mgf_hash_and_label::<_>(label)
+            } else {
+                Oaep::<D, U>::new_with_mgf_hash()
+            };
+
+            let plaintext = if blind {
+                prk.decrypt(padding, &ciphertext).unwrap()
+            } else {
+                prk.decrypt_blinded(&mut rng, padding, &ciphertext).unwrap()
+            };
+
+            assert_eq!(input, plaintext);
+        }
     }
 
     #[test]
-    #[ignore]
     fn test_decrypt_oaep_invalid_hash() {
-        todo!()
+        let mut rng = ChaCha8Rng::from_seed([42; 32]);
+        let priv_key = get_private_key();
+        let pub_key: RsaPublicKey = (&priv_key).into();
+        let ciphertext = pub_key
+            .encrypt(&mut rng, Oaep::<Sha1>::new(), "a_plain_text".as_bytes())
+            .unwrap();
+        assert!(
+            priv_key
+                .decrypt_blinded(
+                    &mut rng,
+                    Oaep::<Sha1>::new_with_label::<_>("label".as_bytes()),
+                    &ciphertext,
+                )
+                .is_err(),
+            "decrypt should have failed on hash verification"
+        );
     }
 
     #[test]
-    #[ignore]
     fn test_encrypt_decrypt_oaep_traits() {
-        let priv_key = get_private_key::<u32>();
-        do_test_encrypt_decrypt_oaep_traits::<_, Sha1>(&priv_key);
-        do_test_encrypt_decrypt_oaep_traits::<_, Sha224>(&priv_key);
-        do_test_encrypt_decrypt_oaep_traits::<_, Sha256>(&priv_key);
-        do_test_encrypt_decrypt_oaep_traits::<_, Sha384>(&priv_key);
-        do_test_encrypt_decrypt_oaep_traits::<_, Sha512>(&priv_key);
-        do_test_encrypt_decrypt_oaep_traits::<_, Sha3_256>(&priv_key);
-        do_test_encrypt_decrypt_oaep_traits::<_, Sha3_384>(&priv_key);
-        do_test_encrypt_decrypt_oaep_traits::<_, Sha3_512>(&priv_key);
+        let priv_key = get_private_key();
+        do_test_encrypt_decrypt_oaep_traits::<Sha1>(&priv_key);
+        do_test_encrypt_decrypt_oaep_traits::<Sha224>(&priv_key);
+        do_test_encrypt_decrypt_oaep_traits::<Sha256>(&priv_key);
+        do_test_encrypt_decrypt_oaep_traits::<Sha384>(&priv_key);
+        do_test_encrypt_decrypt_oaep_traits::<Sha512>(&priv_key);
+        do_test_encrypt_decrypt_oaep_traits::<Sha3_256>(&priv_key);
+        do_test_encrypt_decrypt_oaep_traits::<Sha3_384>(&priv_key);
+        do_test_encrypt_decrypt_oaep_traits::<Sha3_512>(&priv_key);
 
-        do_test_oaep_with_different_hashes_traits::<_, Sha1, Sha1>(&priv_key);
-        do_test_oaep_with_different_hashes_traits::<_, Sha224, Sha1>(&priv_key);
-        do_test_oaep_with_different_hashes_traits::<_, Sha256, Sha1>(&priv_key);
-        do_test_oaep_with_different_hashes_traits::<_, Sha384, Sha1>(&priv_key);
-        do_test_oaep_with_different_hashes_traits::<_, Sha512, Sha1>(&priv_key);
-        do_test_oaep_with_different_hashes_traits::<_, Sha3_256, Sha1>(&priv_key);
-        do_test_oaep_with_different_hashes_traits::<_, Sha3_384, Sha1>(&priv_key);
-        do_test_oaep_with_different_hashes_traits::<_, Sha3_512, Sha1>(&priv_key);
+        do_test_oaep_with_different_hashes_traits::<Sha1, Sha1>(&priv_key);
+        do_test_oaep_with_different_hashes_traits::<Sha224, Sha1>(&priv_key);
+        do_test_oaep_with_different_hashes_traits::<Sha256, Sha1>(&priv_key);
+        do_test_oaep_with_different_hashes_traits::<Sha384, Sha1>(&priv_key);
+        do_test_oaep_with_different_hashes_traits::<Sha512, Sha1>(&priv_key);
+        do_test_oaep_with_different_hashes_traits::<Sha3_256, Sha1>(&priv_key);
+        do_test_oaep_with_different_hashes_traits::<Sha3_384, Sha1>(&priv_key);
+        do_test_oaep_with_different_hashes_traits::<Sha3_512, Sha1>(&priv_key);
     }
 
-    fn do_test_encrypt_decrypt_oaep_traits<T: UnsignedModularInt, D: Digest + FixedOutputReset>(
-        prk: &RsaPrivateKey<T>,
-    ) {
-        todo!()
+    fn do_test_encrypt_decrypt_oaep_traits<D: Digest + FixedOutputReset>(prk: &RsaPrivateKey) {
+        do_test_oaep_with_different_hashes_traits::<D, D>(prk);
     }
 
-    fn do_test_oaep_with_different_hashes_traits<
-        T: UnsignedModularInt,
-        D: Digest,
-        MGD: Digest + FixedOutputReset,
-    >(
-        prk: &RsaPrivateKey<T>,
+    fn do_test_oaep_with_different_hashes_traits<D: Digest, MGD: Digest + FixedOutputReset>(
+        prk: &RsaPrivateKey,
     ) {
-        todo!()
+        let mut rng = ChaCha8Rng::from_seed([42; 32]);
+
+        let k = prk.size();
+
+        for i in 1..8 {
+            let mut input = vec![0u8; i * 8];
+            rng.fill_bytes(&mut input);
+
+            if input.len() > k - 11 {
+                input = input[0..k - 11].to_vec();
+            }
+            let label = get_label(&mut rng);
+
+            let pub_key: RsaPublicKey = prk.into();
+
+            let ciphertext = if let Some(ref label) = label {
+                let encrypting_key =
+                    EncryptingKey::<D, MGD>::new_with_label(pub_key, label.clone());
+                encrypting_key.encrypt_with_rng(&mut rng, &input).unwrap()
+            } else {
+                let encrypting_key = EncryptingKey::<D, MGD>::new(pub_key);
+                encrypting_key.encrypt_with_rng(&mut rng, &input).unwrap()
+            };
+
+            assert_ne!(input, ciphertext);
+            let blind: bool = rng.next_u32() < (1 << 31);
+
+            let decrypting_key = if let Some(ref label) = label {
+                DecryptingKey::<D, MGD>::new_with_label(prk.clone(), label.clone())
+            } else {
+                DecryptingKey::<D, MGD>::new(prk.clone())
+            };
+
+            let plaintext = if blind {
+                decrypting_key.decrypt(&ciphertext).unwrap()
+            } else {
+                decrypting_key
+                    .decrypt_with_rng(&mut rng, &ciphertext)
+                    .unwrap()
+            };
+
+            assert_eq!(input, plaintext);
+        }
     }
 
     #[test]
-    #[ignore]
     fn test_decrypt_oaep_invalid_hash_traits() {
-        todo!()
+        let mut rng = ChaCha8Rng::from_seed([42; 32]);
+        let priv_key = get_private_key();
+        let pub_key: RsaPublicKey = (&priv_key).into();
+        let encrypting_key = EncryptingKey::<Sha1>::new(pub_key);
+        let decrypting_key = DecryptingKey::<Sha1>::new_with_label(priv_key, "label".as_bytes());
+        let ciphertext = encrypting_key
+            .encrypt_with_rng(&mut rng, "a_plain_text".as_bytes())
+            .unwrap();
+        assert!(
+            decrypting_key
+                .decrypt_with_rng(&mut rng, &ciphertext)
+                .is_err(),
+            "decrypt should have failed on hash verification"
+        );
     }
 }

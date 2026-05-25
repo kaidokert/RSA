@@ -1,6 +1,6 @@
 //! Mask generation function common to both PSS and OAEP padding
 
-use digest::{Digest, DynDigest, FixedOutputReset};
+use digest::{Digest, FixedOutputReset};
 
 /// Mask generation function.
 ///
@@ -15,16 +15,10 @@ where
     const MAX_LEN: u64 = u32::MAX as u64 + 1;
     assert!(out.len() as u64 <= MAX_LEN);
 
-
     while i < out.len() {
-        //todo: Clean this up, it's random sized stack alloc, based on typical digest sizes
-        const MAX_SEED_LEN: usize = 256;
-        let buffer = &mut [0u8; MAX_SEED_LEN];
-        let mut digest_input = buffer.get_mut(..seed.len() + 4).unwrap();
-        digest_input[0..seed.len()].copy_from_slice(seed);
-        digest_input[seed.len()..].copy_from_slice(&counter);
+        Digest::update(digest, seed);
+        Digest::update(digest, counter);
 
-        Digest::update(digest, digest_input);
         let digest_output = &*digest.finalize_reset();
         let mut j = 0;
         loop {

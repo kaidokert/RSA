@@ -40,6 +40,9 @@ pub enum Error {
     /// Invalid coefficient.
     InvalidCoefficient,
 
+    /// Modulus too small.
+    ModulusTooSmall,
+
     /// Modulus too large.
     ModulusTooLarge,
 
@@ -50,9 +53,11 @@ pub enum Error {
     PublicExponentTooLarge,
 
     /// PKCS#1 error.
+    #[cfg(feature = "encoding")]
     Pkcs1(pkcs1::Error),
 
     /// PKCS#8 error.
+    #[cfg(feature = "encoding")]
     Pkcs8(pkcs8::Error),
 
     /// Internal error.
@@ -67,15 +72,19 @@ pub enum Error {
     /// Invalid arguments.
     InvalidArguments,
 
+    /// Decoding error.
+    #[cfg(feature = "alloc")]
+    Decode(crypto_bigint::DecodeError),
+
+    /// Random number generator error.
+    Rng,
+
     /// Output buffer too small
     OutputBufferTooSmall,
-
-    /// Digest buffer too small
-    DigestBufferTooSmall,
 }
 
-#[cfg(feature = "std")]
-impl std::error::Error for Error {}
+impl core::error::Error for Error {}
+
 impl core::fmt::Display for Error {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         match self {
@@ -92,43 +101,57 @@ impl core::fmt::Display for Error {
             Error::InvalidModulus => write!(f, "invalid modulus"),
             Error::InvalidExponent => write!(f, "invalid exponent"),
             Error::InvalidCoefficient => write!(f, "invalid coefficient"),
+            Error::ModulusTooSmall => write!(f, "modulus too small"),
             Error::ModulusTooLarge => write!(f, "modulus too large"),
             Error::PublicExponentTooSmall => write!(f, "public exponent too small"),
             Error::PublicExponentTooLarge => write!(f, "public exponent too large"),
+            #[cfg(feature = "encoding")]
             Error::Pkcs1(err) => write!(f, "{}", err),
+            #[cfg(feature = "encoding")]
             Error::Pkcs8(err) => write!(f, "{}", err),
             Error::Internal => write!(f, "internal error"),
             Error::LabelTooLong => write!(f, "label too long"),
             Error::InvalidPadLen => write!(f, "invalid padding length"),
             Error::InvalidArguments => write!(f, "invalid arguments"),
+            #[cfg(feature = "alloc")]
+            Error::Decode(err) => write!(f, "{:?}", err),
+            Error::Rng => write!(f, "rng error"),
             Error::OutputBufferTooSmall => write!(f, "output buffer too small"),
-            Error::DigestBufferTooSmall => write!(f, "digest buffer too small"),
         }
     }
 }
 
+#[cfg(feature = "encoding")]
 impl From<pkcs1::Error> for Error {
     fn from(err: pkcs1::Error) -> Error {
         Error::Pkcs1(err)
     }
 }
 
+#[cfg(feature = "encoding")]
 impl From<pkcs8::Error> for Error {
     fn from(err: pkcs8::Error) -> Error {
         Error::Pkcs8(err)
     }
 }
-
-#[cfg(feature = "std")]
-impl From<Error> for signature::Error {
-    fn from(err: Error) -> Self {
-        Self::from_source(err)
+#[cfg(feature = "alloc")]
+impl From<crypto_bigint::DecodeError> for Error {
+    fn from(err: crypto_bigint::DecodeError) -> Error {
+        Error::Decode(err)
     }
 }
 
-#[cfg(not(feature = "std"))]
 impl From<Error> for signature::Error {
-    fn from(_err: Error) -> Self {
-        Self::new()
+    fn from(err: Error) -> Self {
+        #[cfg(feature = "alloc")]
+        {
+            Self::from_source(err)
+        }
+
+        #[cfg(not(feature = "alloc"))]
+        {
+            let _ = err;
+            Self::new()
+        }
     }
 }

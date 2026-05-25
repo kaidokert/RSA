@@ -1,41 +1,48 @@
 //! Supported padding schemes.
-use rand_core::CryptoRngCore;
+
+#[cfg(feature = "alloc")]
+use alloc::vec::Vec;
+
+use rand_core::TryCryptoRng;
 
 use crate::errors::Result;
-use crate::key::{RsaPrivateKey, RsaPublicKey};
-
-use super::UnsignedModularInt;
+#[cfg(feature = "private-key")]
+use crate::key::RsaPrivateKey;
+use crate::traits::{PublicKeyParts, UnsignedModularInt};
 
 /// Padding scheme used for encryption.
-pub trait PaddingScheme<T>
-where
-    T: UnsignedModularInt,
-{
+pub trait PaddingScheme {
     /// Decrypt the given message using the given private key.
     ///
     /// If an `rng` is passed, it uses RSA blinding to help mitigate timing
     /// side-channel attacks.
-
-    // Decrypt function
+    #[cfg(feature = "private-key")]
+    fn decrypt<Rng: TryCryptoRng + ?Sized>(
+        self,
+        rng: Option<&mut Rng>,
+        priv_key: &RsaPrivateKey,
+        ciphertext: &[u8],
+    ) -> Result<Vec<u8>>;
 
     /// Encrypt the given message using the given public key.
-    fn encrypt<'a, Rng: CryptoRngCore>(
-        self,
-        rng: &mut Rng,
-        pub_key: &RsaPublicKey<T>,
-        msg: &[u8],
-        storage: &'a mut [u8],
-    ) -> Result<&'a [u8]>;
+    #[cfg(feature = "alloc")]
+    fn encrypt<Rng, K, T>(self, rng: &mut Rng, pub_key: &K, msg: &[u8]) -> Result<Vec<u8>>
+    where
+        Rng: TryCryptoRng + ?Sized,
+        T: UnsignedModularInt,
+        K: PublicKeyParts<T>;
 }
 
 /// Digital signature scheme.
-pub trait SignatureScheme<T>
-where
-    T: UnsignedModularInt + Clone,
-{
+pub trait SignatureScheme {
     /// Sign the given digest.
-
-    // Sign function
+    #[cfg(feature = "private-key")]
+    fn sign<Rng: TryCryptoRng + ?Sized>(
+        self,
+        rng: Option<&mut Rng>,
+        priv_key: &RsaPrivateKey,
+        hashed: &[u8],
+    ) -> Result<Vec<u8>>;
 
     /// Verify a signed message.
     ///
@@ -43,5 +50,8 @@ where
     /// passed in through `hash`.
     ///
     /// If the message is valid `Ok(())` is returned, otherwise an `Err` indicating failure.
-    fn verify(self, pub_key: &RsaPublicKey<T>, hashed: &[u8], sig: &[u8]) -> Result<()>;
+    fn verify<K, T>(self, pub_key: &K, hashed: &[u8], sig: &[u8]) -> Result<()>
+    where
+        T: UnsignedModularInt,
+        K: PublicKeyParts<T>;
 }

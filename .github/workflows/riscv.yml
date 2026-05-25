@@ -1,0 +1,53 @@
+name: RISC-V
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 6 * * 1'  # Weekly on Monday at 06:00 UTC
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  riscv:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: riscv32imac-unknown-none-elf
+        components: llvm-tools
+
+    - name: Install QEMU
+      run: sudo apt-get update && sudo apt-get install -y qemu-system-misc
+
+    - name: Cache cargo binaries
+      uses: actions/cache@v4
+      with:
+        path: ~/.cargo/bin/cargo-bloat
+        key: ${{ runner.os }}-cargo-bloat-v1
+
+    - name: Install cargo-bloat
+      run: |
+        if ! command -v cargo-bloat &> /dev/null; then
+          cargo install cargo-bloat --locked
+        fi
+
+    - uses: actions/cache@v4
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          footprint/risc-v/target
+        key: riscv-${{ hashFiles('footprint/risc-v/Cargo.toml', 'Cargo.toml') }}
+        restore-keys: riscv-
+
+    - name: Run RISC-V suite
+      run: |
+        set -o pipefail
+        python3 run_suite.py | tee -a "$GITHUB_STEP_SUMMARY"
+      working-directory: footprint/risc-v

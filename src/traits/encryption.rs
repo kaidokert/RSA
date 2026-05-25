@@ -1,34 +1,42 @@
 //! Encryption-related traits.
-use rand_core::CryptoRngCore;
+
+#[cfg(feature = "alloc")]
+use alloc::vec::Vec;
+use rand_core::{CryptoRng, TryCryptoRng};
 
 use crate::errors::Result;
 
 /// Encrypt the message using provided random source
 pub trait RandomizedEncryptor {
-    /// Encrypt the given message.
-    fn encrypt_with_rng<'a, R: CryptoRngCore + ?Sized>(
+    /// Encrypt the given message into caller-provided storage.
+    fn encrypt_with_rng_into<'a, R: TryCryptoRng + ?Sized>(
         &self,
         rng: &mut R,
         msg: &[u8],
         storage: &'a mut [u8],
     ) -> Result<&'a [u8]>;
+
+    /// Encrypt the given message.
+    #[cfg(feature = "alloc")]
+    fn encrypt_with_rng<R: CryptoRng + ?Sized>(&self, rng: &mut R, msg: &[u8]) -> Result<Vec<u8>>;
 }
 
 /// Decrypt the given message
 pub trait Decryptor {
     /// Decrypt the given message.
-    fn decrypt(&self, ciphertext: &[u8], storage: &mut [u8]) -> Result<&[u8]>;
+    #[cfg(feature = "alloc")]
+    fn decrypt(&self, ciphertext: &[u8]) -> Result<Vec<u8>>;
 }
 
 /// Decrypt the given message using provided random source
 pub trait RandomizedDecryptor {
     /// Decrypt the given message.
-    fn decrypt_with_rng<R: CryptoRngCore + ?Sized>(
+    #[cfg(feature = "alloc")]
+    fn decrypt_with_rng<R: CryptoRng + ?Sized>(
         &self,
         rng: &mut R,
         ciphertext: &[u8],
-        storage: &mut [u8],
-    ) -> Result<&[u8]>;
+    ) -> Result<Vec<u8>>;
 }
 
 /// Encryption keypair with an associated encryption key.
