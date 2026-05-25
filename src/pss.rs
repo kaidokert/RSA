@@ -172,7 +172,7 @@ impl<D> Debug for Pss<D> {
 }
 
 #[cfg(feature = "alloc")]
-#[allow(dead_code)] // PSS verify helper kept alongside the trait-method entry points.
+#[allow(dead_code)]
 pub(crate) fn verify<D>(
     pub_key: &RsaPublicKey,
     hashed: &[u8],
@@ -194,7 +194,7 @@ where
 }
 
 #[cfg(feature = "alloc")]
-#[allow(dead_code)] // Vec-allocating wrapper kept alongside verify_digest_into for rebase friendliness.
+#[allow(dead_code)]
 pub(crate) fn verify_digest<D>(
     pub_key: &RsaPublicKey,
     hashed: &[u8],
@@ -208,13 +208,7 @@ where
     verify_digest_into::<D, _, BoxedUint>(pub_key, hashed, sig, salt_len, &mut storage)
 }
 
-/// no_alloc analog of [`verify_digest`] — runs the RSA modular exponentiation
-/// into caller-supplied `storage` and then PSS-verifies in place. Generic
-/// over the bigint backend (`T`) and the public-key wrapper (`K`).
-///
-/// `storage` must be at least `pub_key.size()` bytes. The bytes from `sig`
-/// are interpreted as a big-endian integer (`T`); a mismatch with the
-/// modulus precision is rejected.
+/// `storage` must be at least `pub_key.size()` bytes.
 pub fn verify_digest_into<D, K, T>(
     pub_key: &K,
     hashed: &[u8],

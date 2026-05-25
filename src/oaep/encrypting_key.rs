@@ -70,7 +70,6 @@ where
     }
 
     /// Create a new encrypting key from an RSA public key using provided label.
-    /// no_alloc counterpart that accepts a fixed-capacity [`Label`].
     #[cfg(not(feature = "alloc"))]
     pub fn new_with_label(key: GenericRsaPublicKey<T, M>, label: Label) -> Self {
         Self {

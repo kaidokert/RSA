@@ -277,9 +277,6 @@ pub use crate::{
 #[cfg(feature = "private-key")]
 pub use crate::key::RsaPrivateKey;
 
-// Boxed scheme types ride behind `alloc` (they carry Box-typed fields).
-// The no_alloc public-key paths are `rsa::oaep::GenericEncryptingKey` and
-// `rsa::pss::GenericVerifyingKey`.
 #[cfg(feature = "alloc")]
 pub use crate::oaep::Oaep;
 #[cfg(feature = "alloc")]
