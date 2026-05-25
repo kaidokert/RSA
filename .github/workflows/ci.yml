@@ -77,5 +77,5 @@ jobs:
       - uses: RustCrypto/actions/cargo-cache@master
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: nightly-2025-02-22
+          toolchain: nightly-2026-05-23
       - run: cargo build --benches
