@@ -9,7 +9,9 @@ A microcontroller-friendly fork of the [RustCrypto RSA crate](https://github.com
 
 #### Scope
 
-This is a proof of concept focused on shrinking code size and stack usage. Public-key only — verification and encryption — which covers the common embedded use cases (bootloader signature checks, key wrapping to a server). Private-key operations (key generation, signing, decryption) are out of scope on the heapless path: they need constant-time primitives, a trustworthy RNG, and secure key storage that the dependency stack doesn't yet provide. The full upstream behavior remains available via the `alloc` and `private-key` feature flags on a heap-allocating backend.
+This is a proof of concept focused on shrinking code size and stack usage. Public-key only — verification and encryption — which covers the common embedded use cases (bootloader signature checks, key wrapping to a server).
+
+Private-key operations (key generation, signing, decryption) are deliberately omitted from the heapless path on safety grounds: doing them correctly requires constant-time primitives, a trustworthy RNG, and secure key storage that the dependency stack doesn't yet provide. The full upstream behavior remains available via the `alloc` and `private-key` feature flags on a heap-allocating backend; license, MSRV, and security advisories there follow the upstream crate, preserved verbatim in [`UPSTREAM_README.md`](UPSTREAM_README.md).
 
 #### Resource usage (as of version 0.10.0-rc.18)
 
