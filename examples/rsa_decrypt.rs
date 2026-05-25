@@ -10,7 +10,7 @@ use fixed_bigint::FixedUInt;
 use rsa::pkcs1v15::{GenericSignature, GenericVerifyingKey};
 use rsa::signature::hazmat::PrehashVerifier;
 use rsa::{
-    modmath_support::{public_key_from_be_bytes, rsa_decrypt},
+    modmath_support::{public_key_from_be_bytes, rsa_public_op},
     ModMathValue,
 };
 use sha1::Sha1;
@@ -39,7 +39,7 @@ fn main() {
     ];
 
     let key = public_key_from_be_bytes::<U512>(&modulus, 3).expect("public key");
-    let encoded_message = rsa_decrypt(&key, &signature).expect("rsa public op");
+    let encoded_message = rsa_public_op(&key, &signature).expect("rsa public op");
     let verifying_key = GenericVerifyingKey::<Sha1, _, _>::new(key);
     let signature =
         GenericSignature::from(ModMathValue::from_inner(U512::from_be_bytes(&signature)));

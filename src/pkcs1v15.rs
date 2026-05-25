@@ -261,6 +261,10 @@ impl SignatureScheme for Pkcs1v15Sign {
             }
         }
 
+        if sig.len() != pub_key.size() {
+            return Err(Error::Verification);
+        }
+
         let mut storage = pub_key.n().as_ref().to_be_bytes();
         let sig = T::try_from_be_bytes_vartime(sig).map_err(|_| Error::Verification)?;
         verify_generic(

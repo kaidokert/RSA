@@ -142,6 +142,9 @@ where
         T: UnsignedModularInt,
         K: PublicKeyParts<T>,
     {
+        if sig.len() != pub_key.size() {
+            return Err(Error::Verification);
+        }
         let sig = T::try_from_be_bytes_vartime(sig).map_err(|_| Error::Verification)?;
         if sig >= *pub_key.n().as_ref() || sig.bits_precision() != pub_key.n_bits_precision() {
             return Err(Error::Verification);

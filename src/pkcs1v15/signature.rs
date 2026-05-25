@@ -80,6 +80,17 @@ where
     }
 }
 
+impl<T> core::ops::Deref for SignatureBytes<T>
+where
+    T: UnsignedModularInt,
+{
+    type Target = [u8];
+
+    fn deref(&self) -> &[u8] {
+        self.0.as_ref()
+    }
+}
+
 impl<T> From<GenericSignature<T>> for SignatureBytes<T>
 where
     T: UnsignedModularInt,

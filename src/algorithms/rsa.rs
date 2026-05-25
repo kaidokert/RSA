@@ -209,8 +209,8 @@ fn blind<R: TryCryptoRng + ?Sized, K: PublicKeyParts<BoxedUint, MontyParams = Bo
 
     let mut r: BoxedUint = BoxedUint::zero_with_precision(bits);
     let mut ir: Option<BoxedUint> = None;
+    let modulus = CryptoNonZero::new(key.n().as_ref().clone()).expect("modulus is non-zero");
     while ir.is_none() {
-        let modulus = CryptoNonZero::new(key.n().as_ref().clone()).expect("modulus is non-zero");
         r = BoxedUint::try_random_mod_vartime(rng, &modulus).map_err(|_| Error::Rng)?;
 
         // r^-1 (mod n)

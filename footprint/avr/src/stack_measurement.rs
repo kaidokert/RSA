@@ -15,15 +15,19 @@ unsafe extern "C" {
 /// tearing race if an ISR fires between the two `in` instructions.
 #[inline(always)]
 fn read_sp() -> u16 {
-    let sreg: u8;
     let lo: u8;
     let hi: u8;
     unsafe {
-        core::arch::asm!("in {}, 0x3F", out(reg) sreg); // save SREG (I bit)
-        core::arch::asm!("cli");
-        core::arch::asm!("in {}, 0x3D", out(reg) lo); // SPL
-        core::arch::asm!("in {}, 0x3E", out(reg) hi); // SPH
-        core::arch::asm!("out 0x3F, {}", in(reg) sreg); // restore SREG
+        core::arch::asm!(
+            "in {sreg}, 0x3F",  // save SREG (I bit) into scratch reg
+            "cli",
+            "in {lo}, 0x3D",    // SPL
+            "in {hi}, 0x3E",    // SPH
+            "out 0x3F, {sreg}", // restore SREG from scratch reg
+            sreg = out(reg) _,
+            lo = out(reg) lo,
+            hi = out(reg) hi,
+        );
     }
     (hi as u16) << 8 | lo as u16
 }

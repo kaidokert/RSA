@@ -261,7 +261,7 @@ where
 /// Apply the raw RSA public operation to a fixed-width block.
 ///
 /// For signature use-cases this recovers the encoded message representative.
-pub fn rsa_decrypt<T>(
+pub fn rsa_public_op<T>(
     key: &GenericRsaPublicKey<ModMathValue<T>, ModMathParams<T>>,
     input: &[u8],
 ) -> Result<<ModMathValue<T> as UnsignedModularInt>::Bytes>

@@ -8,6 +8,23 @@
 #![no_main]
 #![feature(asm_experimental_arch)]
 
+// Compile-time invariants for feature selectors — fail with a clear message
+// instead of a downstream missing-type / duplicate-item error.
+const _: () = {
+    const N: usize = cfg!(feature = "key_512") as usize
+        + cfg!(feature = "key_768") as usize
+        + cfg!(feature = "key_1024") as usize
+        + cfg!(feature = "key_1536") as usize;
+    assert!(N == 1, "exactly one `key_*` feature must be enabled");
+};
+const _: () = {
+    const N: usize =
+        cfg!(feature = "hash_sha1") as usize + cfg!(feature = "hash_sha256") as usize;
+    assert!(N == 1, "exactly one `hash_*` feature must be enabled");
+};
+#[cfg(all(feature = "hash_sha1", not(feature = "key_512")))]
+compile_error!("hash_sha1 only paired with key_512 (no fixture exists for other key sizes)");
+
 use fixed_bigint::FixedUInt;
 use rsa::modmath_support::public_key_from_be_bytes;
 use rsa::pkcs1v15::{GenericSignature, GenericVerifyingKey};
