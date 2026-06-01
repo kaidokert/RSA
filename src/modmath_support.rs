@@ -371,6 +371,13 @@ impl<T: ModMathInt> IntoMontyForm<ModMathParams<T, Nct>> for ModMathForm<T, Nct>
             params: params.clone(),
         }
     }
+
+    /// `Field::reduce` is `raw * R² mod modulus` via CIOS — well-defined for
+    /// any `raw < R = 2^W`. Same body as `from_reduced` because the
+    /// underlying primitive already handles unreduced input.
+    fn from_value(integer: ModMathValue<T>, params: &ModMathParams<T, Nct>) -> Self {
+        Self::from_reduced(integer, params)
+    }
 }
 
 impl<T: ModMathInt> ModMathForm<T, Nct> {
@@ -434,6 +441,12 @@ impl<T: ModMathIntCt> IntoMontyForm<ModMathParams<T, Ct>> for ModMathForm<T, Ct>
             integer_mont: wrap_value(r.mont_value()),
             params: params.clone(),
         }
+    }
+
+    /// Same as the Nct variant: `FieldCt::reduce` uses `wide_montgomery_mul_ct`
+    /// with `R² mod modulus`, which handles arbitrary `raw < R = 2^W`.
+    fn from_value(integer: ModMathValue<T>, params: &ModMathParams<T, Ct>) -> Self {
+        Self::from_reduced(integer, params)
     }
 }
 

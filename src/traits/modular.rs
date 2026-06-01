@@ -12,11 +12,11 @@ use crypto_bigint::{
 };
 #[cfg(feature = "alloc")]
 use crypto_bigint::{NonZero as CryptoNonZero, Odd as CryptoOdd};
-use num_traits::{FromBytes as NumFromBytes, ToBytes as NumToBytes, Zero};
-#[cfg(not(feature = "modmath"))]
-use num_traits::PrimInt;
 #[cfg(feature = "modmath")]
 use fixed_bigint::ConstBitPrimInt;
+#[cfg(not(feature = "modmath"))]
+use num_traits::PrimInt;
+use num_traits::{FromBytes as NumFromBytes, ToBytes as NumToBytes, Zero};
 use zeroize::Zeroize;
 
 use crate::errors::{Error, Result};
@@ -268,12 +268,29 @@ where
     }
 }
 
-/// Build a Montgomery-domain value from an integer already reduced modulo `params.modulus()`.
+/// Build a Montgomery-domain value.
+///
+/// Two constructors with **different input contracts**:
+///
+/// - [`from_reduced`](Self::from_reduced) — caller guarantees `integer <
+///   params.modulus()`. Implementations may rely on this; no reduction is
+///   performed. Use this when you already know the value is reduced.
+/// - [`from_value`](Self::from_value) — accepts any `integer` in
+///   `[0, 2^bits_precision)`. Implementations MUST handle the unreduced
+///   case (either by reducing internally or by using a Montgomery primitive
+///   that tolerates unreduced inputs, e.g. CIOS with `raw * R²`).
+///
+/// No default `from_value` is provided on purpose. Forwarding to
+/// `from_reduced` would silently produce wrong results for unreduced
+/// inputs on backends that don't tolerate them — the trait makes this
+/// distinction explicit so each implementor confronts it.
 pub trait IntoMontyForm<P: ModulusParams>: Sized {
+    /// Build from an integer already reduced modulo `params.modulus()`.
     fn from_reduced(integer: P::Modulus, params: &P) -> Self;
-    fn from_value(integer: P::Modulus, params: &P) -> Self {
-        Self::from_reduced(integer, params)
-    }
+
+    /// Build from any integer in `[0, 2^bits_precision)`, handling
+    /// reduction internally if needed.
+    fn from_value(integer: P::Modulus, params: &P) -> Self;
 }
 
 #[cfg(feature = "alloc")]
