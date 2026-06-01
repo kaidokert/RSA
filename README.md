@@ -19,13 +19,13 @@ PSS signature verification. The `u8` backend uses 8-bit limbs (more portable, wo
 
 | Target          |  Key | Hash    | Backend | .text (KiB) | Stack (bytes) |
 | --------------- | ---: | ------- | ------- | ----------: | ------------: |
-| ATmega2560      |  512 | SHA-1   | u8      |        27.2 |          2198 |
-| Cortex-M0       |  512 | SHA-1   | u32     |         8.9 |          3760 |
-| Cortex-M0       | 2048 | SHA-256 | u32     |        15.6 |          9256 |
-| Cortex-M3       |  512 | SHA-1   | u32     |         9.2 |          3776 |
-| Cortex-M3       | 2048 | SHA-256 | u32     |        13.0 |          9144 |
-| sifive_e (RV32) |  512 | SHA-1   | u32     |        11.1 |          2036 |
-| sifive_e (RV32) | 2048 | SHA-256 | u32     |        21.2 |          8436 |
+| ATmega2560      |  512 | SHA-1   | u8      |        27.4 |          3099 |
+| Cortex-M0       |  512 | SHA-1   | u32     |         8.9 |          4208 |
+| Cortex-M0       | 2048 | SHA-256 | u32     |        15.5 |         11724 |
+| Cortex-M3       |  512 | SHA-1   | u32     |         9.2 |          4216 |
+| Cortex-M3       | 2048 | SHA-256 | u32     |        13.1 |         11564 |
+| sifive_e (RV32) |  512 | SHA-1   | u32     |        11.3 |          2840 |
+| sifive_e (RV32) | 2048 | SHA-256 | u32     |        21.1 |         11736 |
 
 #### Example (host, alloc)
 
