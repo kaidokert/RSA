@@ -303,7 +303,7 @@ impl IntoMontyForm<BoxedMontyParams> for BoxedMontyForm {
         let modulus =
             CryptoNonZero::new(params.modulus().as_ref().clone()).expect("modulus is non-zero");
         let reduced = integer.rem_vartime(&modulus);
-        BoxedMontyForm::new(reduced, params)
+        Self::from_reduced(reduced, params)
     }
 }
 
