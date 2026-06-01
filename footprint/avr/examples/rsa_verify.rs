@@ -18,8 +18,7 @@ const _: () = {
     assert!(N == 1, "exactly one `key_*` feature must be enabled");
 };
 const _: () = {
-    const N: usize =
-        cfg!(feature = "hash_sha1") as usize + cfg!(feature = "hash_sha256") as usize;
+    const N: usize = cfg!(feature = "hash_sha1") as usize + cfg!(feature = "hash_sha256") as usize;
     assert!(N == 1, "exactly one `hash_*` feature must be enabled");
 };
 #[cfg(all(feature = "hash_sha1", not(feature = "key_512")))]

@@ -12,7 +12,11 @@ use crypto_bigint::{
 };
 #[cfg(feature = "alloc")]
 use crypto_bigint::{NonZero as CryptoNonZero, Odd as CryptoOdd};
-use num_traits::{FromBytes as NumFromBytes, PrimInt, ToBytes as NumToBytes, Zero};
+#[cfg(feature = "modmath")]
+use fixed_bigint::ConstBitPrimInt;
+#[cfg(not(feature = "modmath"))]
+use num_traits::PrimInt;
+use num_traits::{FromBytes as NumFromBytes, ToBytes as NumToBytes, Zero};
 use zeroize::Zeroize;
 
 use crate::errors::{Error, Result};
@@ -45,6 +49,40 @@ pub trait FixedWidthUnsignedInt: Zeroize + Clone + Copy {
     fn bits_precision(&self) -> u32;
 }
 
+#[cfg(feature = "modmath")]
+impl<T> FixedWidthUnsignedInt for T
+where
+    T: Zeroize + Clone + Copy + ConstBitPrimInt + Zero + NumToBytes + NumFromBytes,
+    T: NumToBytes<Bytes = <T as NumFromBytes>::Bytes>,
+    <T as NumToBytes>::Bytes: NumBytes + Default + AsMut<[u8]>,
+{
+    type Bytes = <T as NumToBytes>::Bytes;
+
+    fn leading_zeros(&self) -> u32 {
+        ConstBitPrimInt::leading_zeros(*self)
+    }
+
+    fn to_be_bytes(&self) -> Self::Bytes {
+        NumToBytes::to_be_bytes(self)
+    }
+
+    fn try_from_be_bytes_vartime(bytes: &[u8]) -> Result<Self> {
+        let mut repr = <T as NumFromBytes>::Bytes::default();
+        let out = repr.as_mut();
+        let out_len = out.len();
+        if bytes.len() > out_len {
+            return Err(Error::InvalidArguments);
+        }
+        out[out_len - bytes.len()..].copy_from_slice(bytes);
+        Ok(NumFromBytes::from_be_bytes(&repr))
+    }
+
+    fn bits_precision(&self) -> u32 {
+        ConstBitPrimInt::count_zeros(<T as Zero>::zero())
+    }
+}
+
+#[cfg(not(feature = "modmath"))]
 impl<T> FixedWidthUnsignedInt for T
 where
     T: Zeroize + Clone + Copy + PrimInt + NumToBytes + NumFromBytes,
@@ -89,7 +127,13 @@ where
     }
 
     fn try_resize(self, at_least_bits_precision: u32) -> Option<Self::Output> {
-        if at_least_bits_precision >= self.bits_precision() {
+        // Mirrors `crypto_bigint::Resize::try_resize`: returns `Some` iff
+        // the actual value fits in `at_least_bits_precision` bits. T is
+        // fixed-width and `resize_unchecked` is a no-op, but the check
+        // still needs to reject values that wouldn't survive a narrower
+        // precision.
+        let value_bits = self.bits_precision() - self.leading_zeros();
+        if value_bits <= at_least_bits_precision {
             Some(self)
         } else {
             None
@@ -100,7 +144,7 @@ where
 #[cfg(not(feature = "alloc"))]
 impl<T> UnsignedModularInt for T
 where
-    T: FixedWidthUnsignedInt + core::ops::Rem<Output = T> + PartialOrd,
+    T: FixedWidthUnsignedInt + PartialOrd,
 {
     type Bytes = <T as FixedWidthUnsignedInt>::Bytes;
 
@@ -110,10 +154,6 @@ where
 
     fn to_be_bytes(&self) -> Self::Bytes {
         FixedWidthUnsignedInt::to_be_bytes(self)
-    }
-
-    fn rem_vartime(&self, modulus: &NonZero<Self>) -> Self {
-        *self % *modulus.as_ref()
     }
 
     fn as_nz_ref(&self) -> NonZero<Self> {
@@ -137,7 +177,7 @@ where
 #[cfg(not(feature = "alloc"))]
 impl<T> TryFromBeBytes for T
 where
-    T: FixedWidthUnsignedInt + core::ops::Rem<Output = T>,
+    T: FixedWidthUnsignedInt,
 {
     fn try_from_be_bytes_vartime(bytes: &[u8]) -> Result<Self> {
         FixedWidthUnsignedInt::try_from_be_bytes_vartime(bytes)
@@ -154,7 +194,6 @@ pub trait UnsignedModularInt:
     type Bytes: NumBytes + AsMut<[u8]>;
     fn leading_zeros(&self) -> u32;
     fn to_be_bytes(&self) -> Self::Bytes;
-    fn rem_vartime(&self, modulus: &NonZero<Self>) -> Self;
     fn as_nz_ref(&self) -> NonZero<Self>;
     fn bits(&self) -> u32;
     fn bits_precision(&self) -> u32;
@@ -235,15 +274,42 @@ where
     }
 }
 
-/// Build a Montgomery-domain value from an integer already reduced modulo `params.modulus()`.
+/// Build a Montgomery-domain value.
+///
+/// Two constructors with **different input contracts**:
+///
+/// - [`from_reduced`](Self::from_reduced) — caller guarantees `integer <
+///   params.modulus()`. Implementations may rely on this; no reduction is
+///   performed. Use this when you already know the value is reduced.
+/// - [`from_value`](Self::from_value) — accepts any `integer` in
+///   `[0, 2^bits_precision)`. Implementations MUST handle the unreduced
+///   case (either by reducing internally or by using a Montgomery primitive
+///   that tolerates unreduced inputs, e.g. CIOS with `raw * R²`).
+///
+/// No default `from_value` is provided on purpose. Forwarding to
+/// `from_reduced` would silently produce wrong results for unreduced
+/// inputs on backends that don't tolerate them — the trait makes this
+/// distinction explicit so each implementor confronts it.
 pub trait IntoMontyForm<P: ModulusParams>: Sized {
+    /// Build from an integer already reduced modulo `params.modulus()`.
     fn from_reduced(integer: P::Modulus, params: &P) -> Self;
+
+    /// Build from any integer in `[0, 2^bits_precision)`, handling
+    /// reduction internally if needed.
+    fn from_value(integer: P::Modulus, params: &P) -> Self;
 }
 
 #[cfg(feature = "alloc")]
 impl IntoMontyForm<BoxedMontyParams> for BoxedMontyForm {
     fn from_reduced(integer: BoxedUint, params: &BoxedMontyParams) -> Self {
         BoxedMontyForm::new(integer, params)
+    }
+
+    fn from_value(integer: BoxedUint, params: &BoxedMontyParams) -> Self {
+        let modulus =
+            CryptoNonZero::new(params.modulus().as_ref().clone()).expect("modulus is non-zero");
+        let reduced = integer.rem_vartime(&modulus);
+        Self::from_reduced(reduced, params)
     }
 }
 
@@ -334,9 +400,6 @@ impl UnsignedModularInt for BoxedUint {
     #[cfg(feature = "alloc")]
     fn to_be_bytes_trimmed_vartime(&self) -> Box<[u8]> {
         self.to_be_bytes_trimmed_vartime()
-    }
-    fn rem_vartime(&self, modulus: &NonZero<Self>) -> Self {
-        self.rem_vartime(&CryptoNonZero::new(modulus.as_ref().clone()).expect("Value is non-zero"))
     }
     fn as_nz_ref(&self) -> NonZero<Self> {
         NonZero::new(self.clone()).expect("Value is non-zero")
