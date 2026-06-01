@@ -649,7 +649,7 @@ mod tests {
 
     #[rstest]
     #[case(
-        "Test.\n", 
+        "Test.\n",
         hex!(
             "a4f3fa6ea93bcdd0c57be020c1193ecbfd6f200a3d95c409769b029578fa0e33"
             "6ad9a347600e40d3ae823b8c7e6bad88cc07c1d54c3a1523cbbb6d58efc362ae"

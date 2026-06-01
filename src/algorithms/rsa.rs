@@ -23,7 +23,7 @@ use crate::{
     errors::{Error, Result},
     traits::{
         modular::{IntoMontyForm, ModulusParams, Pow, PowBoundedExp},
-        NonZero, UnsignedModularInt,
+        UnsignedModularInt,
     },
 };
 
@@ -282,9 +282,8 @@ where
     T: UnsignedModularInt,
     M: ModulusParams<Modulus = T>,
 {
-    let modulus = NonZero::new(p.modulus().as_ref().clone()).expect("modulus is non-zero");
-    let n_reduced = n.rem_vartime(&modulus).resize_unchecked(p.bits_precision());
-    M::MontgomeryForm::from_reduced(n_reduced, p)
+    let n_sized = n.clone().resize_unchecked(p.bits_precision());
+    M::MontgomeryForm::from_value(n_sized, p)
 }
 
 /// The following (deterministic) algorithm also recovers the prime factors `p` and `q` of a modulus `n`, given the

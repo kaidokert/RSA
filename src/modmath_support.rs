@@ -1,16 +1,15 @@
 //! Generic `modmath` backend adapters for fixed-width RSA public-key paths.
+//!
 
 // TODO: document the public surface once the trait shape settles.
 #![allow(missing_docs)]
 
 #[cfg(feature = "alloc")]
 use alloc::boxed::Box;
-use core::ops::{Rem, Shr, ShrAssign};
+use core::ops::{Shr, ShrAssign};
 
-use modmath::{
-    compute_n_prime_newton, compute_r2_mod_n, compute_r_mod_n, type_bit_width, CiosMontMul, Parity,
-    WideMul,
-};
+use fixed_bigint::{Ct, Nct, Personality};
+use modmath::{CiosMontMul, CiosMontMulCt, Field as ModmathField, Parity, WideMul};
 use num_traits::ops::overflowing::OverflowingAdd;
 use num_traits::ops::wrapping::{WrappingAdd, WrappingMul, WrappingSub};
 use num_traits::{One, Zero};
@@ -20,18 +19,16 @@ use crate::{
     algorithms::rsa::rsa_encrypt,
     errors::{Error, Result},
     key::GenericRsaPublicKey,
-    traits::{
-        modular::{
-            IntegerResize, IntoMontyForm, ModulusParams, NonZero, Odd, Pow, PowBoundedExp,
-            TryFromBeBytes, UnsignedModularInt,
-        },
-        FixedWidthUnsignedInt,
+    traits::modular::{
+        FixedWidthUnsignedInt, IntegerResize, IntoMontyForm, ModulusParams, NonZero, Odd, Pow,
+        PowBoundedExp, TryFromBeBytes, UnsignedModularInt,
     },
 };
 
 pub trait ModMathInt:
     FixedWidthUnsignedInt
     + From<u8>
+    + PartialEq
     + PartialOrd
     + One
     + Zero
@@ -42,7 +39,6 @@ pub trait ModMathInt:
     + WrappingAdd
     + WrappingMul
     + WrappingSub
-    + Rem<Output = Self>
     + Shr<usize, Output = Self>
     + ShrAssign<usize>
 {
@@ -51,6 +47,7 @@ pub trait ModMathInt:
 impl<T> ModMathInt for T where
     T: FixedWidthUnsignedInt
         + From<u8>
+        + PartialEq
         + PartialOrd
         + One
         + Zero
@@ -61,9 +58,52 @@ impl<T> ModMathInt for T where
         + WrappingAdd
         + WrappingMul
         + WrappingSub
-        + Rem<Output = Self>
         + Shr<usize, Output = Self>
         + ShrAssign<usize>
+{
+}
+
+pub trait ModMathIntCt:
+    FixedWidthUnsignedInt
+    + From<u8>
+    + PartialEq
+    + PartialOrd
+    + One
+    + Zero
+    + Parity
+    + OverflowingAdd
+    + WideMul
+    + CiosMontMulCt
+    + WrappingAdd
+    + WrappingMul
+    + WrappingSub
+    + Shr<usize, Output = Self>
+    + ShrAssign<usize>
+    + subtle::ConditionallySelectable
+    + subtle::ConstantTimeLess
+    + core::ops::BitAnd<Output = Self>
+{
+}
+
+impl<T> ModMathIntCt for T where
+    T: FixedWidthUnsignedInt
+        + From<u8>
+        + PartialEq
+        + PartialOrd
+        + One
+        + Zero
+        + Parity
+        + OverflowingAdd
+        + WideMul
+        + CiosMontMulCt
+        + WrappingAdd
+        + WrappingMul
+        + WrappingSub
+        + Shr<usize, Output = Self>
+        + ShrAssign<usize>
+        + subtle::ConditionallySelectable
+        + subtle::ConstantTimeLess
+        + core::ops::BitAnd<Output = Self>
 {
 }
 
@@ -98,6 +138,7 @@ fn unwrap_value<T: Copy>(value: &ModMathValue<T>) -> T {
 }
 
 #[cfg(feature = "alloc")]
+#[repr(transparent)]
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord)]
 pub struct ModMathValue<T>(pub T);
 
@@ -125,7 +166,7 @@ where
 #[cfg(feature = "alloc")]
 impl<T> From<u8> for ModMathValue<T>
 where
-    T: ModMathInt,
+    T: From<u8>,
 {
     fn from(value: u8) -> Self {
         Self(<T as From<u8>>::from(value))
@@ -135,7 +176,7 @@ where
 #[cfg(feature = "alloc")]
 impl<T> IntegerResize for ModMathValue<T>
 where
-    T: ModMathInt,
+    T: FixedWidthUnsignedInt + PartialOrd,
 {
     type Output = Self;
 
@@ -155,7 +196,7 @@ where
 #[cfg(feature = "alloc")]
 impl<T> UnsignedModularInt for ModMathValue<T>
 where
-    T: ModMathInt,
+    T: FixedWidthUnsignedInt + PartialOrd,
 {
     type Bytes = <T as FixedWidthUnsignedInt>::Bytes;
 
@@ -178,10 +219,6 @@ where
         bytes[first_non_zero..].to_vec().into_boxed_slice()
     }
 
-    fn rem_vartime(&self, modulus: &NonZero<Self>) -> Self {
-        Self(self.0 % modulus.as_ref().0)
-    }
-
     fn as_nz_ref(&self) -> NonZero<Self> {
         NonZero::new(*self).expect("value is non-zero")
     }
@@ -198,7 +235,7 @@ where
 #[cfg(feature = "alloc")]
 impl<T> TryFromBeBytes for ModMathValue<T>
 where
-    T: ModMathInt,
+    T: FixedWidthUnsignedInt,
 {
     fn try_from_be_bytes_vartime(bytes: &[u8]) -> Result<Self> {
         Ok(Self(
@@ -211,40 +248,49 @@ where
 pub type ModMathValue<T> = T;
 
 #[derive(Clone, Debug)]
-pub struct ModMathParams<T: ModMathInt> {
-    modulus: Odd<ModMathValue<T>>,
-    // Montgomery constants for R = 2^W, where W = type_bit_width::<T>().
-    // n_prime satisfies modulus * n_prime ≡ -1 (mod R).
-    n_prime: T,
-    // r_mod_n = R mod modulus = 2^W mod modulus.  Also serves as 1 in Montgomery form.
-    r_mod_n: T,
-    // r2_mod_n = R^2 mod modulus.  Used by wide_montgomery_mul to convert into Montgomery form.
-    r2_mod_n: T,
+pub struct ModMathParams<T, P: Personality = Nct> {
+    // Owns the modulus + precomputed Montgomery constants. `Clone` is a
+    // trivial 4×T memcpy per modmath::Field's documented guarantee — does
+    // NOT re-run `compute_r_mod_n` / `compute_r2_mod_n`.
+    field: ModmathField<T, P>,
+    // Parallel copy of the modulus, wrapped in `Odd` for the
+    // `ModulusParams::modulus() -> &Odd<...>` trait interface. Duplicates
+    // `field.modulus()` (one extra T per params, one extra T-sized memcpy
+    // per clone) — cheap, and lets `modulus()` return a real reference
+    // instead of transmuting through `repr(transparent)`.
+    modulus_odd: Odd<ModMathValue<T>>,
 }
 
-impl<T: ModMathInt> ModMathParams<T> {
-    /// Create modular arithmetic parameters for an odd, non-zero modulus.
+impl<T: ModMathInt> ModMathParams<T, Nct> {
     pub fn new(modulus: T) -> Result<Self> {
+        let field = ModmathField::<T, Nct>::new(modulus).ok_or(Error::InvalidModulus)?;
         let modulus_odd = Odd::new(wrap_value(modulus)).ok_or(Error::InvalidModulus)?;
-        let w = type_bit_width::<T>();
-        let n_prime = compute_n_prime_newton(modulus, w);
-        let r_mod_n = compute_r_mod_n(modulus, w);
-        let r2_mod_n = compute_r2_mod_n(r_mod_n, modulus, w);
-        Ok(Self {
-            modulus: modulus_odd,
-            n_prime,
-            r_mod_n,
-            r2_mod_n,
-        })
+        Ok(Self { field, modulus_odd })
     }
 }
 
-/// Construct a public key backed by the `modmath` adapter from big-endian
-/// modulus bytes and a public exponent.
+impl<T: ModMathIntCt> ModMathParams<T, Ct> {
+    /// Create CT (encrypt) Montgomery parameters for an odd, non-zero
+    /// modulus.
+    pub fn new(modulus: T) -> Result<Self> {
+        let field = ModmathField::<T, Ct>::new(modulus).ok_or(Error::InvalidModulus)?;
+        let modulus_odd = Odd::new(wrap_value(modulus)).ok_or(Error::InvalidModulus)?;
+        Ok(Self { field, modulus_odd })
+    }
+}
+
+impl<T, P: Personality> ModMathParams<T, P> {
+    pub(crate) fn field(&self) -> &ModmathField<T, P> {
+        &self.field
+    }
+}
+
+/// Construct an **NCT** public key from big-endian modulus bytes and a public
+/// exponent. Use this for signature verification.
 pub fn public_key_from_be_bytes<T>(
     modulus: &[u8],
     exponent: u32,
-) -> Result<GenericRsaPublicKey<ModMathValue<T>, ModMathParams<T>>>
+) -> Result<GenericRsaPublicKey<ModMathValue<T>, ModMathParams<T, Nct>>>
 where
     T: ModMathInt,
 {
@@ -255,14 +301,13 @@ where
     let e = wrap_value(<T as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(
         &exponent,
     )?);
-    GenericRsaPublicKey::from_components(n, e, ModMathParams::new(unwrap_value(&n))?)
+    GenericRsaPublicKey::from_components(n, e, ModMathParams::<T, Nct>::new(unwrap_value(&n))?)
 }
 
-/// Apply the raw RSA public operation to a fixed-width block.
-///
-/// For signature use-cases this recovers the encoded message representative.
+/// Apply the raw RSA public operation to a fixed-width block using the **NCT**
+/// (vartime) Montgomery path. Intended for signature verification.
 pub fn rsa_public_op<T>(
-    key: &GenericRsaPublicKey<ModMathValue<T>, ModMathParams<T>>,
+    key: &GenericRsaPublicKey<ModMathValue<T>, ModMathParams<T, Nct>>,
     input: &[u8],
 ) -> Result<<ModMathValue<T> as UnsignedModularInt>::Bytes>
 where
@@ -274,66 +319,75 @@ where
     Ok(rsa_encrypt(key, &input)?.to_be_bytes())
 }
 
-/// A value held in Montgomery form modulo a `ModMathParams` modulus.
-///
-/// `integer_mont` stores `a * R mod N`, where `R = 2^W` and `W = type_bit_width::<T>()`.
-#[derive(Clone, Debug)]
-pub struct ModMathForm<T: ModMathInt> {
-    integer_mont: ModMathValue<T>,
-    params: ModMathParams<T>,
+/// Construct a **CT** public key. Use this when the resulting key will feed
+/// PKCS#1 v1.5 / OAEP encryption (or any other path where the plaintext is
+/// secret). `T` must be a Ct-typed FixedUInt; the bound is enforced by the
+/// `CiosMontMulCt` requirement inside [`ModMathIntCt`].
+pub fn public_key_ct_from_be_bytes<T>(
+    modulus: &[u8],
+    exponent: u32,
+) -> Result<GenericRsaPublicKey<ModMathValue<T>, ModMathParams<T, Ct>>>
+where
+    T: ModMathIntCt,
+{
+    let n = wrap_value(<T as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(
+        modulus,
+    )?);
+    let exponent = exponent.to_be_bytes();
+    let e = wrap_value(<T as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(
+        &exponent,
+    )?);
+    GenericRsaPublicKey::from_components(n, e, ModMathParams::<T, Ct>::new(unwrap_value(&n))?)
 }
 
-impl<T: ModMathInt> IntoMontyForm<ModMathParams<T>> for ModMathForm<T> {
-    fn from_reduced(integer: ModMathValue<T>, params: &ModMathParams<T>) -> Self {
-        // a_mont = a * R mod N, computed via CIOS as a * R^2 * R^-1 mod N.
-        let a_mont = T::cios_mont_mul(
-            unwrap_value_ref(&integer),
-            &params.r2_mod_n,
-            unwrap_value_ref(params.modulus.as_ref()),
-            &params.n_prime,
-        )
-        .expect("CIOS Montgomery mul requires non-empty word array");
+pub fn rsa_public_op_ct<T>(
+    key: &GenericRsaPublicKey<ModMathValue<T>, ModMathParams<T, Ct>>,
+    input: &[u8],
+) -> Result<<ModMathValue<T> as UnsignedModularInt>::Bytes>
+where
+    T: ModMathIntCt,
+{
+    let input = wrap_value(<T as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(
+        input,
+    )?);
+    Ok(rsa_encrypt(key, &input)?.to_be_bytes())
+}
+
+#[derive(Clone, Debug)]
+pub struct ModMathForm<T, P: Personality = Nct>
+where
+    T: Clone,
+{
+    integer_mont: ModMathValue<T>,
+    params: ModMathParams<T, P>,
+}
+
+impl<T: ModMathInt> IntoMontyForm<ModMathParams<T, Nct>> for ModMathForm<T, Nct> {
+    fn from_reduced(integer: ModMathValue<T>, params: &ModMathParams<T, Nct>) -> Self {
+        let field = params.field();
+        let r = field.reduce(unwrap_value_ref(&integer));
         Self {
-            integer_mont: wrap_value(a_mont),
+            integer_mont: wrap_value(r.mont_value()),
             params: params.clone(),
         }
     }
 }
 
-impl<T: ModMathInt> ModMathForm<T> {
+impl<T: ModMathInt> ModMathForm<T, Nct> {
     fn pow_loop(&self, exp_raw: T) -> T {
-        let modulus = unwrap_value_ref(self.params.modulus.as_ref());
-        let n_prime = &self.params.n_prime;
-        let mut base_mont = unwrap_value(&self.integer_mont);
-        // 1 in Montgomery form is R mod N.
-        let mut result_mont = self.params.r_mod_n;
-        let mut e = exp_raw;
-        while !e.is_zero() {
-            if e.is_odd() {
-                result_mont = T::cios_mont_mul(&result_mont, &base_mont, modulus, n_prime)
-                    .expect("CIOS Montgomery mul requires non-empty word array");
-            }
-            base_mont = T::cios_mont_mul(&base_mont, &base_mont, modulus, n_prime)
-                .expect("CIOS Montgomery mul requires non-empty word array");
-            e >>= 1;
-        }
-        result_mont
+        let field = self.params.field();
+        let base = field.residue_from_mont(unwrap_value(&self.integer_mont));
+        field.exp(&base, &exp_raw).mont_value()
     }
 
     fn to_reduced(&self) -> T {
-        // a_mont * 1 * R^-1 mod N = a (regular form).
-        let one = <T as From<u8>>::from(1u8);
-        T::cios_mont_mul(
-            unwrap_value_ref(&self.integer_mont),
-            &one,
-            unwrap_value_ref(self.params.modulus.as_ref()),
-            &self.params.n_prime,
-        )
-        .expect("CIOS Montgomery mul requires non-empty word array")
+        let field = self.params.field();
+        let r = field.residue_from_mont(unwrap_value(&self.integer_mont));
+        field.into_raw(&r)
     }
 }
 
-impl<T: ModMathInt> Pow<ModMathParams<T>> for ModMathForm<T> {
+impl<T: ModMathInt> Pow<ModMathParams<T, Nct>> for ModMathForm<T, Nct> {
     fn pow(&self, exp: &ModMathValue<T>) -> Self {
         let result_mont = self.pow_loop(unwrap_value(exp));
         Self {
@@ -343,7 +397,7 @@ impl<T: ModMathInt> Pow<ModMathParams<T>> for ModMathForm<T> {
     }
 }
 
-impl<T: ModMathInt> PowBoundedExp<ModMathParams<T>> for ModMathForm<T> {
+impl<T: ModMathInt> PowBoundedExp<ModMathParams<T, Nct>> for ModMathForm<T, Nct> {
     fn pow_bounded_exp(&self, exp: &ModMathValue<T>, _exp_bits: u32) -> Self {
         // The LSB-first loop exits naturally when the exponent reaches zero,
         // so the `_exp_bits` hint is unused here.
@@ -359,32 +413,145 @@ impl<T: ModMathInt> PowBoundedExp<ModMathParams<T>> for ModMathForm<T> {
     }
 }
 
-impl<T: ModMathInt> ModulusParams for ModMathParams<T> {
+impl<T: ModMathInt> ModulusParams for ModMathParams<T, Nct> {
     type Modulus = ModMathValue<T>;
-    type MontgomeryForm = ModMathForm<T>;
+    type MontgomeryForm = ModMathForm<T, Nct>;
 
     fn modulus(&self) -> &Odd<Self::Modulus> {
-        &self.modulus
+        &self.modulus_odd
     }
 
     fn bits_precision(&self) -> u32 {
-        self.modulus.bits_precision()
+        FixedWidthUnsignedInt::bits_precision(self.field.modulus())
+    }
+}
+
+impl<T: ModMathIntCt> IntoMontyForm<ModMathParams<T, Ct>> for ModMathForm<T, Ct> {
+    fn from_reduced(integer: ModMathValue<T>, params: &ModMathParams<T, Ct>) -> Self {
+        let field = params.field();
+        let r = field.reduce(unwrap_value_ref(&integer));
+        Self {
+            integer_mont: wrap_value(r.mont_value()),
+            params: params.clone(),
+        }
+    }
+}
+
+impl<T: ModMathIntCt> ModMathForm<T, Ct> {
+    fn pow_loop(&self, exp_raw: T) -> T {
+        let field = self.params.field();
+        let base = field.residue_from_mont(unwrap_value(&self.integer_mont));
+        field.exp_public_exp(&base, &exp_raw).mont_value()
+    }
+
+    fn to_reduced(&self) -> T {
+        let field = self.params.field();
+        let r = field.residue_from_mont(unwrap_value(&self.integer_mont));
+        field.into_raw(&r)
+    }
+}
+
+impl<T: ModMathIntCt> Pow<ModMathParams<T, Ct>> for ModMathForm<T, Ct> {
+    fn pow(&self, exp: &ModMathValue<T>) -> Self {
+        let result_mont = self.pow_loop(unwrap_value(exp));
+        Self {
+            integer_mont: wrap_value(result_mont),
+            params: self.params.clone(),
+        }
+    }
+}
+
+impl<T: ModMathIntCt> PowBoundedExp<ModMathParams<T, Ct>> for ModMathForm<T, Ct> {
+    fn pow_bounded_exp(&self, exp: &ModMathValue<T>, _exp_bits: u32) -> Self {
+        let result_mont = self.pow_loop(unwrap_value(exp));
+        Self {
+            integer_mont: wrap_value(result_mont),
+            params: self.params.clone(),
+        }
+    }
+
+    fn retrieve(&self) -> ModMathValue<T> {
+        wrap_value(self.to_reduced())
+    }
+}
+
+impl<T: ModMathIntCt> ModulusParams for ModMathParams<T, Ct> {
+    type Modulus = ModMathValue<T>;
+    type MontgomeryForm = ModMathForm<T, Ct>;
+
+    fn modulus(&self) -> &Odd<Self::Modulus> {
+        &self.modulus_odd
+    }
+
+    fn bits_precision(&self) -> u32 {
+        FixedWidthUnsignedInt::bits_precision(self.field.modulus())
     }
 }
 
 #[cfg(test)]
 #[cfg(all(feature = "alloc", feature = "private-key"))]
 mod tests {
-    use fixed_bigint::FixedUInt;
+    use fixed_bigint::{Ct, FixedUInt};
     use rand::rngs::ChaCha8Rng;
     use rand_core::SeedableRng;
     use sha1::Sha1;
     use signature::hazmat::PrehashVerifier;
 
-    use super::{public_key_from_be_bytes, ModMathParams, ModMathValue};
+    use super::{
+        public_key_ct_from_be_bytes, public_key_from_be_bytes, ModMathParams, ModMathValue,
+    };
     use crate::key::GenericRsaPublicKey;
     use crate::pkcs1v15::{GenericEncryptingKey, GenericSignature, GenericVerifyingKey};
     use crate::{traits::RandomizedEncryptor, BoxedUint, Pkcs1v15Encrypt, RsaPublicKey};
+
+    type SmallU = FixedUInt<u8, 64>;
+    type SmallUCt = FixedUInt<u8, 64, Ct>;
+
+    #[test]
+    fn brand_round_trip() {
+        let params = ModMathParams::<SmallU>::new(SmallU::from(13u8)).unwrap();
+        let f = params.field();
+        let r = f.reduce(&SmallU::from(7u8));
+        assert_eq!(f.into_raw(&r), SmallU::from(7u8));
+    }
+
+    #[test]
+    fn brand_mul_exp() {
+        let params = ModMathParams::<SmallU>::new(SmallU::from(13u8)).unwrap();
+        let f = params.field();
+        // 7 * 11 = 77 ≡ 12 (mod 13)
+        let a = f.reduce(&SmallU::from(7u8));
+        let b = f.reduce(&SmallU::from(11u8));
+        assert_eq!(f.into_raw(&f.mul(&a, &b)), SmallU::from(12u8));
+        // 2^10 = 1024 ≡ 10 (mod 13)
+        let base = f.reduce(&SmallU::from(2u8));
+        assert_eq!(
+            f.into_raw(&f.exp(&base, &SmallU::from(10u8))),
+            SmallU::from(10u8)
+        );
+    }
+
+    #[test]
+    fn brand_ct_matches_nct() {
+        let p_nct = ModMathParams::<SmallU>::new(SmallU::from(13u8)).unwrap();
+        let p_ct = ModMathParams::<SmallUCt, Ct>::new(SmallUCt::from(13u8)).unwrap();
+        let f_nct = p_nct.field();
+        let f_ct = p_ct.field();
+        let nct = f_nct.into_raw(&f_nct.mul(
+            &f_nct.reduce(&SmallU::from(7u8)),
+            &f_nct.reduce(&SmallU::from(11u8)),
+        ));
+        let ct = f_ct.into_raw(&f_ct.mul(
+            &f_ct.reduce(&SmallUCt::from(7u8)),
+            &f_ct.reduce(&SmallUCt::from(11u8)),
+        ));
+        // Distinct types — compare via underlying byte representation.
+        let mut nct_bytes = [0u8; 64];
+        let mut ct_bytes = [0u8; 64];
+        let _ = nct.to_be_bytes(&mut nct_bytes);
+        let _ = ct.to_be_bytes(&mut ct_bytes);
+        assert_eq!(nct_bytes, ct_bytes);
+    }
 
     #[test]
     fn verify_pkcs1v15_signature_with_modmath_fixed_uint() {
@@ -441,10 +608,13 @@ mod tests {
 
         let n = U512::from_be_bytes(&modulus);
         let e = U512::from(3u8);
+        // Turbofish the personality: `ModMathParams::new` is ambiguous
+        // between the Nct and Ct impl blocks (the `P = Nct` default doesn't
+        // fire in inference contexts). Pin Nct explicitly.
         let key = GenericRsaPublicKey::from_components(
             ModMathValue::from_inner(n),
             ModMathValue::from_inner(e),
-            ModMathParams::new(n).unwrap(),
+            ModMathParams::<U512, fixed_bigint::Nct>::new(n).unwrap(),
         )
         .unwrap();
         let verifying_key = GenericVerifyingKey::<Sha1, _, _>::new(key);
@@ -455,7 +625,10 @@ mod tests {
 
     #[test]
     fn encrypt_pkcs1v15_with_modmath_fixed_uint_matches_boxeduint() {
-        type U512 = FixedUInt<u8, 64>;
+        // Encrypt path takes a secret plaintext, so type the modulus as
+        // Ct-personality — `CiosMontMulCt` only resolves for Ct-typed
+        // FixedUInts under the personality typestate.
+        type U512 = FixedUInt<u8, 64, Ct>;
 
         let modulus: [u8; 64] = [
             0x96, 0x9D, 0x03, 0xFF, 0xA9, 0x8D, 0x88, 0x8F, 0x3A, 0xA4, 0xF2, 0xFE, 0xD2, 0x32,
@@ -466,7 +639,7 @@ mod tests {
         ];
         let msg = b"hello world!";
 
-        let modmath_key = public_key_from_be_bytes::<U512>(&modulus, 3).unwrap();
+        let modmath_key = public_key_ct_from_be_bytes::<U512>(&modulus, 3).unwrap();
         let boxed_key = RsaPublicKey::new(
             BoxedUint::from_be_slice(&modulus, 512).unwrap(),
             3u64.into(),

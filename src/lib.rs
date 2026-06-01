@@ -256,7 +256,11 @@ mod key;
 pub mod modmath_support;
 
 #[cfg(feature = "modmath")]
-pub use crate::modmath_support::{ModMathForm, ModMathInt, ModMathParams, ModMathValue};
+pub use crate::modmath_support::{
+    ModMathForm, ModMathInt, ModMathIntCt, ModMathParams, ModMathValue,
+};
+#[cfg(feature = "modmath")]
+pub use fixed_bigint::{Ct, Nct};
 #[cfg(feature = "encoding")]
 pub use pkcs1;
 #[cfg(feature = "encoding")]
