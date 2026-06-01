@@ -185,7 +185,13 @@ where
     }
 
     fn try_resize(self, at_least_bits_precision: u32) -> Option<Self::Output> {
-        if at_least_bits_precision >= self.bits_precision() {
+        // Mirrors `crypto_bigint::Resize::try_resize`: returns `Some` iff
+        // the actual value fits in `at_least_bits_precision` bits. Our
+        // type is fixed-width and `resize_unchecked` is a no-op, but the
+        // check still needs to reject values that wouldn't survive a
+        // narrower precision.
+        let value_bits = self.bits_precision() - self.leading_zeros();
+        if value_bits <= at_least_bits_precision {
             Some(self)
         } else {
             None
