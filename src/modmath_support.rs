@@ -359,6 +359,8 @@ where
     Ok(rsa_encrypt(key, &input)?.to_be_bytes())
 }
 
+// `T: Zeroize` (not just `Clone`) is locked in to satisfy `Drop` coherence
+// below — loosening it silently disables the auto-wipe.
 #[derive(Clone, Debug)]
 pub struct ModMathForm<T, P: Personality = Nct>
 where
@@ -368,12 +370,7 @@ where
     params: ModMathParams<T, P>,
 }
 
-// `integer_mont` carries secret-derived Montgomery state (e.g. the plaintext
-// during encryption). `params` holds only the public modulus + Montgomery
-// constants, so we leave it untouched. The `Drop` impl wipes automatically;
-// `ZeroizeOnDrop` is the marker the trait expects callers to be able to rely
-// on. Bounds on `Drop` must match the struct's, hence `T: Zeroize` in the
-// struct definition above (already implied by `ModMathInt` / `ModMathIntCt`).
+// `integer_mont` is secret-derived Montgomery state; `params` is public.
 impl<T, P: Personality> Zeroize for ModMathForm<T, P>
 where
     T: Clone + Zeroize,
@@ -388,7 +385,7 @@ where
     T: Clone + Zeroize,
 {
     fn drop(&mut self) {
-        self.integer_mont.zeroize();
+        self.zeroize();
     }
 }
 
