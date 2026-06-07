@@ -368,6 +368,19 @@ where
     params: ModMathParams<T, P>,
 }
 
+// `integer_mont` carries secret-derived Montgomery state (e.g. the plaintext
+// during encryption). `params` holds only the public modulus + Montgomery
+// constants, so we leave it untouched. Wrap a `ModMathForm` in
+// `zeroize::Zeroizing<_>` for automatic wipe on drop.
+impl<T, P: Personality> Zeroize for ModMathForm<T, P>
+where
+    T: Clone + Zeroize,
+{
+    fn zeroize(&mut self) {
+        self.integer_mont.zeroize();
+    }
+}
+
 impl<T: ModMathInt> IntoMontyForm<ModMathParams<T, Nct>> for ModMathForm<T, Nct> {
     fn from_reduced(integer: ModMathValue<T>, params: &ModMathParams<T, Nct>) -> Self {
         let field = params.field();
