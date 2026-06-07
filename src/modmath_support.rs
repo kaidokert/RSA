@@ -362,7 +362,7 @@ where
 #[derive(Clone, Debug)]
 pub struct ModMathForm<T, P: Personality = Nct>
 where
-    T: Clone,
+    T: Clone + Zeroize,
 {
     integer_mont: ModMathValue<T>,
     params: ModMathParams<T, P>,
@@ -370,8 +370,10 @@ where
 
 // `integer_mont` carries secret-derived Montgomery state (e.g. the plaintext
 // during encryption). `params` holds only the public modulus + Montgomery
-// constants, so we leave it untouched. Wrap a `ModMathForm` in
-// `zeroize::Zeroizing<_>` for automatic wipe on drop.
+// constants, so we leave it untouched. The `Drop` impl wipes automatically;
+// `ZeroizeOnDrop` is the marker the trait expects callers to be able to rely
+// on. Bounds on `Drop` must match the struct's, hence `T: Zeroize` in the
+// struct definition above (already implied by `ModMathInt` / `ModMathIntCt`).
 impl<T, P: Personality> Zeroize for ModMathForm<T, P>
 where
     T: Clone + Zeroize,
@@ -380,6 +382,17 @@ where
         self.integer_mont.zeroize();
     }
 }
+
+impl<T, P: Personality> Drop for ModMathForm<T, P>
+where
+    T: Clone + Zeroize,
+{
+    fn drop(&mut self) {
+        self.integer_mont.zeroize();
+    }
+}
+
+impl<T, P: Personality> zeroize::ZeroizeOnDrop for ModMathForm<T, P> where T: Clone + Zeroize {}
 
 impl<T: ModMathInt> IntoMontyForm<ModMathParams<T, Nct>> for ModMathForm<T, Nct> {
     fn from_reduced(integer: ModMathValue<T>, params: &ModMathParams<T, Nct>) -> Self {
@@ -530,7 +543,8 @@ mod tests {
     use signature::hazmat::PrehashVerifier;
 
     use super::{
-        public_key_ct_from_be_bytes, public_key_from_be_bytes, ModMathParams, ModMathValue,
+        public_key_ct_from_be_bytes, public_key_from_be_bytes, ModMathForm, ModMathParams,
+        ModMathValue,
     };
     use crate::key::GenericRsaPublicKey;
     use crate::pkcs1v15::{GenericEncryptingKey, GenericSignature, GenericVerifyingKey};
@@ -583,6 +597,13 @@ mod tests {
         let _ = nct.to_be_bytes(&mut nct_bytes);
         let _ = ct.to_be_bytes(&mut ct_bytes);
         assert_eq!(nct_bytes, ct_bytes);
+    }
+
+    #[test]
+    fn mod_math_form_zeroize_on_drop() {
+        fn assert_zeroize_on_drop<T: zeroize::ZeroizeOnDrop>() {}
+        assert_zeroize_on_drop::<ModMathForm<SmallU>>();
+        assert_zeroize_on_drop::<ModMathForm<SmallUCt, Ct>>();
     }
 
     #[test]
