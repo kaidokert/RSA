@@ -373,7 +373,7 @@ impl<T: ModMathInt> IntoMontyForm<ModMathParams<T, Nct>> for ModMathForm<T, Nct>
         let field = params.field();
         let r = field.reduce(unwrap_value_ref(&integer));
         Self {
-            integer_mont: wrap_value(r.mont_value()),
+            integer_mont: wrap_value(*r.mont_value()),
             params: params.clone(),
         }
     }
@@ -390,7 +390,7 @@ impl<T: ModMathInt> ModMathForm<T, Nct> {
     fn pow_loop(&self, exp_raw: T) -> T {
         let field = self.params.field();
         let base = field.residue_from_mont(unwrap_value(&self.integer_mont));
-        field.exp(&base, &exp_raw).mont_value()
+        *field.exp(&base, &exp_raw).mont_value()
     }
 
     fn to_reduced(&self) -> T {
@@ -444,7 +444,7 @@ impl<T: ModMathIntCt> IntoMontyForm<ModMathParams<T, Ct>> for ModMathForm<T, Ct>
         let field = params.field();
         let r = field.reduce(unwrap_value_ref(&integer));
         Self {
-            integer_mont: wrap_value(r.mont_value()),
+            integer_mont: wrap_value(*r.mont_value()),
             params: params.clone(),
         }
     }
@@ -460,7 +460,7 @@ impl<T: ModMathIntCt> ModMathForm<T, Ct> {
     fn pow_loop(&self, exp_raw: T) -> T {
         let field = self.params.field();
         let base = field.residue_from_mont(unwrap_value(&self.integer_mont));
-        field.exp_public_exp(&base, &exp_raw).mont_value()
+        *field.exp_public_exp(&base, &exp_raw).mont_value()
     }
 
     fn to_reduced(&self) -> T {
