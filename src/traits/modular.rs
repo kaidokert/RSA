@@ -12,11 +12,10 @@ use crypto_bigint::{
 };
 #[cfg(feature = "alloc")]
 use crypto_bigint::{NonZero as CryptoNonZero, Odd as CryptoOdd};
-#[cfg(feature = "modmath")]
-use fixed_bigint::ConstBitPrimInt;
+use const_num_traits::PrimBits;
 #[cfg(not(feature = "modmath"))]
-use num_traits::PrimInt;
-use num_traits::{FromBytes as NumFromBytes, ToBytes as NumToBytes, Zero};
+use const_num_traits::PrimInt;
+use const_num_traits::{FromBytes as NumFromBytes, ToBytes as NumToBytes, Zero};
 use zeroize::Zeroize;
 
 use crate::errors::{Error, Result};
@@ -52,18 +51,18 @@ pub trait FixedWidthUnsignedInt: Zeroize + Clone + Copy {
 #[cfg(feature = "modmath")]
 impl<T> FixedWidthUnsignedInt for T
 where
-    T: Zeroize + Clone + Copy + ConstBitPrimInt + Zero + NumToBytes + NumFromBytes,
+    T: Zeroize + Clone + Copy + PrimBits + Zero + NumToBytes + NumFromBytes,
     T: NumToBytes<Bytes = <T as NumFromBytes>::Bytes>,
     <T as NumToBytes>::Bytes: NumBytes + Default + AsMut<[u8]>,
 {
     type Bytes = <T as NumToBytes>::Bytes;
 
     fn leading_zeros(&self) -> u32 {
-        ConstBitPrimInt::leading_zeros(*self)
+        PrimBits::leading_zeros(*self)
     }
 
     fn to_be_bytes(&self) -> Self::Bytes {
-        NumToBytes::to_be_bytes(self)
+        NumToBytes::to_be_bytes(*self)
     }
 
     fn try_from_be_bytes_vartime(bytes: &[u8]) -> Result<Self> {
@@ -78,7 +77,7 @@ where
     }
 
     fn bits_precision(&self) -> u32 {
-        ConstBitPrimInt::count_zeros(<T as Zero>::zero())
+        PrimBits::count_zeros(<T as Zero>::zero())
     }
 }
 
@@ -92,11 +91,11 @@ where
     type Bytes = <T as NumToBytes>::Bytes;
 
     fn leading_zeros(&self) -> u32 {
-        PrimInt::leading_zeros(*self)
+        PrimBits::leading_zeros(*self)
     }
 
     fn to_be_bytes(&self) -> Self::Bytes {
-        NumToBytes::to_be_bytes(self)
+        NumToBytes::to_be_bytes(*self)
     }
 
     fn try_from_be_bytes_vartime(bytes: &[u8]) -> Result<Self> {

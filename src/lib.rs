@@ -260,7 +260,7 @@ pub use crate::modmath_support::{
     ModMathForm, ModMathInt, ModMathIntCt, ModMathParams, ModMathValue,
 };
 #[cfg(feature = "modmath")]
-pub use fixed_bigint::{Ct, Nct};
+pub use const_num_traits::{Ct, Nct};
 #[cfg(feature = "encoding")]
 pub use pkcs1;
 #[cfg(feature = "encoding")]

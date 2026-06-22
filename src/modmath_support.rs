@@ -8,11 +8,11 @@
 use alloc::boxed::Box;
 use core::ops::{Shr, ShrAssign};
 
-use fixed_bigint::{Ct, Nct, Personality};
+use const_num_traits::{Ct, Nct, Personality};
 use modmath::{CiosMontMul, CiosMontMulCt, Field as ModmathField, Parity, WideMul};
-use num_traits::ops::overflowing::OverflowingAdd;
-use num_traits::ops::wrapping::{WrappingAdd, WrappingMul, WrappingSub};
-use num_traits::{One, Zero};
+use const_num_traits::ops::overflowing::OverflowingAdd;
+use const_num_traits::ops::wrapping::{WrappingAdd, WrappingMul, WrappingSub};
+use const_num_traits::{One, Zero};
 use zeroize::Zeroize;
 
 use crate::{
@@ -533,7 +533,8 @@ impl<T: ModMathIntCt> ModulusParams for ModMathParams<T, Ct> {
 #[cfg(test)]
 #[cfg(all(feature = "alloc", feature = "private-key"))]
 mod tests {
-    use fixed_bigint::{Ct, FixedUInt};
+    use const_num_traits::Ct;
+    use fixed_bigint::FixedUInt;
     use rand::rngs::ChaCha8Rng;
     use rand_core::SeedableRng;
     use sha1::Sha1;
@@ -664,7 +665,7 @@ mod tests {
         let key = GenericRsaPublicKey::from_components(
             ModMathValue::from_inner(n),
             ModMathValue::from_inner(e),
-            ModMathParams::<U512, fixed_bigint::Nct>::new(n).unwrap(),
+            ModMathParams::<U512, const_num_traits::Nct>::new(n).unwrap(),
         )
         .unwrap();
         let verifying_key = GenericVerifyingKey::<Sha1, _, _>::new(key);
