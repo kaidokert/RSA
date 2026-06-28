@@ -776,4 +776,88 @@ mod private_op_tests {
         let result = crate::algorithms::rsa::rsa_private_op_and_check(&c, &bad_d, &e, &n_params);
         assert!(result.is_err());
     }
+
+    // 2048-bit RSA keypair fixture — same `(n, e=65537, d)` used in
+    // `algorithms::rsa::tests::recover_primes_works`. Pulled in here so the
+    // heapless wip-private-key test path can roundtrip-sign without
+    // requiring `alloc`. `e` is rendered as 3-byte BE (`0x010001`) and
+    // resized into `U2048` at test time.
+    const N_2048: [u8; 256] = hex_literal::hex!(
+        "d397b84d98a4c26138ed1b695a8106ead91d553bf06041b62d3fdc50a041e222
+         b8f4529689c1b82c5e71554f5dd69fa2f4b6158cf0dbeb57811a0fc327e1f28e
+         74fe74d3bc166c1eabdc1b8b57b934ca8be5b00b4f29975bcc99acaf415b59bb
+         28a6782bb41a2c3c2976b3c18dbadef62f00c6bb226640095096c0cc60d22fe7
+         ef987d75c6a81b10d96bf292028af110dc7cc1bbc43d22adab379a0cd5d8078c
+         c780ff5cd6209dea34c922cf784f7717e428d75b5aec8ff30e5f0141510766e2
+         e0ab8d473c84e8710b2b98227c3db095337ad3452f19e2b9bfbccdd8148abf67
+         76fa552775e6e75956e45229ae5a9c46949bab1e622f0e48f56524a84ed3483b"
+    );
+    const D_2048: [u8; 256] = hex_literal::hex!(
+        "c4e70c689162c94c660828191b52b4d8392115df486a9adbe831e458d7395832
+         0dc1b755456e93701e9702d76fb0b92f90e01d1fe248153281fe79aa9763a92f
+         ae69d8d7ecd144de29fa135bd14f9573e349e45031e3b76982f583003826c552
+         e89a397c1a06bd2163488630d92e8c2bb643d7abef700da95d685c941489a46f
+         54b5316f62b5d2c3a7f1bbd134cb37353a44683fdc9d95d36458de22f6c44057
+         fe74a0a436c4308f73f4da42f35c47ac16a7138d483afc91e41dc3a1127382e0
+         c0f5119b0221b4fc639d6b9c38177a6de9b526ebd88c38d7982c07f98a0efd87
+         7d508aae275b946915c02e2e1106d175d74ec6777f5e80d12c053d9c7be1e341"
+    );
+
+    #[test]
+    fn pkcs1v15_sign_into_round_trip_2048_sha1() {
+        use crate::algorithms::pkcs1v15::{
+            pkcs1v15_generate_prefix_into, pkcs1v15_sign_pad_into, sign_into,
+        };
+        use crate::traits::PublicKeyParts;
+        use sha1::Sha1;
+
+        type U2048 = FixedUInt<u8, 256, Ct>;
+        const K: usize = 256;
+
+        let key = public_key_ct_from_be_bytes::<U2048>(&N_2048, 65537).unwrap();
+        let d_int = <U2048 as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(&D_2048).unwrap();
+        let d = wrap_value(d_int);
+        let e_int =
+            <U2048 as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(&[0x01, 0x00, 0x01])
+                .unwrap();
+        let e = wrap_value(e_int);
+
+        let digest = [0xAAu8; 20];
+        let mut prefix_storage = [0u8; 32];
+        let prefix = pkcs1v15_generate_prefix_into::<Sha1>(&mut prefix_storage).unwrap();
+
+        let mut em_storage = [0u8; K];
+        let mut sig_storage = [0u8; K];
+        let sig = sign_into(
+            key.n_params(),
+            &d,
+            &e,
+            prefix,
+            &digest,
+            K,
+            &mut em_storage,
+            &mut sig_storage,
+        )
+        .unwrap();
+        assert_eq!(sig.len(), K);
+
+        // Roundtrip via public op: `sig^e mod n` must recover the padded EM
+        // that `pkcs1v15_sign_pad_into` produces for the same (prefix, digest).
+        let recovered = public_key_op_ct(&key, sig).unwrap();
+        let mut expected_em_storage = [0u8; K];
+        let expected_em =
+            pkcs1v15_sign_pad_into(prefix, &digest, K, &mut expected_em_storage).unwrap();
+        assert_eq!(recovered.as_ref(), expected_em);
+    }
+
+    // Local alias for `rsa_public_op_ct` — keeps the test's call-site short.
+    fn public_key_op_ct<T>(
+        key: &crate::key::GenericRsaPublicKey<ModMathValue<T>, ModMathParams<T, Ct>>,
+        input: &[u8],
+    ) -> Result<<ModMathValue<T> as UnsignedModularInt>::Bytes>
+    where
+        T: ModMathIntCt,
+    {
+        crate::modmath_support::rsa_public_op_ct(key, input)
+    }
 }

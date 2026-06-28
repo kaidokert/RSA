@@ -15,6 +15,11 @@ use rand_core::TryCryptoRng;
 use zeroize::Zeroizing;
 
 use crate::errors::{Error, Result};
+#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
+use crate::traits::{
+    modular::{ModulusParams, Pow, PowBoundedExp},
+    UnsignedModularInt,
+};
 
 /// Fills the provided slice with random values, which are guaranteed
 /// to not be zero.
@@ -179,6 +184,61 @@ pub fn pkcs1v15_sign_pad_into<'a>(
     em[k - hash_len..k].copy_from_slice(hashed);
 
     Ok(em)
+}
+
+/// ⚠️ PKCS#1 v1.5 sign — heapless-compatible, generic over the integer backend.
+///
+/// Composes the four byte/integer steps of `RSASSA-PKCS1-V1_5-SIGN`:
+///
+/// 1. Build the padded encoding
+///    `EM = 0x00 || 0x01 || PS || 0x00 || prefix || hashed` in
+///    caller-provided `em_storage`.
+/// 2. Convert the EM bytes to integer `T` via
+///    [`UnsignedModularInt::try_from_be_bytes_vartime`].
+/// 3. Compute `s = EM^d mod n` via
+///    [`crate::algorithms::rsa::rsa_private_op_and_check`] — CT in the secret
+///    exponent on the Ct-personality heapless path, with a verify-after-sign
+///    integrity check on every backend.
+/// 4. Serialize `s` to bytes, left-padded with zeros to length `k`, into
+///    caller-provided `sig_storage`.
+///
+/// `k` is the byte length of the modulus `n` and determines both the EM
+/// and signature lengths. Both scratch buffers must be at least `k` bytes.
+///
+/// # ☢️️ WARNING: HAZARDOUS API ☢️
+///
+/// This is the raw PKCS#1 v1.5 sign primitive over a precomputed modulus
+/// context. Higher-level callers should hash the input message themselves
+/// and prepend the appropriate digest-algorithm DigestInfo prefix.
+///
+/// TODO: switch the final serialization step to `uint_to_zeroizing_be_pad_into`
+/// once fixed-bigint provides `Zeroize` for `BytesHolder`. The intermediate
+/// `T::Bytes` produced by `s.to_be_bytes()` carries the just-signed value
+/// briefly on the stack; today it's a soft-leak window, the future zeroizing
+/// path closes it.
+// Consumer (the heapless `SigningKey<D>` wrapper) lands in a later PR.
+#[allow(dead_code)]
+#[allow(clippy::too_many_arguments)] // Composing four byte/integer steps; splitting helps nothing.
+#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
+pub fn sign_into<'sig, T, M>(
+    n_params: &M,
+    d: &T,
+    e: &T,
+    prefix: &[u8],
+    hashed: &[u8],
+    k: usize,
+    em_storage: &mut [u8],
+    sig_storage: &'sig mut [u8],
+) -> Result<&'sig [u8]>
+where
+    T: UnsignedModularInt,
+    M: ModulusParams<Modulus = T>,
+    M::MontgomeryForm: Pow<M> + PowBoundedExp<M>,
+{
+    let em_slice = pkcs1v15_sign_pad_into(prefix, hashed, k, em_storage)?;
+    let em = T::try_from_be_bytes_vartime(em_slice)?;
+    let s = crate::algorithms::rsa::rsa_private_op_and_check(&em, d, e, n_params)?;
+    crate::algorithms::pad::uint_to_be_pad_into(s, k, sig_storage)
 }
 
 #[inline]
