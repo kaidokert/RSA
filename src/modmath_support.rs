@@ -917,4 +917,182 @@ mod private_op_tests {
     {
         crate::modmath_support::rsa_public_op_ct(key, input)
     }
+
+    // ─── defensive-error tests for `sign_into` upfront checks ───────────
+    //
+    // These tests trip the fast-fail guards added on PR #21 / #22 review.
+    // None reach the RSA exponentiation, so `d`/`e` can be dummy values
+    // and the toy `SmallUCt` (512-bit) `n_params` is sufficient.
+
+    fn dummy_de() -> (ModMathValue<SmallUCt>, ModMathValue<SmallUCt>) {
+        (
+            wrap_value(SmallUCt::from(1u8)),
+            wrap_value(SmallUCt::from(1u8)),
+        )
+    }
+
+    // SmallUCt = FixedUInt<u8, 64, Ct> → bits_precision = 512 → k = 64.
+    const SMALL_K: usize = 64;
+
+    #[test]
+    fn pkcs1v15_sign_into_rejects_wrong_k() {
+        use crate::algorithms::pkcs1v15::sign_into;
+        let n_params = toy_params();
+        let (d, e) = dummy_de();
+        let mut em = [0u8; SMALL_K];
+        let mut sig = [0u8; SMALL_K];
+        let result = sign_into(
+            &n_params,
+            &d,
+            &e,
+            &[],
+            &[0u8; 20],
+            SMALL_K - 1, // wrong: should be SMALL_K
+            &mut em,
+            &mut sig,
+        );
+        assert!(matches!(result, Err(Error::InvalidArguments)));
+    }
+
+    #[test]
+    fn pkcs1v15_sign_into_rejects_small_sig_storage() {
+        use crate::algorithms::pkcs1v15::sign_into;
+        let n_params = toy_params();
+        let (d, e) = dummy_de();
+        let mut em = [0u8; SMALL_K];
+        let mut sig = [0u8; SMALL_K - 1]; // one byte short
+        let result = sign_into(
+            &n_params,
+            &d,
+            &e,
+            &[],
+            &[0u8; 20],
+            SMALL_K,
+            &mut em,
+            &mut sig,
+        );
+        assert!(matches!(result, Err(Error::OutputBufferTooSmall)));
+    }
+
+    #[test]
+    fn pkcs1v15_sign_into_propagates_message_too_long() {
+        // prefix + hashed + 11 > k → `pkcs1v15_sign_pad_into` returns
+        // MessageTooLong. Confirms errors from the padding step bubble up.
+        use crate::algorithms::pkcs1v15::sign_into;
+        let n_params = toy_params();
+        let (d, e) = dummy_de();
+        let mut em = [0u8; SMALL_K];
+        let mut sig = [0u8; SMALL_K];
+        let oversize_prefix = [0u8; SMALL_K]; // 64-byte prefix alone exceeds k - 11
+        let result = sign_into(
+            &n_params,
+            &d,
+            &e,
+            &oversize_prefix,
+            &[0u8; 20],
+            SMALL_K,
+            &mut em,
+            &mut sig,
+        );
+        assert!(matches!(result, Err(Error::MessageTooLong)));
+    }
+
+    #[test]
+    fn pss_sign_into_rejects_wrong_k() {
+        use crate::algorithms::pss::sign_into;
+        use digest::Digest;
+        use sha1::Sha1;
+        let n_params = toy_params();
+        let (d, e) = dummy_de();
+        let mut em = [0u8; SMALL_K];
+        let mut sig = [0u8; SMALL_K];
+        let mut hash = Sha1::new();
+        let result = sign_into(
+            &n_params,
+            &d,
+            &e,
+            &[0u8; 20],
+            &[],
+            SMALL_K - 1, // wrong
+            &mut hash,
+            &mut em,
+            &mut sig,
+        );
+        assert!(matches!(result, Err(Error::InvalidArguments)));
+    }
+
+    #[test]
+    fn pss_sign_into_rejects_small_sig_storage() {
+        use crate::algorithms::pss::sign_into;
+        use digest::Digest;
+        use sha1::Sha1;
+        let n_params = toy_params();
+        let (d, e) = dummy_de();
+        let mut em = [0u8; SMALL_K];
+        let mut sig = [0u8; SMALL_K - 1];
+        let mut hash = Sha1::new();
+        let result = sign_into(
+            &n_params,
+            &d,
+            &e,
+            &[0u8; 20],
+            &[],
+            SMALL_K,
+            &mut hash,
+            &mut em,
+            &mut sig,
+        );
+        assert!(matches!(result, Err(Error::OutputBufferTooSmall)));
+    }
+
+    #[test]
+    fn pss_sign_into_rejects_small_em_storage() {
+        use crate::algorithms::pss::sign_into;
+        use digest::Digest;
+        use sha1::Sha1;
+        let n_params = toy_params();
+        let (d, e) = dummy_de();
+        // em_bits = key_bits - 1 = 511 → em_len = 64. Pass 63 to fail.
+        let mut em = [0u8; SMALL_K - 1];
+        let mut sig = [0u8; SMALL_K];
+        let mut hash = Sha1::new();
+        let result = sign_into(
+            &n_params,
+            &d,
+            &e,
+            &[0u8; 20],
+            &[],
+            SMALL_K,
+            &mut hash,
+            &mut em,
+            &mut sig,
+        );
+        assert!(matches!(result, Err(Error::OutputBufferTooSmall)));
+    }
+
+    #[test]
+    fn pss_sign_into_rejects_wrong_hash_length() {
+        // emsa_pss_encode_into returns InputNotHashed when m_hash.len()
+        // != hash output size. Confirms errors from the encode step bubble up.
+        use crate::algorithms::pss::sign_into;
+        use digest::Digest;
+        use sha1::Sha1;
+        let n_params = toy_params();
+        let (d, e) = dummy_de();
+        let mut em = [0u8; SMALL_K];
+        let mut sig = [0u8; SMALL_K];
+        let mut hash = Sha1::new();
+        let result = sign_into(
+            &n_params,
+            &d,
+            &e,
+            &[0u8; 21], // SHA-1 produces 20 bytes, not 21
+            &[],
+            SMALL_K,
+            &mut hash,
+            &mut em,
+            &mut sig,
+        );
+        assert!(matches!(result, Err(Error::InputNotHashed)));
+    }
 }
