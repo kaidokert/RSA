@@ -277,6 +277,47 @@ where
     pow_mod_params(c, d, n_params)
 }
 
+/// ⚠️ Performs `rsa_private_op` and verifies the result by re-encrypting
+/// and comparing against the input. This is the integrity check that
+/// PKCS#1 v1.5 / PSS signing reduce to (mirroring the upstream
+/// `rsa_decrypt_and_check` for the raw-exponent path).
+///
+/// Returns the recovered message `m = c^d mod n` only if `m^e mod n == c`,
+/// otherwise [`Error::Internal`]. Defends against transient compute errors
+/// that would otherwise emit a malformed signature (notably the class of
+/// fault attacks that try to leak `p`/`q` from a corrupted CRT step;
+/// today's heapless raw-exponent path doesn't take that branch but the
+/// check shape stays consistent with the upstream invariant).
+///
+/// # ☢️️ WARNING: HAZARDOUS API ☢️
+///
+/// Raw RSA must be wrapped in a padding/signature scheme (PKCS#1 v1.5, PSS,
+/// OAEP) to be secure. See the [module-level documentation][crate::hazmat]
+/// for more information.
+// Consumer (the heapless `pkcs1v15` / `pss` sign port) lands in a later PR.
+#[allow(dead_code)]
+#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
+#[inline]
+pub fn rsa_private_op_and_check<T, M>(c: &T, d: &T, e: &T, n_params: &M) -> Result<T>
+where
+    T: UnsignedModularInt,
+    M: ModulusParams<Modulus = T>,
+    M::MontgomeryForm: Pow<M> + PowBoundedExp<M>,
+{
+    let m = rsa_private_op(c, d, n_params);
+    // `m < n` by construction (output of `rsa_private_op` is in `[0, n)` after
+    // Montgomery retrieve), so we route through `from_reduced` to skip the
+    // variable-time reduction `from_value` would perform on BoxedUint —
+    // `from_value -> rem_vartime` would otherwise leak `m` via timing.
+    let m_sized = m.clone().resize_unchecked(n_params.bits_precision());
+    let m_mont = M::MontgomeryForm::from_reduced(m_sized, n_params);
+    let check = m_mont.pow_bounded_exp(e, e.bits()).retrieve();
+    if *c != check {
+        return Err(Error::Internal);
+    }
+    Ok(m)
+}
+
 /// Computes `base.pow_mod(exp, n)` with precomputed `n_params`.
 fn pow_mod_params<T, M>(base: &T, exp: &T, n_params: &M) -> T
 where

@@ -737,15 +737,43 @@ mod private_op_tests {
 
     type SmallUCt = FixedUInt<u8, 64, Ct>;
 
+    // n = 35 = 5 · 7, φ(n) = 24. e = 5, d = 29 (since 5·29 = 145 ≡ 1 mod 24).
+    // m = 2 → c = 2^5 mod 35 = 32 → m_recovered = 32^29 mod 35 = 2.
+    fn toy_params() -> ModMathParams<SmallUCt, Ct> {
+        ModMathParams::<SmallUCt, Ct>::new(SmallUCt::from(35u8)).unwrap()
+    }
+
     #[test]
     fn rsa_private_op_round_trip_heapless_ct() {
-        // n = 35 = 5 · 7, φ(n) = 24. e = 5, d = 29 (since 5·29 = 145 ≡ 1 mod 24).
-        // m = 2 → c = 2^5 mod 35 = 32 → m_recovered = 32^29 mod 35 = 2.
-        let n_params = ModMathParams::<SmallUCt, Ct>::new(SmallUCt::from(35u8)).unwrap();
+        let n_params = toy_params();
         let c = wrap_value(SmallUCt::from(32u8));
         let d = wrap_value(SmallUCt::from(29u8));
         let expected = wrap_value(SmallUCt::from(2u8));
         let recovered = crate::algorithms::rsa::rsa_private_op(&c, &d, &n_params);
         assert_eq!(recovered, expected);
+    }
+
+    #[test]
+    fn rsa_private_op_and_check_round_trip_heapless_ct() {
+        let n_params = toy_params();
+        let c = wrap_value(SmallUCt::from(32u8));
+        let d = wrap_value(SmallUCt::from(29u8));
+        let e = wrap_value(SmallUCt::from(5u8));
+        let expected = wrap_value(SmallUCt::from(2u8));
+        let recovered =
+            crate::algorithms::rsa::rsa_private_op_and_check(&c, &d, &e, &n_params).unwrap();
+        assert_eq!(recovered, expected);
+    }
+
+    #[test]
+    fn rsa_private_op_and_check_rejects_wrong_exponent() {
+        // Same modulus + e, but a wrong `d` (11 instead of 29). The recovered
+        // `m` won't re-encrypt back to `c`, so the integrity check should fail.
+        let n_params = toy_params();
+        let c = wrap_value(SmallUCt::from(32u8));
+        let bad_d = wrap_value(SmallUCt::from(11u8));
+        let e = wrap_value(SmallUCt::from(5u8));
+        let result = crate::algorithms::rsa::rsa_private_op_and_check(&c, &bad_d, &e, &n_params);
+        assert!(result.is_err());
     }
 }
