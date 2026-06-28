@@ -480,7 +480,21 @@ impl<T: ModMathIntCt> IntoMontyForm<ModMathParams<T, Ct>> for ModMathForm<T, Ct>
 }
 
 impl<T: ModMathIntCt> ModMathForm<T, Ct> {
-    fn pow_loop(&self, exp_raw: T) -> T {
+    // Secret-exponent ladder. Used by `Pow::pow`, which is the path RSA
+    // signing and unblinded decryption reduce to — the exponent is `d`,
+    // never disclosed in timing. Routes to modmath's `Field<T, Ct>::exp`,
+    // a fixed-iteration Montgomery ladder with branchless per-bit select.
+    fn pow_loop_ct(&self, exp_raw: T) -> T {
+        let field = self.params.field();
+        let base = field.residue_from_mont(unwrap_value(&self.integer_mont));
+        *field.exp(&base, &exp_raw).mont_value()
+    }
+
+    // Public-exponent ladder. Used by `PowBoundedExp::pow_bounded_exp`,
+    // which acknowledges variable-time-in-exponent semantics — the
+    // exponent is `e` (RSA public verify/encrypt), already disclosed.
+    // Routes to modmath's `Field<T, Ct>::exp_public_exp`.
+    fn pow_loop_public_exp(&self, exp_raw: T) -> T {
         let field = self.params.field();
         let base = field.residue_from_mont(unwrap_value(&self.integer_mont));
         *field.exp_public_exp(&base, &exp_raw).mont_value()
@@ -495,7 +509,7 @@ impl<T: ModMathIntCt> ModMathForm<T, Ct> {
 
 impl<T: ModMathIntCt> Pow<ModMathParams<T, Ct>> for ModMathForm<T, Ct> {
     fn pow(&self, exp: &ModMathValue<T>) -> Self {
-        let result_mont = self.pow_loop(unwrap_value(exp));
+        let result_mont = self.pow_loop_ct(unwrap_value(exp));
         Self {
             integer_mont: wrap_value(result_mont),
             params: self.params.clone(),
@@ -505,7 +519,7 @@ impl<T: ModMathIntCt> Pow<ModMathParams<T, Ct>> for ModMathForm<T, Ct> {
 
 impl<T: ModMathIntCt> PowBoundedExp<ModMathParams<T, Ct>> for ModMathForm<T, Ct> {
     fn pow_bounded_exp(&self, exp: &ModMathValue<T>, _exp_bits: u32) -> Self {
-        let result_mont = self.pow_loop(unwrap_value(exp));
+        let result_mont = self.pow_loop_public_exp(unwrap_value(exp));
         Self {
             integer_mont: wrap_value(result_mont),
             params: self.params.clone(),
