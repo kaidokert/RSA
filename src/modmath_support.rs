@@ -41,6 +41,8 @@ pub trait ModMathInt:
     + WrappingSub
     + Shr<usize, Output = Self>
     + ShrAssign<usize>
+    + core::ops::Add<Output = Self>
+    + core::ops::Mul<Output = Self>
 {
 }
 
@@ -60,6 +62,8 @@ impl<T> ModMathInt for T where
         + WrappingSub
         + Shr<usize, Output = Self>
         + ShrAssign<usize>
+        + core::ops::Add<Output = Self>
+        + core::ops::Mul<Output = Self>
 {
 }
 
@@ -82,6 +86,8 @@ pub trait ModMathIntCt:
     + subtle::ConditionallySelectable
     + subtle::ConstantTimeLess
     + core::ops::BitAnd<Output = Self>
+    + core::ops::Add<Output = Self>
+    + core::ops::Mul<Output = Self>
 {
 }
 
@@ -104,6 +110,8 @@ impl<T> ModMathIntCt for T where
         + subtle::ConditionallySelectable
         + subtle::ConstantTimeLess
         + core::ops::BitAnd<Output = Self>
+        + core::ops::Add<Output = Self>
+        + core::ops::Mul<Output = Self>
 {
 }
 
