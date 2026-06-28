@@ -147,7 +147,7 @@ pub fn rsa_decrypt<R: TryCryptoRng + ?Sized>(
         }
         _ => {
             // c^d (mod n)
-            pow_mod_params(&c, d, n_params)
+            rsa_private_op(&c, d, n_params)
         }
     };
 
@@ -252,6 +252,29 @@ fn unblind(m: &BoxedUint, unblinder: &BoxedUint, n_params: &BoxedMontyParams) ->
     );
 
     m.mul_mod(unblinder, n_params.modulus().as_nz_ref())
+}
+
+/// ⚠️ Performs the raw RSA private-key operation `c^d mod n`.
+///
+/// This is the bare primitive that both signing and unblinded decryption reduce
+/// to. The operation is constant-time in both base and secret exponent when
+/// `M::MontgomeryForm: Pow<M>` resolves to a Ct-personality implementation
+/// (e.g. `modmath::Field<T, Ct>` via the heapless `modmath_support` adapter).
+///
+/// # ☢️️ WARNING: HAZARDOUS API ☢️
+///
+/// Raw RSA must be wrapped in a padding/signature scheme (PKCS#1 v1.5, PSS,
+/// OAEP) to be secure. See the [module-level documentation][crate::hazmat]
+/// for more information.
+#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
+#[inline]
+pub fn rsa_private_op<T, M>(c: &T, d: &T, n_params: &M) -> T
+where
+    T: UnsignedModularInt,
+    M: ModulusParams<Modulus = T>,
+    M::MontgomeryForm: Pow<M>,
+{
+    pow_mod_params(c, d, n_params)
 }
 
 /// Computes `base.pow_mod(exp, n)` with precomputed `n_params`.
