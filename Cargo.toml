@@ -96,6 +96,12 @@ alloc = ["dep:crypto-bigint", "crypto-bigint/alloc", "pkcs8/alloc", "spki/alloc"
 private-key = ["alloc", "dep:crypto-primes"]
 modmath = ["dep:modmath", "dep:fixed-bigint"]
 
+# In-progress: gate for individual private-key functions that have been
+# generalized to work on the no_alloc / modmath path. Enabling this alone
+# (without `private-key`) compiles and tests the ported subset; enabling
+# both gives you the full alloc-bound surface plus any newly ported items.
+wip-private-key = []
+
 [package.metadata.docs.rs]
 features = ["std", "serde", "hazmat", "sha2"]
 

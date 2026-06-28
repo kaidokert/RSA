@@ -710,3 +710,28 @@ mod tests {
         assert_eq!(modmath_ciphertext, boxed_ciphertext.as_slice());
     }
 }
+
+// Tests for the `rsa_private_op` primitive on the heapless / Ct path.
+// Gated independently of the alloc+private-key block above so the
+// `wip-private-key` feature (which doesn't imply alloc) can compile
+// and run them in no_alloc mode.
+#[cfg(test)]
+#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
+mod private_op_tests {
+    use super::*;
+    use fixed_bigint::{Ct, FixedUInt};
+
+    type SmallUCt = FixedUInt<u8, 64, Ct>;
+
+    #[test]
+    fn rsa_private_op_round_trip_heapless_ct() {
+        // n = 35 = 5 · 7, φ(n) = 24. e = 5, d = 29 (since 5·29 = 145 ≡ 1 mod 24).
+        // m = 2 → c = 2^5 mod 35 = 32 → m_recovered = 32^29 mod 35 = 2.
+        let n_params = ModMathParams::<SmallUCt, Ct>::new(SmallUCt::from(35u8)).unwrap();
+        let c = wrap_value(SmallUCt::from(32u8));
+        let d = wrap_value(SmallUCt::from(29u8));
+        let expected = wrap_value(SmallUCt::from(2u8));
+        let recovered = crate::algorithms::rsa::rsa_private_op(&c, &d, &n_params);
+        assert_eq!(recovered, expected);
+    }
+}
