@@ -16,6 +16,11 @@ use digest::{Digest, FixedOutputReset};
 
 use super::mgf::{mgf1_xor, mgf1_xor_digest};
 use crate::errors::{Error, Result};
+#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
+use crate::traits::{
+    modular::{ModulusParams, Pow, PowBoundedExp},
+    UnsignedModularInt,
+};
 
 #[cfg(feature = "alloc")]
 pub(crate) fn emsa_pss_encode<D>(
@@ -24,6 +29,28 @@ pub(crate) fn emsa_pss_encode<D>(
     salt: &[u8],
     hash: &mut D,
 ) -> Result<Vec<u8>>
+where
+    D: Digest + FixedOutputReset,
+{
+    let em_len = em_bits.div_ceil(8);
+    let mut em = vec![0; em_len];
+    emsa_pss_encode_into(m_hash, em_bits, salt, hash, &mut em)?;
+    Ok(em)
+}
+
+/// EMSA-PSS encode, RFC 8017 § 9.1.1 — slice-output variant.
+///
+/// Writes exactly `em_len = em_bits.div_ceil(8)` bytes into the head of
+/// `storage`. `storage.len()` must be at least `em_len`; on success, the
+/// returned slice is `&storage[..em_len]`.
+#[inline]
+pub fn emsa_pss_encode_into<'a, D>(
+    m_hash: &[u8],
+    em_bits: usize,
+    salt: &[u8],
+    hash: &mut D,
+    storage: &'a mut [u8],
+) -> Result<&'a [u8]>
 where
     D: Digest + FixedOutputReset,
 {
@@ -47,7 +74,10 @@ where
         return Err(Error::Internal);
     }
 
-    let mut em = vec![0; em_len];
+    let em = storage
+        .get_mut(..em_len)
+        .ok_or(Error::OutputBufferTooSmall)?;
+    em.fill(0);
 
     let (db, h) = em.split_at_mut(em_len - h_len - 1);
     let h = &mut h[..(em_len - 1) - db.len()];
@@ -170,6 +200,80 @@ where
     em[em_len - 1] = 0xBC;
 
     Ok(em)
+}
+
+/// ⚠️ RSASSA-PSS sign — heapless-compatible, generic over the integer backend.
+///
+/// Composes the four byte/integer steps of RSASSA-PSS-SIGN:
+///
+/// 1. [`emsa_pss_encode_into`] — build the EM encoding for `(m_hash, salt)`
+///    into `em_storage`. `em_bits = key_bits - 1` per RFC 8017 § 8.1.1 is
+///    derived internally from `n_params.bits_precision()`.
+/// 2. [`UnsignedModularInt::try_from_be_bytes_vartime`] — bytes → integer.
+/// 3. [`crate::algorithms::rsa::rsa_private_op_and_check`] — CT in the
+///    secret exponent on the Ct-personality heapless path, with a
+///    verify-after-sign integrity check on every backend.
+/// 4. `uint_to_be_pad_into` — integer → bytes, left-padded to `k`.
+///
+/// `k` is the byte length of the modulus `n` (matches
+/// `PublicKeyParts::size()`). `sig_storage.len() >= k` and
+/// `em_storage.len() >= em_len` are both checked up front; either
+/// produces a fast-fail error before any hashing or exponentiation runs.
+///
+/// # ☢️️ WARNING: HAZARDOUS API ☢️
+///
+/// Caller is responsible for hashing the message and generating the random
+/// `salt`. This is the raw PSS sign primitive — wrap it in a higher-level
+/// `SigningKey<D>` for real use.
+///
+/// TODO: switch the final serialization to `uint_to_zeroizing_be_pad_into`
+/// once fixed-bigint provides `Zeroize` for `BytesHolder`. The
+/// intermediate `T::Bytes` produced by `s.to_be_bytes()` carries the
+/// just-signed value briefly on the stack; today it's a soft-leak window
+/// the future zeroizing path closes.
+// Consumer (the heapless `pss::SigningKey<D>` wrapper) lands in a later PR.
+#[allow(dead_code)]
+#[allow(clippy::too_many_arguments)] // Composing four byte/integer steps; splitting helps nothing.
+#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
+pub fn sign_into<'sig, T, M, D>(
+    n_params: &M,
+    d: &T,
+    e: &T,
+    m_hash: &[u8],
+    salt: &[u8],
+    k: usize,
+    hash: &mut D,
+    em_storage: &mut [u8],
+    sig_storage: &'sig mut [u8],
+) -> Result<&'sig [u8]>
+where
+    T: UnsignedModularInt,
+    M: ModulusParams<Modulus = T>,
+    M::MontgomeryForm: Pow<M> + PowBoundedExp<M>,
+    D: Digest + FixedOutputReset,
+{
+    // `k` must equal the ceiling-byte length of the modulus, matching
+    // `PublicKeyParts::size()` (which the public-side verifier uses for
+    // its own length check). `div_ceil` not floor div — for a key whose
+    // `bits_precision()` is not a multiple of 8 (e.g. an imported
+    // 2049-bit RSA modulus on the BoxedUint backend) the floor would
+    // reject the only `k` value that would actually round-trip.
+    let key_bits = n_params.bits_precision() as usize;
+    if k != key_bits.div_ceil(8) {
+        return Err(Error::InvalidArguments);
+    }
+    if sig_storage.len() < k {
+        return Err(Error::OutputBufferTooSmall);
+    }
+    // RFC 8017 § 8.1.1: em_bits ≡ modulus_bits − 1.
+    let em_bits = key_bits - 1;
+    if em_storage.len() < em_bits.div_ceil(8) {
+        return Err(Error::OutputBufferTooSmall);
+    }
+    let em_slice = emsa_pss_encode_into(m_hash, em_bits, salt, hash, em_storage)?;
+    let em = T::try_from_be_bytes_vartime(em_slice)?;
+    let s = crate::algorithms::rsa::rsa_private_op_and_check(&em, d, e, n_params)?;
+    crate::algorithms::pad::uint_to_be_pad_into(s, k, sig_storage)
 }
 
 fn emsa_pss_verify_pre<'a>(

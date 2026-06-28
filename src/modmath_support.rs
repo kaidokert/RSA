@@ -873,6 +873,63 @@ mod private_op_tests {
         assert_eq!(recovered.as_ref(), expected_em);
     }
 
+    #[test]
+    fn pss_sign_into_round_trip_2048_sha1() {
+        use crate::algorithms::pss::{emsa_pss_verify, sign_into};
+        use crate::traits::PublicKeyParts;
+        use digest::Digest;
+        use sha1::Sha1;
+
+        type U2048 = FixedUInt<u8, 256, Ct>;
+        const K: usize = 256;
+        const KEY_BITS: usize = 2048;
+
+        let key = public_key_ct_from_be_bytes::<U2048>(&N_2048, 65537).unwrap();
+        let d = wrap_value(
+            <U2048 as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(&D_2048).unwrap(),
+        );
+        let e = wrap_value(
+            <U2048 as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(&[0x01, 0x00, 0x01])
+                .unwrap(),
+        );
+
+        let digest = [0xAAu8; 20];
+        let salt: &[u8] = &[]; // empty salt → deterministic encoding
+        let mut hash = Sha1::new();
+
+        let mut em_storage = [0u8; K];
+        let mut sig_storage = [0u8; K];
+        let sig = sign_into(
+            key.n_params(),
+            &d,
+            &e,
+            &digest,
+            salt,
+            K,
+            &mut hash,
+            &mut em_storage,
+            &mut sig_storage,
+        )
+        .unwrap();
+        assert_eq!(sig.len(), K);
+
+        // Roundtrip via public op: `sig^e mod n` must yield a valid PSS-encoded
+        // EM for `(digest, salt)`. `emsa_pss_verify` modifies `em` in place
+        // (MGF unmask), so copy the recovered bytes into a mutable buffer.
+        let recovered = public_key_op_ct(&key, sig).unwrap();
+        let mut em_copy = [0u8; K];
+        em_copy.copy_from_slice(recovered.as_ref());
+        let mut verify_hash = Sha1::new();
+        emsa_pss_verify(
+            &digest,
+            &mut em_copy,
+            Some(salt.len()),
+            &mut verify_hash,
+            KEY_BITS,
+        )
+        .unwrap();
+    }
+
     // Local alias for `rsa_public_op_ct` — keeps the test's call-site short.
     fn public_key_op_ct<T>(
         key: &crate::key::GenericRsaPublicKey<ModMathValue<T>, ModMathParams<T, Ct>>,

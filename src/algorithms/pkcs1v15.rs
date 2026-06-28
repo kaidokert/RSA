@@ -235,11 +235,13 @@ where
     M: ModulusParams<Modulus = T>,
     M::MontgomeryForm: Pow<M> + PowBoundedExp<M>,
 {
-    // `k` must match the modulus width, otherwise we'd produce a signature
-    // that round-trips against a *different* modulus interpretation than
-    // the one the verifier sees. Same shape as upstream `rsa_decrypt`'s
-    // `c.bits_precision() == n.bits_precision()` check.
-    if k != n_params.bits_precision() as usize / 8 {
+    // `k` must equal the ceiling-byte length of the modulus, matching
+    // `PublicKeyParts::size()` (which the public-side verifier uses for
+    // its own length check). `div_ceil` not floor div — for a key whose
+    // `bits_precision()` is not a multiple of 8 (e.g. an imported
+    // 2049-bit RSA modulus on the BoxedUint backend) the floor would
+    // reject the only `k` value that would actually round-trip.
+    if k != (n_params.bits_precision() as usize).div_ceil(8) {
         return Err(Error::InvalidArguments);
     }
     // Fail fast on a too-small `sig_storage` rather than letting
