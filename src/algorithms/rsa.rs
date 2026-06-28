@@ -305,7 +305,13 @@ where
     M::MontgomeryForm: Pow<M> + PowBoundedExp<M>,
 {
     let m = rsa_private_op(c, d, n_params);
-    let check = pow_mod_params_vartime_exp_bits(&m, e, e.bits(), n_params);
+    // `m < n` by construction (output of `rsa_private_op` is in `[0, n)` after
+    // Montgomery retrieve), so we route through `from_reduced` to skip the
+    // variable-time reduction `from_value` would perform on BoxedUint —
+    // `from_value -> rem_vartime` would otherwise leak `m` via timing.
+    let m_sized = m.clone().resize_unchecked(n_params.bits_precision());
+    let m_mont = M::MontgomeryForm::from_reduced(m_sized, n_params);
+    let check = m_mont.pow_bounded_exp(e, e.bits()).retrieve();
     if *c != check {
         return Err(Error::Internal);
     }
