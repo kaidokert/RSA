@@ -773,8 +773,7 @@ mod private_op_tests {
         let c = wrap_value(SmallUCt::from(32u8));
         let bad_d = wrap_value(SmallUCt::from(11u8));
         let e = wrap_value(SmallUCt::from(5u8));
-        let result =
-            crate::algorithms::rsa::rsa_private_op_and_check(&c, &bad_d, &e, &n_params);
+        let result = crate::algorithms::rsa::rsa_private_op_and_check(&c, &bad_d, &e, &n_params);
         assert!(result.is_err());
     }
 }
