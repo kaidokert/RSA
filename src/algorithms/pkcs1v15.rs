@@ -235,6 +235,19 @@ where
     M: ModulusParams<Modulus = T>,
     M::MontgomeryForm: Pow<M> + PowBoundedExp<M>,
 {
+    // `k` must match the modulus width, otherwise we'd produce a signature
+    // that round-trips against a *different* modulus interpretation than
+    // the one the verifier sees. Same shape as upstream `rsa_decrypt`'s
+    // `c.bits_precision() == n.bits_precision()` check.
+    if k != n_params.bits_precision() as usize / 8 {
+        return Err(Error::InvalidArguments);
+    }
+    // Fail fast on a too-small `sig_storage` rather than letting
+    // `uint_to_be_pad_into` surface `OutputBufferTooSmall` after the
+    // exponentiation work is already done.
+    if sig_storage.len() < k {
+        return Err(Error::OutputBufferTooSmall);
+    }
     let em_slice = pkcs1v15_sign_pad_into(prefix, hashed, k, em_storage)?;
     let em = T::try_from_be_bytes_vartime(em_slice)?;
     let s = crate::algorithms::rsa::rsa_private_op_and_check(&em, d, e, n_params)?;
