@@ -872,7 +872,6 @@ mod private_op_tests {
 
         let digest = [0xAAu8; 20];
         let salt: &[u8] = &[]; // empty salt → deterministic encoding
-        let em_bits = KEY_BITS - 1;
         let mut hash = Sha1::new();
 
         let mut em_storage = [0u8; K];
@@ -883,7 +882,6 @@ mod private_op_tests {
             &e,
             &digest,
             salt,
-            em_bits,
             K,
             &mut hash,
             &mut em_storage,

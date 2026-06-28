@@ -207,24 +207,24 @@ where
 /// Composes the four byte/integer steps of RSASSA-PSS-SIGN:
 ///
 /// 1. [`emsa_pss_encode_into`] — build the EM encoding for `(m_hash, salt)`
-///    into `em_storage`. `em_bits = key_bits - 1` per RFC 8017 § 8.1.1
-///    (caller passes this explicitly to avoid depending on a bit-counting
-///    method on `T`).
+///    into `em_storage`. `em_bits = key_bits - 1` per RFC 8017 § 8.1.1 is
+///    derived internally from `n_params.bits_precision()`.
 /// 2. [`UnsignedModularInt::try_from_be_bytes_vartime`] — bytes → integer.
 /// 3. [`crate::algorithms::rsa::rsa_private_op_and_check`] — CT in the
 ///    secret exponent on the Ct-personality heapless path, with a
 ///    verify-after-sign integrity check on every backend.
 /// 4. `uint_to_be_pad_into` — integer → bytes, left-padded to `k`.
 ///
-/// `k` is the byte length of the modulus `n`. `sig_storage.len() >= k` and
-/// `em_storage.len() >= em_bits.div_ceil(8)` are checked up front.
+/// `k` is the byte length of the modulus `n` (matches
+/// `PublicKeyParts::size()`). `sig_storage.len() >= k` and
+/// `em_storage.len() >= em_len` are both checked up front; either
+/// produces a fast-fail error before any hashing or exponentiation runs.
 ///
 /// # ☢️️ WARNING: HAZARDOUS API ☢️
 ///
-/// Caller is responsible for: hashing the message, generating the random
-/// `salt`, and passing the correct `em_bits = key_bits - 1`. This is the
-/// raw PSS sign primitive — wrap it in a higher-level `SigningKey<D>` for
-/// real use.
+/// Caller is responsible for hashing the message and generating the random
+/// `salt`. This is the raw PSS sign primitive — wrap it in a higher-level
+/// `SigningKey<D>` for real use.
 ///
 /// TODO: switch the final serialization to `uint_to_zeroizing_be_pad_into`
 /// once fixed-bigint provides `Zeroize` for `BytesHolder`. The
@@ -241,7 +241,6 @@ pub fn sign_into<'sig, T, M, D>(
     e: &T,
     m_hash: &[u8],
     salt: &[u8],
-    em_bits: usize,
     k: usize,
     hash: &mut D,
     em_storage: &mut [u8],
@@ -253,12 +252,22 @@ where
     M::MontgomeryForm: Pow<M> + PowBoundedExp<M>,
     D: Digest + FixedOutputReset,
 {
-    // Same shape as the upstream `rsa_decrypt` precision check + the
-    // matching `pkcs1v15::sign_into` upfront guards.
-    if k != n_params.bits_precision() as usize / 8 {
+    // `k` must equal the ceiling-byte length of the modulus, matching
+    // `PublicKeyParts::size()` (which the public-side verifier uses for
+    // its own length check). `div_ceil` not floor div — for a key whose
+    // `bits_precision()` is not a multiple of 8 (e.g. an imported
+    // 2049-bit RSA modulus on the BoxedUint backend) the floor would
+    // reject the only `k` value that would actually round-trip.
+    let key_bits = n_params.bits_precision() as usize;
+    if k != key_bits.div_ceil(8) {
         return Err(Error::InvalidArguments);
     }
     if sig_storage.len() < k {
+        return Err(Error::OutputBufferTooSmall);
+    }
+    // RFC 8017 § 8.1.1: em_bits ≡ modulus_bits − 1.
+    let em_bits = key_bits - 1;
+    if em_storage.len() < em_bits.div_ceil(8) {
         return Err(Error::OutputBufferTooSmall);
     }
     let em_slice = emsa_pss_encode_into(m_hash, em_bits, salt, hash, em_storage)?;
