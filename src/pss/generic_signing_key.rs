@@ -31,7 +31,6 @@ use zeroize::Zeroize;
 ///
 /// PSS has no DigestInfo prefix — `D` is purely a phantom marker for the
 /// digest algorithm used by both encode and verify.
-#[derive(Clone)]
 pub struct GenericSigningKey<D, T, M>
 where
     D: Digest,
@@ -41,6 +40,43 @@ where
     pub(super) inner: GenericRsaPrivateKey<T, M>,
     pub(super) salt_len: usize,
     pub(super) phantom: PhantomData<D>,
+}
+
+// Manual Clone impls — split by `private-key` cfg to avoid imposing
+// the `M::MontgomeryForm: Clone` bound on heapless backends where it
+// isn't needed (only `GenericRsaPrivateKey`'s `precomputed` field
+// requires it, and that field is `cfg(private-key)`).
+#[cfg(feature = "private-key")]
+impl<D, T, M> Clone for GenericSigningKey<D, T, M>
+where
+    D: Digest,
+    T: UnsignedModularInt + Zeroize + Clone,
+    M: ModulusParams<Modulus = T> + Clone,
+    M::MontgomeryForm: Clone,
+{
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+            salt_len: self.salt_len,
+            phantom: PhantomData,
+        }
+    }
+}
+
+#[cfg(not(feature = "private-key"))]
+impl<D, T, M> Clone for GenericSigningKey<D, T, M>
+where
+    D: Digest,
+    T: UnsignedModularInt + Zeroize + Clone,
+    M: ModulusParams<Modulus = T> + Clone,
+{
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+            salt_len: self.salt_len,
+            phantom: PhantomData,
+        }
+    }
 }
 
 impl<D, T, M> GenericSigningKey<D, T, M>
