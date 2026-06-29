@@ -278,6 +278,8 @@ pub use crate::{
     pkcs1v15::{Pkcs1v15Encrypt, Pkcs1v15Sign},
 };
 
+#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
+pub use crate::key::GenericRsaPrivateKey;
 #[cfg(feature = "private-key")]
 pub use crate::key::RsaPrivateKey;
 

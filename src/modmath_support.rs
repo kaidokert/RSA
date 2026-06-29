@@ -1187,6 +1187,124 @@ mod private_op_tests {
     }
 
     #[test]
+    fn pss_signing_key_round_trip_2048_sha1() {
+        use crate::algorithms::pss::emsa_pss_verify;
+        use crate::key::GenericRsaPrivateKey;
+        use crate::pss::GenericSigningKey;
+        use digest::Digest;
+        use sha1::Sha1;
+
+        type U2048 = FixedUInt<u8, 256, Ct>;
+        const K: usize = 256;
+        const KEY_BITS: usize = 2048;
+
+        let key =
+            crate::modmath_support::public_key_ct_from_be_bytes::<U2048>(&N_2048, 65537).unwrap();
+        let d = wrap_value(
+            <U2048 as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(&D_2048).unwrap(),
+        );
+        let priv_key = GenericRsaPrivateKey::from_components(key.clone(), d);
+        // Salt length = 0 → deterministic encoding, easy roundtrip.
+        let signing_key = GenericSigningKey::<Sha1, _, _>::new_with_salt_len(priv_key, 0);
+
+        let msg: &[u8] = b"pss-roundtrip test message";
+        let digest = Sha1::digest(msg);
+        let mut em_storage = [0u8; K];
+        let mut sig_storage = [0u8; K];
+        let sig_slice = signing_key
+            .try_sign_prehash_with_salt_into(&digest, &[], &mut em_storage, &mut sig_storage)
+            .unwrap();
+        assert_eq!(sig_slice.len(), K);
+
+        // Roundtrip: `sig^e mod n` should yield a valid PSS-encoded EM
+        // for `(digest, salt_len=0)`. `emsa_pss_verify` modifies em
+        // in place (MGF unmask), so copy first.
+        let recovered = public_key_op_ct(&key, sig_slice).unwrap();
+        let mut em_copy = [0u8; K];
+        em_copy.copy_from_slice(recovered.as_ref());
+        let mut verify_hash = Sha1::new();
+        emsa_pss_verify(&digest, &mut em_copy, Some(0), &mut verify_hash, KEY_BITS).unwrap();
+    }
+
+    #[test]
+    fn pss_signing_key_rejects_wrong_prehash_length() {
+        use crate::key::GenericRsaPrivateKey;
+        use crate::pss::GenericSigningKey;
+        use sha1::Sha1;
+
+        type U2048 = FixedUInt<u8, 256, Ct>;
+        const K: usize = 256;
+
+        let key =
+            crate::modmath_support::public_key_ct_from_be_bytes::<U2048>(&N_2048, 65537).unwrap();
+        let d = wrap_value(
+            <U2048 as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(&D_2048).unwrap(),
+        );
+        let priv_key = GenericRsaPrivateKey::from_components(key, d);
+        let signing_key = GenericSigningKey::<Sha1, _, _>::new_with_salt_len(priv_key, 0);
+
+        let bad_prehash = [0u8; 21]; // SHA-1 is 20 bytes.
+        let mut em_storage = [0u8; K];
+        let mut sig_storage = [0u8; K];
+        let result = signing_key.try_sign_prehash_with_salt_into(
+            &bad_prehash,
+            &[],
+            &mut em_storage,
+            &mut sig_storage,
+        );
+        assert!(matches!(result, Err(Error::InputNotHashed)));
+    }
+
+    #[test]
+    fn pss_signing_key_rejects_salt_len_mismatch() {
+        use crate::key::GenericRsaPrivateKey;
+        use crate::pss::GenericSigningKey;
+        use sha1::Sha1;
+
+        type U2048 = FixedUInt<u8, 256, Ct>;
+        const K: usize = 256;
+
+        let key =
+            crate::modmath_support::public_key_ct_from_be_bytes::<U2048>(&N_2048, 65537).unwrap();
+        let d = wrap_value(
+            <U2048 as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(&D_2048).unwrap(),
+        );
+        let priv_key = GenericRsaPrivateKey::from_components(key, d);
+        // salt_len configured to 20; supply 16 -> mismatch.
+        let signing_key = GenericSigningKey::<Sha1, _, _>::new_with_salt_len(priv_key, 20);
+
+        let prehash = [0u8; 20];
+        let wrong_salt = [0u8; 16];
+        let mut em_storage = [0u8; K];
+        let mut sig_storage = [0u8; K];
+        let result = signing_key.try_sign_prehash_with_salt_into(
+            &prehash,
+            &wrong_salt,
+            &mut em_storage,
+            &mut sig_storage,
+        );
+        assert!(matches!(result, Err(Error::InvalidArguments)));
+    }
+
+    #[test]
+    fn pss_signing_key_satisfies_zeroize() {
+        use crate::key::GenericRsaPrivateKey;
+        use crate::pss::GenericSigningKey;
+        use sha1::Sha1;
+        fn assert_zeroize<Z: Zeroize>() {}
+        assert_zeroize::<
+            GenericSigningKey<Sha1, ModMathValue<SmallUCt>, ModMathParams<SmallUCt, Ct>>,
+        >();
+
+        let public =
+            crate::modmath_support::public_key_ct_from_be_bytes::<SmallUCt>(&[35u8], 5).unwrap();
+        let priv_key =
+            GenericRsaPrivateKey::from_components(public, wrap_value(SmallUCt::from(29u8)));
+        let mut signing_key = GenericSigningKey::<Sha1, _, _>::new(priv_key);
+        signing_key.zeroize();
+    }
+
+    #[test]
     fn pkcs1v15_signing_key_satisfies_zeroize() {
         use crate::key::GenericRsaPrivateKey;
         use crate::pkcs1v15::GenericSigningKey;
