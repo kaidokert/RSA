@@ -34,6 +34,8 @@ use crate::algorithms::rsa::{
 #[cfg(feature = "private-key")]
 use crate::dummy_rng::DummyRng;
 use crate::errors::{Error, Result};
+#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
+use crate::traits::keys::GenericPrivateKeyParts;
 use crate::traits::keys::PublicKeyParts;
 #[cfg(feature = "private-key")]
 use crate::traits::keys::{CrtValue, PrivateKeyParts};
@@ -94,6 +96,142 @@ where
         state.write(self.n.as_ref().to_be_bytes().as_ref());
         state.write(self.e.to_be_bytes().as_ref());
     }
+}
+
+/// Generic RSA private key — heapless-compatible value type.
+///
+/// Holds the public components plus the secret exponent `d`. Mirrors
+/// [`GenericRsaPublicKey`] in shape; satisfies both [`PublicKeyParts<T>`]
+/// (via delegation to the inner pubkey) and [`GenericPrivateKeyParts<T>`]
+/// — the Montgomery parameter type `M` comes through `PublicKeyParts`'s
+/// `MontyParams` associated type.
+///
+/// Deliberately minimal: no `primes`, no `precomputed` CRT values, no
+/// keygen. This is the (n, e, d) private form suitable for the raw
+/// signing path. CRT support arrives later behind a separate
+/// extension trait when the dependency stack provides CT modular
+/// inverse — see the roadmap in `CLAUDE.md`.
+#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
+#[derive(Clone)]
+pub struct GenericRsaPrivateKey<T, M>
+where
+    T: UnsignedModularInt + Zeroize,
+    M: ModulusParams<Modulus = T>,
+{
+    /// Public components of the private key.
+    pubkey_components: GenericRsaPublicKey<T, M>,
+    /// Private exponent.
+    d: T,
+}
+
+// Manual `Debug` impl — never print `d`. Mirrors the redaction in the
+// existing alloc-side `RsaPrivateKey::fmt` so `{:?}` on a key value
+// can't leak private material into logs.
+#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
+impl<T, M> fmt::Debug for GenericRsaPrivateKey<T, M>
+where
+    T: UnsignedModularInt + Zeroize,
+    M: ModulusParams<Modulus = T>,
+    GenericRsaPublicKey<T, M>: fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("GenericRsaPrivateKey")
+            .field("pubkey_components", &self.pubkey_components)
+            .field("d", &"...")
+            .finish()
+    }
+}
+
+// Consumer (heapless `pkcs1v15::SigningKey<D>` / `pss::SigningKey<D>`
+// wrappers) lands in Phase 2.
+#[allow(dead_code)]
+#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
+impl<T, M> GenericRsaPrivateKey<T, M>
+where
+    T: UnsignedModularInt + Zeroize,
+    M: ModulusParams<Modulus = T>,
+{
+    /// Construct from the components of a precomputed key. Caller is
+    /// responsible for the cryptographic relationship between `n`, `e`,
+    /// and `d` (typically `e * d ≡ 1 mod λ(n)`); no validation is
+    /// performed here.
+    pub fn from_components(pubkey_components: GenericRsaPublicKey<T, M>, d: T) -> Self {
+        Self {
+            pubkey_components,
+            d,
+        }
+    }
+
+    /// Borrow the public-key components.
+    pub fn as_public(&self) -> &GenericRsaPublicKey<T, M> {
+        &self.pubkey_components
+    }
+}
+
+#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
+impl<T, M> PublicKeyParts<T> for GenericRsaPrivateKey<T, M>
+where
+    T: UnsignedModularInt + Zeroize,
+    M: ModulusParams<Modulus = T>,
+{
+    type MontyParams = M;
+
+    fn n(&self) -> &NonZero<T> {
+        self.pubkey_components.n()
+    }
+
+    fn e(&self) -> &T {
+        self.pubkey_components.e()
+    }
+
+    fn n_params(&self) -> &Self::MontyParams {
+        self.pubkey_components.n_params()
+    }
+}
+
+#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
+impl<T, M> GenericPrivateKeyParts<T> for GenericRsaPrivateKey<T, M>
+where
+    T: UnsignedModularInt + Zeroize,
+    M: ModulusParams<Modulus = T>,
+{
+    fn d(&self) -> &T {
+        &self.d
+    }
+}
+
+// Canonical `Zeroize` shape: impl on the type, `Drop` delegates so
+// the wipe lives in one place, `ZeroizeOnDrop` is the load-bearing
+// marker callers can rely on. Mirrors the `ModMathForm` pattern from
+// PR #17. The pubkey is public material; only `d` needs wiping.
+#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
+impl<T, M> Zeroize for GenericRsaPrivateKey<T, M>
+where
+    T: UnsignedModularInt + Zeroize,
+    M: ModulusParams<Modulus = T>,
+{
+    fn zeroize(&mut self) {
+        self.d.zeroize();
+    }
+}
+
+#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
+impl<T, M> Drop for GenericRsaPrivateKey<T, M>
+where
+    T: UnsignedModularInt + Zeroize,
+    M: ModulusParams<Modulus = T>,
+{
+    fn drop(&mut self) {
+        self.zeroize();
+    }
+}
+
+#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
+impl<T, M> ZeroizeOnDrop for GenericRsaPrivateKey<T, M>
+where
+    T: UnsignedModularInt + Zeroize,
+    M: ModulusParams<Modulus = T>,
+{
 }
 
 /// Represents a whole RSA key, public and private parts.

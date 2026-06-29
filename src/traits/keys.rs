@@ -49,6 +49,45 @@ pub trait PublicKeyParts<T: UnsignedModularInt> {
     }
 }
 
+/// Generic components of an RSA private key — minimal trait for the
+/// heapless / wip-private-key port.
+///
+/// Mirrors [`PublicKeyParts`] in shape: generic over both the integer
+/// type `T` and the Montgomery parameter type `M`, no concrete
+/// dependency on `BoxedUint`/`BoxedMontyParams`. The minimal surface
+/// is `d()` only — CRT accessors (`dp`/`dq`/`qinv`/`p_params`/`q_params`)
+/// are deliberately omitted from this trait; they'll arrive on a
+/// future `GenericCrtPrivateKeyParts` extension trait when CT modular
+/// inverse lands upstream and we can support CRT on the heapless path.
+///
+/// The legacy [`PrivateKeyParts`] (alloc-bound, `BoxedUint`-concrete)
+/// is bridged to this trait via a blanket impl, so any existing
+/// `K: PrivateKeyParts` value also satisfies
+/// `GenericPrivateKeyParts<BoxedUint, BoxedMontyParams>`.
+#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
+pub trait GenericPrivateKeyParts<T>: PublicKeyParts<T>
+where
+    T: UnsignedModularInt,
+{
+    /// Returns the private exponent of the key.
+    fn d(&self) -> &T;
+}
+
+/// Bridge: every legacy [`PrivateKeyParts`] impl also satisfies the
+/// generic trait at the concrete `BoxedUint` substitution. Lets
+/// existing alloc-side consumers (and the upstream
+/// `algorithms::rsa::rsa_decrypt[_and_check]` path) be re-bound on
+/// `GenericPrivateKeyParts` incrementally without breaking compilation.
+#[cfg(feature = "private-key")]
+impl<K> GenericPrivateKeyParts<BoxedUint> for K
+where
+    K: PrivateKeyParts,
+{
+    fn d(&self) -> &BoxedUint {
+        PrivateKeyParts::d(self)
+    }
+}
+
 /// Components of an RSA private key.
 #[cfg(feature = "private-key")]
 pub trait PrivateKeyParts: PublicKeyParts<BoxedUint> {
