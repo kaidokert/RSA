@@ -250,6 +250,19 @@ where
     }
 }
 
+// Opt the alloc-side newtype into raw `(public_key, d)` private-key
+// construction. The heapless-build blanket on
+// `FixedWidthUnsignedInt + PartialOrd` doesn't reach `ModMathValue<T>`
+// (a newtype, not itself `FixedWidthUnsignedInt`), so impl it here.
+#[cfg(all(
+    feature = "alloc",
+    any(feature = "private-key", feature = "wip-private-key")
+))]
+impl<T> crate::traits::keys::RawPrivateKeyConstructible for ModMathValue<T> where
+    T: FixedWidthUnsignedInt + PartialOrd
+{
+}
+
 #[cfg(not(feature = "alloc"))]
 pub type ModMathValue<T> = T;
 
