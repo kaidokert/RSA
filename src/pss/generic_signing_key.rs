@@ -53,7 +53,7 @@ where
     GenericRsaPrivateKey<T, M>: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("SigningKey")
+        f.debug_struct("GenericSigningKey")
             .field("inner", &self.inner)
             .field("salt_len", &self.salt_len)
             .finish()

@@ -7,11 +7,11 @@
 //! the DigestInfo prefix, caller-supplied scratch buffers for the EM
 //! and signature output.
 
-use super::sign_into;
 #[cfg(feature = "alloc")]
-use super::{pkcs1v15_generate_prefix, GenericVerifyingKey};
+use super::pkcs1v15_generate_prefix;
 #[cfg(not(feature = "alloc"))]
 use super::{pkcs1v15_generate_prefix_helper, Prefix};
+use super::{sign_into, GenericVerifyingKey};
 use crate::{
     errors::Result,
     key::GenericRsaPrivateKey,
@@ -55,7 +55,7 @@ where
     GenericRsaPrivateKey<T, M>: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("SigningKey")
+        f.debug_struct("GenericSigningKey")
             .field("inner", &self.inner)
             .field("prefix", &self.prefix)
             .finish()
@@ -232,24 +232,26 @@ where
     }
 }
 
-#[cfg(feature = "alloc")]
 impl<D, T, M> GenericSigningKey<D, T, M>
 where
-    D: Digest + AssociatedOid,
+    D: Digest,
     T: UnsignedModularInt + Zeroize,
     M: ModulusParams<Modulus = T>,
 {
     /// Derive the matching [`GenericVerifyingKey`] from this signing
-    /// key, regenerating the DigestInfo prefix from `D`. Not named
+    /// key, preserving the existing DigestInfo prefix (so unprefixed
+    /// signing keys yield unprefixed verifying keys). Not named
     /// `verifying_key` because that would shadow
-    /// [`signature::Keypair::verifying_key`], which preserves the
-    /// signing key's existing prefix (important for unprefixed
-    /// signing keys whose verifying-side prefix must also be empty).
+    /// [`signature::Keypair::verifying_key`] for callers using
+    /// method-call syntax.
     pub fn to_verifying_key(&self) -> GenericVerifyingKey<D, T, M>
     where
-        GenericRsaPrivateKey<T, M>: Clone,
         crate::key::GenericRsaPublicKey<T, M>: Clone,
     {
-        GenericVerifyingKey::new(self.inner.as_public().clone())
+        GenericVerifyingKey {
+            inner: self.inner.as_public().clone(),
+            prefix: self.prefix.clone(),
+            phantom: PhantomData,
+        }
     }
 }
