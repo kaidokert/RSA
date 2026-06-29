@@ -154,7 +154,7 @@ where
 #[cfg(feature = "private-key")]
 #[deprecated(
     since = "0.3.0",
-    note = "use `GenericPrivateKeyParts<BoxedUint>` (generic over backend) instead; this trait will be removed in a future major version"
+    note = "use `GenericPrivateKeyParts<BoxedUint, MontyParams = BoxedMontyParams>` (generic over backend) instead; this trait will be removed in a future major version"
 )]
 pub trait PrivateKeyParts: PublicKeyParts<BoxedUint> {
     /// Returns the private exponent of the key.

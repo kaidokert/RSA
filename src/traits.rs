@@ -11,9 +11,6 @@ pub use keys::GenericPrivateKeyParts;
 #[cfg(feature = "private-key")]
 #[allow(deprecated)]
 pub use keys::PrivateKeyParts;
-#[cfg(not(feature = "private-key"))]
-pub use keys::PublicKeyParts;
-#[cfg(feature = "private-key")]
 pub use keys::PublicKeyParts;
 pub use modular::{FixedWidthUnsignedInt, IntegerResize, NonZero, Odd, UnsignedModularInt};
 pub use padding::{PaddingScheme, SignatureScheme};
