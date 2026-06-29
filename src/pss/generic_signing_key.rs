@@ -17,6 +17,7 @@ use crate::{
         PublicKeyParts, UnsignedModularInt,
     },
 };
+use core::fmt;
 use core::marker::PhantomData;
 use digest::{Digest, FixedOutputReset};
 use rand_core::TryCryptoRng;
@@ -40,6 +41,23 @@ where
     pub(super) inner: GenericRsaPrivateKey<T, M>,
     pub(super) salt_len: usize,
     pub(super) phantom: PhantomData<D>,
+}
+
+// Manual `Debug` — `#[derive]` would synthesize unwanted bounds on
+// `D`/`T`/`M`; the inner private key already redacts `d`.
+impl<D, T, M> fmt::Debug for GenericSigningKey<D, T, M>
+where
+    D: Digest,
+    T: UnsignedModularInt + Zeroize,
+    M: ModulusParams<Modulus = T>,
+    GenericRsaPrivateKey<T, M>: fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SigningKey")
+            .field("inner", &self.inner)
+            .field("salt_len", &self.salt_len)
+            .finish()
+    }
 }
 
 // Manual Clone impls — split by `private-key` cfg to avoid imposing

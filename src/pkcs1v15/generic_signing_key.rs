@@ -21,6 +21,7 @@ use crate::{
     },
 };
 use const_oid::AssociatedOid;
+use core::fmt;
 use core::marker::PhantomData;
 use digest::Digest;
 use zeroize::Zeroize;
@@ -42,6 +43,23 @@ where
     #[cfg(not(feature = "alloc"))]
     pub(super) prefix: Prefix,
     pub(super) phantom: PhantomData<D>,
+}
+
+// Manual `Debug` — `#[derive]` would synthesize unwanted bounds on
+// `D`/`T`/`M`; the inner private key already redacts `d`.
+impl<D, T, M> fmt::Debug for GenericSigningKey<D, T, M>
+where
+    D: Digest,
+    T: UnsignedModularInt + Zeroize,
+    M: ModulusParams<Modulus = T>,
+    GenericRsaPrivateKey<T, M>: fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SigningKey")
+            .field("inner", &self.inner)
+            .field("prefix", &self.prefix)
+            .finish()
+    }
 }
 
 // Manual Clone impls — split by `private-key` cfg to avoid imposing
@@ -221,8 +239,13 @@ where
     T: UnsignedModularInt + Zeroize,
     M: ModulusParams<Modulus = T>,
 {
-    /// Derive the matching [`GenericVerifyingKey`] from this signing key.
-    pub fn verifying_key(&self) -> GenericVerifyingKey<D, T, M>
+    /// Derive the matching [`GenericVerifyingKey`] from this signing
+    /// key, regenerating the DigestInfo prefix from `D`. Not named
+    /// `verifying_key` because that would shadow
+    /// [`signature::Keypair::verifying_key`], which preserves the
+    /// signing key's existing prefix (important for unprefixed
+    /// signing keys whose verifying-side prefix must also be empty).
+    pub fn to_verifying_key(&self) -> GenericVerifyingKey<D, T, M>
     where
         GenericRsaPrivateKey<T, M>: Clone,
         crate::key::GenericRsaPublicKey<T, M>: Clone,
