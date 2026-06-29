@@ -1233,6 +1233,37 @@ mod private_op_tests {
     }
 
     #[test]
+    fn pss_signing_key_rejects_salt_len_mismatch() {
+        use crate::key::GenericRsaPrivateKey;
+        use crate::pss::GenericSigningKey;
+        use sha1::Sha1;
+
+        type U2048 = FixedUInt<u8, 256, Ct>;
+        const K: usize = 256;
+
+        let key =
+            crate::modmath_support::public_key_ct_from_be_bytes::<U2048>(&N_2048, 65537).unwrap();
+        let d = wrap_value(
+            <U2048 as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(&D_2048).unwrap(),
+        );
+        let priv_key = GenericRsaPrivateKey::from_components(key, d);
+        // salt_len configured to 20; supply 16 -> mismatch.
+        let signing_key = GenericSigningKey::<Sha1, _, _>::new_with_salt_len(priv_key, 20);
+
+        let prehash = [0u8; 20];
+        let wrong_salt = [0u8; 16];
+        let mut em_storage = [0u8; K];
+        let mut sig_storage = [0u8; K];
+        let result = signing_key.try_sign_prehash_with_salt_into(
+            &prehash,
+            &wrong_salt,
+            &mut em_storage,
+            &mut sig_storage,
+        );
+        assert!(matches!(result, Err(Error::InvalidArguments)));
+    }
+
+    #[test]
     fn pss_signing_key_satisfies_zeroize() {
         use crate::key::GenericRsaPrivateKey;
         use crate::pss::GenericSigningKey;

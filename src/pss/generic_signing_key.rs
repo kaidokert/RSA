@@ -158,7 +158,10 @@ where
     /// Sign with caller-supplied salt — useful for determinism in tests.
     ///
     /// Returns [`Error::InputNotHashed`] if `prehash.len()` doesn't match
-    /// `D::output_size()`.
+    /// `D::output_size()`. Returns [`Error::InvalidArguments`] if
+    /// `salt.len() != self.salt_len()` — a mismatch silently produces a
+    /// signature that no verifier configured with the key's advertised
+    /// `salt_len` will accept, so we reject it up front.
     pub fn try_sign_prehash_with_salt_into<'sig>(
         &self,
         prehash: &[u8],
@@ -168,6 +171,9 @@ where
     ) -> Result<&'sig [u8]> {
         if prehash.len() != <D as Digest>::output_size() {
             return Err(Error::InputNotHashed);
+        }
+        if salt.len() != self.salt_len {
+            return Err(Error::InvalidArguments);
         }
         let mut hash = D::new();
         sign_into(
