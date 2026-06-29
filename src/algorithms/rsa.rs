@@ -86,7 +86,13 @@ where
         c.try_resize(bits).ok_or(Error::Internal)?
     };
 
-    let is_multiprime = GenericPrivateKeyParts::primes(priv_key).len() > 2;
+    // Bind once — `GenericPrivateKeyParts::primes` default returns `&[]`,
+    // so a key that overrides the CRT accessors but not `primes` could
+    // otherwise reach the CRT branch and panic on `[0]`/`[1]`. The
+    // `primes.len() >= 2` guard below makes that impossible regardless
+    // of how the trait is implemented.
+    let primes = GenericPrivateKeyParts::primes(priv_key);
+    let is_multiprime = primes.len() > 2;
 
     let m = match (
         GenericPrivateKeyParts::dp(priv_key),
@@ -95,11 +101,13 @@ where
         GenericPrivateKeyParts::p_params(priv_key),
         GenericPrivateKeyParts::q_params(priv_key),
     ) {
-        (Some(dp), Some(dq), Some(qinv), Some(p_params), Some(q_params)) if !is_multiprime => {
+        (Some(dp), Some(dq), Some(qinv), Some(p_params), Some(q_params))
+            if !is_multiprime && primes.len() >= 2 =>
+        {
             // We have the precalculated values needed for the CRT.
 
-            let p = &GenericPrivateKeyParts::primes(priv_key)[0];
-            let q = &GenericPrivateKeyParts::primes(priv_key)[1];
+            let p = &primes[0];
+            let q = &primes[1];
 
             // precomputed: dP = (1/e) mod (p-1) = d mod (p-1)
             // precomputed: dQ = (1/e) mod (q-1) = d mod (q-1)
