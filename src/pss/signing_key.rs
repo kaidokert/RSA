@@ -1,6 +1,19 @@
-use super::{sign_digest, Signature, VerifyingKey};
+//! Boxed RSASSA-PSS signing key — alloc-side type alias and
+//! specializations over [`super::GenericSigningKey`]. Mirrors the
+//! pattern on the verify side (`verifying_key.rs`).
+//!
+//! The struct, generic constructors (`new`, `new_with_salt_len`),
+//! `Clone`, `Debug`, `AsRef<GenericRsaPrivateKey<T, M>>`, `Zeroize`,
+//! and the `try_sign_*_into` family all live on
+//! [`super::GenericSigningKey`]. This file holds only what's tied to
+//! the boxed substitution: keygen-bearing constructors, the
+//! `signature::*Signer` trait family (delegating to the alloc-side
+//! `sign_digest(...)`), encoding, serde, and the legacy `Keypair`
+//! wiring.
+
+use super::{sign_digest, GenericSigningKey, Signature, VerifyingKey};
 use crate::{Result, RsaPrivateKey};
-use core::marker::PhantomData;
+use crypto_bigint::{modular::BoxedMontyParams, BoxedUint};
 use digest::{Digest, FixedOutputReset, Update};
 use rand_core::{CryptoRng, TryCryptoRng};
 use signature::{
@@ -34,60 +47,33 @@ use {
 };
 
 /// Signing key for producing RSASSA-PSS signatures as described in
-/// [RFC8017 § 8.1].
+/// [RFC8017 § 8.1]. Boxed alias over [`GenericSigningKey`] — equivalent
+/// to `GenericSigningKey<D, BoxedUint, BoxedMontyParams>`.
 ///
 /// [RFC8017 § 8.1]: https://datatracker.ietf.org/doc/html/rfc8017#section-8.1
-#[derive(Debug, Clone)]
-pub struct SigningKey<D>
+pub type SigningKey<D> = GenericSigningKey<D, BoxedUint, BoxedMontyParams>;
+
+impl<D> GenericSigningKey<D, BoxedUint, BoxedMontyParams>
 where
     D: Digest,
 {
-    inner: RsaPrivateKey,
-    salt_len: usize,
-    phantom: PhantomData<D>,
-}
-
-impl<D> SigningKey<D>
-where
-    D: Digest,
-{
-    /// Create a new RSASSA-PSS signing key.
-    /// Digest output size is used as a salt length.
-    pub fn new(key: RsaPrivateKey) -> Self {
-        Self::new_with_salt_len(key, <D as Digest>::output_size())
-    }
-
-    /// Create a new RSASSA-PSS signing key with a salt of the given length.
-    pub fn new_with_salt_len(key: RsaPrivateKey, salt_len: usize) -> Self {
-        Self {
-            inner: key,
-            salt_len,
-            phantom: Default::default(),
-        }
-    }
-
-    /// Generate a new random RSASSA-PSS signing key.
-    /// Digest output size is used as a salt length.
+    /// Generate a fresh RSASSA-PSS signing key. Digest output size is
+    /// used as a salt length.
     pub fn random<R: CryptoRng + ?Sized>(rng: &mut R, bit_size: usize) -> Result<Self> {
         Self::random_with_salt_len(rng, bit_size, <D as Digest>::output_size())
     }
 
-    /// Generate a new random RSASSA-PSS signing key with a salt of the given length.
+    /// Generate a fresh RSASSA-PSS signing key with a salt of the given
+    /// length.
     pub fn random_with_salt_len<R: CryptoRng + ?Sized>(
         rng: &mut R,
         bit_size: usize,
         salt_len: usize,
     ) -> Result<Self> {
-        Ok(Self {
-            inner: RsaPrivateKey::new(rng, bit_size)?,
+        Ok(Self::new_with_salt_len(
+            RsaPrivateKey::new(rng, bit_size)?,
             salt_len,
-            phantom: Default::default(),
-        })
-    }
-
-    /// Return specified salt length for this key
-    pub fn salt_len(&self) -> usize {
-        self.salt_len
+        ))
     }
 }
 
@@ -195,15 +181,6 @@ where
 //
 // Other trait impls
 //
-
-impl<D> AsRef<RsaPrivateKey> for SigningKey<D>
-where
-    D: Digest,
-{
-    fn as_ref(&self) -> &RsaPrivateKey {
-        &self.inner
-    }
-}
 
 #[cfg(feature = "encoding")]
 impl<D> AssociatedAlgorithmIdentifier for SigningKey<D>
@@ -325,7 +302,6 @@ mod tests {
     #[cfg(all(feature = "hazmat", feature = "serde"))]
     fn test_serde() {
         use super::*;
-        use crate::RsaPrivateKey;
         use rand::rngs::ChaCha8Rng;
         use rand_core::SeedableRng;
         use serde_test::{assert_tokens, Configure, Token};
