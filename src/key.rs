@@ -454,16 +454,25 @@ where
     fn zeroize(&mut self) {
         self.dp.zeroize();
         self.dq.zeroize();
-        // TODO: once these have landed in crypto-bigint
+        // KNOWN GAP: `qinv` (M::MontgomeryForm), `p_params` / `q_params`
+        // (M) are not wiped because the trait doesn't require them to
+        // impl `Zeroize`, and upstream `BoxedMontyForm` /
+        // `BoxedMontyParams` don't yet. Re-enable once the dep stack
+        // does:
+        // self.qinv.zeroize();
         // self.p_params.zeroize();
         // self.q_params.zeroize();
     }
 }
 
+// `Drop` impl bounds must match the struct's exactly (Rust drop-check
+// rule). `T: UnsignedModularInt` already implies `T: Zeroize` via the
+// `FixedWidthUnsignedInt` supertrait, so the body's `self.zeroize()`
+// call resolves without an explicit `Zeroize` bound here.
 #[cfg(feature = "private-key")]
 impl<T, M> Drop for PrecomputedValues<T, M>
 where
-    T: UnsignedModularInt + Zeroize,
+    T: UnsignedModularInt,
     M: ModulusParams<Modulus = T>,
 {
     fn drop(&mut self) {
