@@ -1112,11 +1112,10 @@ mod private_op_tests {
             K: PublicKeyParts<T>,
         {
         }
-        fn assert_priv_parts<K, T, M>(_: &K)
+        fn assert_priv_parts<K, T>(_: &K)
         where
             T: UnsignedModularInt,
-            M: ModulusParams<Modulus = T>,
-            K: GenericPrivateKeyParts<T, M>,
+            K: GenericPrivateKeyParts<T>,
         {
         }
 
@@ -1127,7 +1126,7 @@ mod private_op_tests {
         let key = GenericRsaPrivateKey::from_components(public, wrap_value(SmallUCt::from(29u8)));
 
         assert_pub_parts::<_, ModMathValue<SmallUCt>>(&key);
-        assert_priv_parts::<_, ModMathValue<SmallUCt>, ModMathParams<SmallUCt, Ct>>(&key);
+        assert_priv_parts::<_, ModMathValue<SmallUCt>>(&key);
 
         // Round-trip: accessors return the values we constructed it with.
         assert_eq!(

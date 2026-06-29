@@ -65,24 +65,23 @@ pub trait PublicKeyParts<T: UnsignedModularInt> {
 /// `K: PrivateKeyParts` value also satisfies
 /// `GenericPrivateKeyParts<BoxedUint, BoxedMontyParams>`.
 #[cfg(any(feature = "private-key", feature = "wip-private-key"))]
-pub trait GenericPrivateKeyParts<T, M>: PublicKeyParts<T, MontyParams = M>
+pub trait GenericPrivateKeyParts<T>: PublicKeyParts<T>
 where
     T: UnsignedModularInt,
-    M: ModulusParams<Modulus = T>,
 {
     /// Returns the private exponent of the key.
     fn d(&self) -> &T;
 }
 
 /// Bridge: every legacy [`PrivateKeyParts`] impl also satisfies the
-/// generic trait at the concrete `BoxedUint` / `BoxedMontyParams`
-/// substitution. Lets existing alloc-side consumers (and the upstream
+/// generic trait at the concrete `BoxedUint` substitution. Lets
+/// existing alloc-side consumers (and the upstream
 /// `algorithms::rsa::rsa_decrypt[_and_check]` path) be re-bound on
 /// `GenericPrivateKeyParts` incrementally without breaking compilation.
 #[cfg(feature = "private-key")]
-impl<K> GenericPrivateKeyParts<BoxedUint, BoxedMontyParams> for K
+impl<K> GenericPrivateKeyParts<BoxedUint> for K
 where
-    K: PrivateKeyParts + PublicKeyParts<BoxedUint, MontyParams = BoxedMontyParams>,
+    K: PrivateKeyParts,
 {
     fn d(&self) -> &BoxedUint {
         PrivateKeyParts::d(self)
