@@ -112,7 +112,6 @@ where
 /// extension trait when the dependency stack provides CT modular
 /// inverse — see the roadmap in `CLAUDE.md`.
 #[cfg(any(feature = "private-key", feature = "wip-private-key"))]
-#[derive(Clone)]
 pub struct GenericRsaPrivateKey<T, M>
 where
     T: UnsignedModularInt + Zeroize,
@@ -122,6 +121,55 @@ where
     pubkey_components: GenericRsaPublicKey<T, M>,
     /// Private exponent.
     d: T,
+    /// Prime factors of N (≥ 2 elements when populated). Empty `Vec`
+    /// when constructed without primes — the heapless raw-`(n, e, d)`
+    /// path. Alloc-gated because `Vec` itself requires alloc; heapless
+    /// builds don't store primes.
+    #[cfg(feature = "alloc")]
+    pub(crate) primes: alloc::vec::Vec<T>,
+    /// Precomputed CRT values, when available. Populated by
+    /// alloc-side constructors that do the CRT precompute; left
+    /// `None` by heapless / raw constructors.
+    #[cfg(feature = "private-key")]
+    pub(crate) precomputed: Option<PrecomputedValues<T, M>>,
+}
+
+// Manual Clone impl — `#[derive(Clone)]` doesn't synthesize the
+// `M::MontgomeryForm: Clone` is only needed when the `precomputed`
+// field is present (private-key feature on). Heapless backends whose
+// `MontgomeryForm` doesn't impl `Clone` can still use the wip-private-key
+// build path — keep the extra bound off that variant.
+#[cfg(feature = "private-key")]
+impl<T, M> Clone for GenericRsaPrivateKey<T, M>
+where
+    T: UnsignedModularInt + Zeroize + Clone,
+    M: ModulusParams<Modulus = T> + Clone,
+    M::MontgomeryForm: Clone,
+{
+    fn clone(&self) -> Self {
+        Self {
+            pubkey_components: self.pubkey_components.clone(),
+            d: self.d.clone(),
+            primes: self.primes.clone(),
+            precomputed: self.precomputed.clone(),
+        }
+    }
+}
+
+#[cfg(all(feature = "wip-private-key", not(feature = "private-key")))]
+impl<T, M> Clone for GenericRsaPrivateKey<T, M>
+where
+    T: UnsignedModularInt + Zeroize + Clone,
+    M: ModulusParams<Modulus = T> + Clone,
+{
+    fn clone(&self) -> Self {
+        Self {
+            pubkey_components: self.pubkey_components.clone(),
+            d: self.d.clone(),
+            #[cfg(feature = "alloc")]
+            primes: self.primes.clone(),
+        }
+    }
 }
 
 // Manual `Debug` impl — never print `d`. Mirrors the redaction in the
@@ -154,11 +202,18 @@ where
     /// Construct from the components of a precomputed key. Caller is
     /// responsible for the cryptographic relationship between `n`, `e`,
     /// and `d` (typically `e * d ≡ 1 mod λ(n)`); no validation is
-    /// performed here.
+    /// performed here. No CRT precompute is attached — use the
+    /// alloc-side constructors on `RsaPrivateKey` to add primes and
+    /// CRT acceleration. A future `with_primes`-style constructor on
+    /// the generic type will land in Fold-2b.
     pub fn from_components(pubkey_components: GenericRsaPublicKey<T, M>, d: T) -> Self {
         Self {
             pubkey_components,
             d,
+            #[cfg(feature = "alloc")]
+            primes: alloc::vec::Vec::new(),
+            #[cfg(feature = "private-key")]
+            precomputed: None,
         }
     }
 
@@ -198,6 +253,39 @@ where
     fn d(&self) -> &T {
         &self.d
     }
+
+    // Gate matches the `primes` field (which is `cfg(feature = "alloc")`).
+    // `private-key` implies `alloc` today, but be explicit so this stays
+    // consistent if the implication ever loosens.
+    #[cfg(all(feature = "private-key", feature = "alloc"))]
+    fn primes(&self) -> &[T] {
+        &self.primes
+    }
+
+    #[cfg(feature = "private-key")]
+    fn dp(&self) -> Option<&T> {
+        self.precomputed.as_ref().map(|p| &p.dp)
+    }
+
+    #[cfg(feature = "private-key")]
+    fn dq(&self) -> Option<&T> {
+        self.precomputed.as_ref().map(|p| &p.dq)
+    }
+
+    #[cfg(feature = "private-key")]
+    fn qinv(&self) -> Option<&<Self::MontyParams as ModulusParams>::MontgomeryForm> {
+        self.precomputed.as_ref().map(|p| &p.qinv)
+    }
+
+    #[cfg(feature = "private-key")]
+    fn p_params(&self) -> Option<&Self::MontyParams> {
+        self.precomputed.as_ref().map(|p| &p.p_params)
+    }
+
+    #[cfg(feature = "private-key")]
+    fn q_params(&self) -> Option<&Self::MontyParams> {
+        self.precomputed.as_ref().map(|p| &p.q_params)
+    }
 }
 
 // Canonical `Zeroize` shape: impl on the type, `Drop` delegates so
@@ -212,6 +300,10 @@ where
 {
     fn zeroize(&mut self) {
         self.d.zeroize();
+        #[cfg(feature = "alloc")]
+        self.primes.zeroize();
+        #[cfg(feature = "private-key")]
+        self.precomputed.zeroize();
     }
 }
 
@@ -245,7 +337,7 @@ pub struct RsaPrivateKey {
     /// Prime factors of N, contains >= 2 elements.
     pub(crate) primes: Vec<BoxedUint>,
     /// Precomputed values to speed up private operations
-    pub(crate) precomputed: Option<PrecomputedValues>,
+    pub(crate) precomputed: Option<PrecomputedValues<BoxedUint, BoxedMontyParams>>,
 }
 
 #[cfg(feature = "private-key")]
@@ -306,37 +398,83 @@ impl Drop for RsaPrivateKey {
 impl ZeroizeOnDrop for RsaPrivateKey {}
 
 #[cfg(feature = "private-key")]
-#[derive(Clone)]
-pub(crate) struct PrecomputedValues {
+pub(crate) struct PrecomputedValues<T, M>
+where
+    T: UnsignedModularInt,
+    M: ModulusParams<Modulus = T>,
+{
     /// D mod (P-1)
-    pub(crate) dp: BoxedUint,
+    pub(crate) dp: T,
     /// D mod (Q-1)
-    pub(crate) dq: BoxedUint,
+    pub(crate) dq: T,
     /// Q^-1 mod P
-    pub(crate) qinv: BoxedMontyForm,
+    pub(crate) qinv: M::MontgomeryForm,
 
     /// Montgomery params for `p`
-    pub(crate) p_params: BoxedMontyParams,
+    pub(crate) p_params: M,
     /// Montgomery params for `q`
-    pub(crate) q_params: BoxedMontyParams,
+    pub(crate) q_params: M,
+}
+
+// Manual Clone impl — `#[derive(Clone)]` doesn't synthesize the
+// `M::MontgomeryForm: Clone` bound, only `T: Clone` and `M: Clone`.
+// We need the associated-type bound explicit.
+#[cfg(feature = "private-key")]
+impl<T, M> Clone for PrecomputedValues<T, M>
+where
+    T: UnsignedModularInt + Clone,
+    M: ModulusParams<Modulus = T> + Clone,
+    M::MontgomeryForm: Clone,
+{
+    fn clone(&self) -> Self {
+        Self {
+            dp: self.dp.clone(),
+            dq: self.dq.clone(),
+            qinv: self.qinv.clone(),
+            p_params: self.p_params.clone(),
+            q_params: self.q_params.clone(),
+        }
+    }
 }
 
 #[cfg(feature = "private-key")]
-impl ZeroizeOnDrop for PrecomputedValues {}
+impl<T, M> ZeroizeOnDrop for PrecomputedValues<T, M>
+where
+    T: UnsignedModularInt,
+    M: ModulusParams<Modulus = T>,
+{
+}
 
 #[cfg(feature = "private-key")]
-impl Zeroize for PrecomputedValues {
+impl<T, M> Zeroize for PrecomputedValues<T, M>
+where
+    T: UnsignedModularInt + Zeroize,
+    M: ModulusParams<Modulus = T>,
+{
     fn zeroize(&mut self) {
         self.dp.zeroize();
         self.dq.zeroize();
-        // TODO: once these have landed in crypto-bigint
+        // KNOWN GAP: `qinv` (M::MontgomeryForm), `p_params` / `q_params`
+        // (M) are not wiped because the trait doesn't require them to
+        // impl `Zeroize`, and upstream `BoxedMontyForm` /
+        // `BoxedMontyParams` don't yet. Re-enable once the dep stack
+        // does:
+        // self.qinv.zeroize();
         // self.p_params.zeroize();
         // self.q_params.zeroize();
     }
 }
 
+// `Drop` impl bounds must match the struct's exactly (Rust drop-check
+// rule). `T: UnsignedModularInt` already implies `T: Zeroize` via the
+// `FixedWidthUnsignedInt` supertrait, so the body's `self.zeroize()`
+// call resolves without an explicit `Zeroize` bound here.
 #[cfg(feature = "private-key")]
-impl Drop for PrecomputedValues {
+impl<T, M> Drop for PrecomputedValues<T, M>
+where
+    T: UnsignedModularInt,
+    M: ModulusParams<Modulus = T>,
+{
     fn drop(&mut self) {
         self.zeroize();
     }
