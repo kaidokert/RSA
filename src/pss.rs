@@ -11,11 +11,15 @@
 
 #[cfg(feature = "private-key")]
 mod blinded_signing_key;
+#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
+mod generic_signing_key;
 mod signature;
 #[cfg(feature = "private-key")]
 mod signing_key;
 mod verifying_key;
 
+#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
+pub use self::generic_signing_key::GenericSigningKey;
 #[cfg(feature = "private-key")]
 pub use self::{blinded_signing_key::BlindedSigningKey, signing_key::SigningKey};
 
