@@ -135,9 +135,11 @@ where
 }
 
 // Manual Clone impl — `#[derive(Clone)]` doesn't synthesize the
-// `M::MontgomeryForm: Clone` bound required by the (cfg-gated)
-// `precomputed: Option<PrecomputedValues<T, M>>` field.
-#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
+// `M::MontgomeryForm: Clone` is only needed when the `precomputed`
+// field is present (private-key feature on). Heapless backends whose
+// `MontgomeryForm` doesn't impl `Clone` can still use the wip-private-key
+// build path — keep the extra bound off that variant.
+#[cfg(feature = "private-key")]
 impl<T, M> Clone for GenericRsaPrivateKey<T, M>
 where
     T: UnsignedModularInt + Zeroize + Clone,
@@ -148,10 +150,24 @@ where
         Self {
             pubkey_components: self.pubkey_components.clone(),
             d: self.d.clone(),
+            primes: self.primes.clone(),
+            precomputed: self.precomputed.clone(),
+        }
+    }
+}
+
+#[cfg(all(feature = "wip-private-key", not(feature = "private-key")))]
+impl<T, M> Clone for GenericRsaPrivateKey<T, M>
+where
+    T: UnsignedModularInt + Zeroize + Clone,
+    M: ModulusParams<Modulus = T> + Clone,
+{
+    fn clone(&self) -> Self {
+        Self {
+            pubkey_components: self.pubkey_components.clone(),
+            d: self.d.clone(),
             #[cfg(feature = "alloc")]
             primes: self.primes.clone(),
-            #[cfg(feature = "private-key")]
-            precomputed: self.precomputed.clone(),
         }
     }
 }
@@ -186,9 +202,10 @@ where
     /// Construct from the components of a precomputed key. Caller is
     /// responsible for the cryptographic relationship between `n`, `e`,
     /// and `d` (typically `e * d ≡ 1 mod λ(n)`); no validation is
-    /// performed here. No CRT precompute is attached — call
-    /// [`with_primes`](Self::with_primes) or the alloc-side
-    /// constructors to add primes / CRT acceleration.
+    /// performed here. No CRT precompute is attached — use the
+    /// alloc-side constructors on `RsaPrivateKey` to add primes and
+    /// CRT acceleration. A future `with_primes`-style constructor on
+    /// the generic type will land in Fold-2b.
     pub fn from_components(pubkey_components: GenericRsaPublicKey<T, M>, d: T) -> Self {
         Self {
             pubkey_components,
@@ -237,7 +254,10 @@ where
         &self.d
     }
 
-    #[cfg(feature = "private-key")]
+    // Gate matches the `primes` field (which is `cfg(feature = "alloc")`).
+    // `private-key` implies `alloc` today, but be explicit so this stays
+    // consistent if the implication ever loosens.
+    #[cfg(all(feature = "private-key", feature = "alloc"))]
     fn primes(&self) -> &[T] {
         &self.primes
     }

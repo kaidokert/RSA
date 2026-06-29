@@ -44,14 +44,33 @@ where
     pub(super) phantom: PhantomData<D>,
 }
 
-// Manual Clone impl — `M::MontgomeryForm: Clone` bound from
-// `GenericRsaPrivateKey<T, M>` isn't synthesized by `#[derive]`.
+// Manual Clone impls — split by `private-key` cfg to avoid imposing
+// the `M::MontgomeryForm: Clone` bound on heapless backends where it
+// isn't needed (only `GenericRsaPrivateKey`'s `precomputed` field
+// requires it, and that field is `cfg(private-key)`).
+#[cfg(feature = "private-key")]
 impl<D, T, M> Clone for GenericSigningKey<D, T, M>
 where
     D: Digest,
     T: UnsignedModularInt + Zeroize + Clone,
     M: ModulusParams<Modulus = T> + Clone,
     M::MontgomeryForm: Clone,
+{
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+            prefix: self.prefix.clone(),
+            phantom: PhantomData,
+        }
+    }
+}
+
+#[cfg(not(feature = "private-key"))]
+impl<D, T, M> Clone for GenericSigningKey<D, T, M>
+where
+    D: Digest,
+    T: UnsignedModularInt + Zeroize + Clone,
+    M: ModulusParams<Modulus = T> + Clone,
 {
     fn clone(&self) -> Self {
         Self {
