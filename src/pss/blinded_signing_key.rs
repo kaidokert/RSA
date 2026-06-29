@@ -77,8 +77,9 @@ where
 
 //
 // `*Signer` trait impls — the only carriers of the blinded behavior.
-// Reach into the inner `SigningKey<D>`'s `pub(super)` fields to call
-// `sign_digest` with `blinded = true`.
+// Delegate through `SigningKey<D>`'s public accessors (`AsRef<RsaPrivateKey>`
+// and `salt_len()`) to call `sign_digest` with `blinded = true`, keeping
+// the wrapper independent of `SigningKey`'s field layout.
 //
 
 impl<D> RandomizedSigner<Signature> for BlindedSigningKey<D>
@@ -109,9 +110,9 @@ where
         sign_digest::<_, D>(
             rng,
             true,
-            &self.0.inner,
+            self.0.as_ref(),
             &digest.finalize(),
-            self.0.salt_len,
+            self.0.salt_len(),
         )?
         .as_slice()
         .try_into()
@@ -135,9 +136,9 @@ where
         sign_digest::<_, D>(
             rng,
             true,
-            &self.0.inner,
+            self.0.as_ref(),
             &digest.finalize(),
-            self.0.salt_len,
+            self.0.salt_len(),
         )?
         .as_slice()
         .try_into()
@@ -153,7 +154,7 @@ where
         rng: &mut R,
         prehash: &[u8],
     ) -> signature::Result<Signature> {
-        sign_digest::<_, D>(rng, true, &self.0.inner, prehash, self.0.salt_len)?
+        sign_digest::<_, D>(rng, true, self.0.as_ref(), prehash, self.0.salt_len())?
             .as_slice()
             .try_into()
     }
