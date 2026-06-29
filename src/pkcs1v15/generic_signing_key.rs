@@ -30,7 +30,6 @@ use zeroize::Zeroize;
 /// Generic over the digest `D`, integer type `T`, and Montgomery parameters
 /// `M`. Holds a [`GenericRsaPrivateKey<T, M>`] plus the precomputed
 /// DigestInfo prefix for `D`.
-#[derive(Clone)]
 pub struct GenericSigningKey<D, T, M>
 where
     D: Digest,
@@ -43,6 +42,24 @@ where
     #[cfg(not(feature = "alloc"))]
     pub(super) prefix: Prefix,
     pub(super) phantom: PhantomData<D>,
+}
+
+// Manual Clone impl — `M::MontgomeryForm: Clone` bound from
+// `GenericRsaPrivateKey<T, M>` isn't synthesized by `#[derive]`.
+impl<D, T, M> Clone for GenericSigningKey<D, T, M>
+where
+    D: Digest,
+    T: UnsignedModularInt + Zeroize + Clone,
+    M: ModulusParams<Modulus = T> + Clone,
+    M::MontgomeryForm: Clone,
+{
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+            prefix: self.prefix.clone(),
+            phantom: PhantomData,
+        }
+    }
 }
 
 impl<D, T, M> GenericSigningKey<D, T, M>
