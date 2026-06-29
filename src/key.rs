@@ -213,21 +213,9 @@ where
     /// primes and run validation + CRT precompute.
     ///
     /// Gated on [`RawPrivateKeyConstructible`], which `BoxedUint`
-    /// deliberately doesn't impl, so this method is unreachable on the
-    /// `RsaPrivateKey` alias:
-    ///
-    /// ```compile_fail
-    /// # #[cfg(feature = "private-key")]
-    /// # fn main() {
-    /// use rsa_heapless::RsaPrivateKey;
-    /// use rsa_heapless::traits::PublicKeyParts;
-    /// fn must_not_compile(pub_key: rsa_heapless::RsaPublicKey, d: crypto_bigint::BoxedUint) {
-    ///     let _: RsaPrivateKey = RsaPrivateKey::from_public_and_d(pub_key, d);
-    /// }
-    /// # }
-    /// # #[cfg(not(feature = "private-key"))]
-    /// # fn main() {}
-    /// ```
+    /// deliberately doesn't impl, so this method is unreachable on
+    /// the `RsaPrivateKey` alias. See that alias's docstring for a
+    /// `compile_fail` doctest that locks the behavior in.
     pub fn from_public_and_d(pubkey_components: GenericRsaPublicKey<T, M>, d: T) -> Self {
         Self {
             pubkey_components,
@@ -360,6 +348,18 @@ where
 /// [`RsaPublicKey`] alias and lets the public-API surface stay
 /// unchanged while the storage shape is shared with the heapless
 /// (`wip-private-key`) path.
+///
+/// The raw `(public_key, d)` constructor on
+/// [`GenericRsaPrivateKey::from_public_and_d`] is gated on
+/// [`RawPrivateKeyConstructible`], which `BoxedUint` deliberately
+/// doesn't impl, so it's unreachable through this alias:
+///
+/// ```compile_fail
+/// use rsa_heapless::RsaPrivateKey;
+/// fn must_not_compile(pub_key: rsa_heapless::RsaPublicKey, d: crypto_bigint::BoxedUint) {
+///     let _: RsaPrivateKey = RsaPrivateKey::from_public_and_d(pub_key, d);
+/// }
+/// ```
 #[cfg(feature = "private-key")]
 pub type RsaPrivateKey = GenericRsaPrivateKey<BoxedUint, BoxedMontyParams>;
 

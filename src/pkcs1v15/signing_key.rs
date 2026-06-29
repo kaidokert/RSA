@@ -1,9 +1,19 @@
-use super::{pkcs1v15_generate_prefix, sign, GenericVerifyingKey, Signature, VerifyingKey};
+//! Boxed RSASSA-PKCS1-v1_5 signing key — alloc-side type alias and
+//! specializations over [`super::GenericSigningKey`]. Mirrors the
+//! pattern on the verify side (`verifying_key.rs`).
+//!
+//! The struct, generic constructors (`new`, `new_unprefixed`), `Clone`,
+//! `Debug`, `AsRef<GenericRsaPrivateKey<T, M>>`, `Zeroize`, and the
+//! `try_sign_into` family all live on [`super::GenericSigningKey`].
+//! This file holds only what's tied to the boxed substitution:
+//! keygen-bearing constructors, the `signature::*Signer` trait
+//! family (which delegates to the alloc-side `sign(...)`), encoding,
+//! serde, and the legacy `Keypair` wiring.
+
+use super::{sign, GenericSigningKey, GenericVerifyingKey, Signature, VerifyingKey};
 use crate::{dummy_rng::DummyRng, Result, RsaPrivateKey};
-#[cfg(feature = "alloc")]
-use alloc::vec::Vec;
 use const_oid::AssociatedOid;
-use core::marker::PhantomData;
+use crypto_bigint::{modular::BoxedMontyParams, BoxedUint};
 use digest::{Digest, FixedOutput, HashMarker, Update};
 use rand_core::{CryptoRng, TryCryptoRng};
 use signature::{
@@ -27,66 +37,32 @@ use {
     serdect::serde::{de, ser, Deserialize, Serialize},
 };
 
-/// Signing key for `RSASSA-PKCS1-v1_5` signatures as described in [RFC8017 § 8.2].
+/// Signing key for `RSASSA-PKCS1-v1_5` signatures as described in
+/// [RFC8017 § 8.2]. Boxed alias over [`GenericSigningKey`] — equivalent
+/// to `GenericSigningKey<D, BoxedUint, BoxedMontyParams>`.
 ///
 /// [RFC8017 § 8.2]: https://datatracker.ietf.org/doc/html/rfc8017#section-8.2
-#[derive(Debug, Clone)]
-pub struct SigningKey<D>
-where
-    D: Digest,
-{
-    inner: RsaPrivateKey,
-    prefix: Vec<u8>,
-    phantom: PhantomData<D>,
-}
+pub type SigningKey<D> = GenericSigningKey<D, BoxedUint, BoxedMontyParams>;
 
-impl<D> SigningKey<D>
+impl<D> GenericSigningKey<D, BoxedUint, BoxedMontyParams>
 where
     D: Digest + AssociatedOid,
 {
-    /// Create a new signing key with a prefix for the digest `D`.
-    pub fn new(key: RsaPrivateKey) -> Self {
-        Self {
-            inner: key,
-            prefix: pkcs1v15_generate_prefix::<D>(),
-            phantom: Default::default(),
-        }
-    }
-
-    /// Generate a new signing key with a prefix for the digest `D`.
+    /// Generate a fresh RSA key pair of the given bit size, then wrap
+    /// it in a signing key with the DigestInfo prefix for `D`.
     pub fn random<R: CryptoRng + ?Sized>(rng: &mut R, bit_size: usize) -> Result<Self> {
-        Ok(Self {
-            inner: RsaPrivateKey::new(rng, bit_size)?,
-            prefix: pkcs1v15_generate_prefix::<D>(),
-            phantom: Default::default(),
-        })
+        Ok(Self::new(RsaPrivateKey::new(rng, bit_size)?))
     }
 }
 
-impl<D> SigningKey<D>
+impl<D> GenericSigningKey<D, BoxedUint, BoxedMontyParams>
 where
     D: Digest,
 {
-    /// Create a new signing key from the give RSA private key with an empty prefix.
-    ///
-    /// ## Note: unprefixed signatures are uncommon
-    ///
-    /// In most cases you'll want to use [`SigningKey::new`].
-    pub fn new_unprefixed(key: RsaPrivateKey) -> Self {
-        Self {
-            inner: key,
-            prefix: Vec::new(),
-            phantom: Default::default(),
-        }
-    }
-
-    /// Generate a new signing key with an empty prefix.
+    /// Generate a fresh RSA key pair of the given bit size with an empty
+    /// prefix (raw signatures, no DigestInfo wrapper).
     pub fn random_unprefixed<R: CryptoRng + ?Sized>(rng: &mut R, bit_size: usize) -> Result<Self> {
-        Ok(Self {
-            inner: RsaPrivateKey::new(rng, bit_size)?,
-            prefix: Vec::new(),
-            phantom: Default::default(),
-        })
+        Ok(Self::new_unprefixed(RsaPrivateKey::new(rng, bit_size)?))
     }
 }
 
@@ -201,15 +177,6 @@ where
 //
 // Other trait impls
 //
-
-impl<D> AsRef<RsaPrivateKey> for SigningKey<D>
-where
-    D: Digest,
-{
-    fn as_ref(&self) -> &RsaPrivateKey {
-        &self.inner
-    }
-}
 
 #[cfg(feature = "encoding")]
 impl<D> AssociatedAlgorithmIdentifier for SigningKey<D>
@@ -338,7 +305,6 @@ mod tests {
     #[cfg(all(feature = "hazmat", feature = "serde"))]
     fn test_serde() {
         use super::*;
-        use crate::RsaPrivateKey;
         use rand::rngs::ChaCha8Rng;
         use rand_core::SeedableRng;
         use serde_test::{assert_tokens, Configure, Token};

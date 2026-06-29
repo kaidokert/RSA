@@ -7,11 +7,11 @@
 //! the DigestInfo prefix, caller-supplied scratch buffers for the EM
 //! and signature output.
 
-use super::sign_into;
 #[cfg(feature = "alloc")]
-use super::{pkcs1v15_generate_prefix, GenericVerifyingKey};
+use super::pkcs1v15_generate_prefix;
 #[cfg(not(feature = "alloc"))]
 use super::{pkcs1v15_generate_prefix_helper, Prefix};
+use super::{sign_into, GenericVerifyingKey};
 use crate::{
     errors::Result,
     key::GenericRsaPrivateKey,
@@ -21,6 +21,7 @@ use crate::{
     },
 };
 use const_oid::AssociatedOid;
+use core::fmt;
 use core::marker::PhantomData;
 use digest::Digest;
 use zeroize::Zeroize;
@@ -42,6 +43,23 @@ where
     #[cfg(not(feature = "alloc"))]
     pub(super) prefix: Prefix,
     pub(super) phantom: PhantomData<D>,
+}
+
+// Manual `Debug` — `#[derive]` would synthesize unwanted bounds on
+// `D`/`T`/`M`; the inner private key already redacts `d`.
+impl<D, T, M> fmt::Debug for GenericSigningKey<D, T, M>
+where
+    D: Digest,
+    T: UnsignedModularInt + Zeroize,
+    M: ModulusParams<Modulus = T>,
+    GenericRsaPrivateKey<T, M>: fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("GenericSigningKey")
+            .field("inner", &self.inner)
+            .field("prefix", &self.prefix)
+            .finish()
+    }
 }
 
 // Manual Clone impls — split by `private-key` cfg to avoid imposing
@@ -214,19 +232,26 @@ where
     }
 }
 
-#[cfg(feature = "alloc")]
 impl<D, T, M> GenericSigningKey<D, T, M>
 where
-    D: Digest + AssociatedOid,
+    D: Digest,
     T: UnsignedModularInt + Zeroize,
     M: ModulusParams<Modulus = T>,
 {
-    /// Derive the matching [`GenericVerifyingKey`] from this signing key.
-    pub fn verifying_key(&self) -> GenericVerifyingKey<D, T, M>
+    /// Derive the matching [`GenericVerifyingKey`] from this signing
+    /// key, preserving the existing DigestInfo prefix (so unprefixed
+    /// signing keys yield unprefixed verifying keys). Not named
+    /// `verifying_key` because that would shadow
+    /// [`signature::Keypair::verifying_key`] for callers using
+    /// method-call syntax.
+    pub fn to_verifying_key(&self) -> GenericVerifyingKey<D, T, M>
     where
-        GenericRsaPrivateKey<T, M>: Clone,
         crate::key::GenericRsaPublicKey<T, M>: Clone,
     {
-        GenericVerifyingKey::new(self.inner.as_public().clone())
+        GenericVerifyingKey {
+            inner: self.inner.as_public().clone(),
+            prefix: self.prefix.clone(),
+            phantom: PhantomData,
+        }
     }
 }
