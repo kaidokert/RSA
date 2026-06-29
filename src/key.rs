@@ -34,11 +34,11 @@ use crate::algorithms::rsa::{
 #[cfg(feature = "private-key")]
 use crate::dummy_rng::DummyRng;
 use crate::errors::{Error, Result};
-#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
-use crate::traits::keys::{GenericPrivateKeyParts, RawPrivateKeyConstructible};
 use crate::traits::keys::PublicKeyParts;
 #[cfg(feature = "private-key")]
 use crate::traits::keys::{CrtValue, PrivateKeyParts};
+#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
+use crate::traits::keys::{GenericPrivateKeyParts, RawPrivateKeyConstructible};
 use crate::traits::{
     modular::ModulusParams, NonZero, PaddingScheme, SignatureScheme, UnsignedModularInt,
 };

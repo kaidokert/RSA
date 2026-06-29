@@ -37,8 +37,10 @@ pub trait RawPrivateKeyConstructible: UnsignedModularInt {}
     any(feature = "private-key", feature = "wip-private-key"),
     not(feature = "alloc")
 ))]
-impl<T> RawPrivateKeyConstructible for T where T: crate::traits::modular::FixedWidthUnsignedInt + PartialOrd
-{}
+impl<T> RawPrivateKeyConstructible for T where
+    T: crate::traits::modular::FixedWidthUnsignedInt + PartialOrd
+{
+}
 
 /// Components of an RSA public key.
 pub trait PublicKeyParts<T: UnsignedModularInt> {
