@@ -1139,6 +1139,51 @@ mod private_op_tests {
     }
 
     #[test]
+    fn pkcs1v15_signing_key_rejects_wrong_prehash_length() {
+        use crate::key::GenericRsaPrivateKey;
+        use crate::pkcs1v15::GenericSigningKey;
+        use sha1::Sha1;
+
+        type U2048 = FixedUInt<u8, 256, Ct>;
+        const K: usize = 256;
+
+        let public =
+            crate::modmath_support::public_key_ct_from_be_bytes::<U2048>(&N_2048, 65537).unwrap();
+        let d = wrap_value(
+            <U2048 as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(&D_2048).unwrap(),
+        );
+        let priv_key = GenericRsaPrivateKey::from_components(public, d);
+        let signing_key = GenericSigningKey::<Sha1, _, _>::new(priv_key);
+
+        let bad_prehash = [0u8; 21]; // SHA-1 outputs 20 bytes, not 21.
+        let mut em_storage = [0u8; K];
+        let mut sig_storage = [0u8; K];
+        let result =
+            signing_key.try_sign_prehash_into(&bad_prehash, &mut em_storage, &mut sig_storage);
+        assert!(matches!(result, Err(Error::InputNotHashed)));
+    }
+
+    #[test]
+    fn pkcs1v15_signing_key_satisfies_zeroize() {
+        use crate::key::GenericRsaPrivateKey;
+        use crate::pkcs1v15::GenericSigningKey;
+        use sha1::Sha1;
+        fn assert_zeroize<Z: Zeroize>() {}
+        assert_zeroize::<
+            GenericSigningKey<Sha1, ModMathValue<SmallUCt>, ModMathParams<SmallUCt, Ct>>,
+        >();
+
+        // Construct one and exercise .zeroize() at runtime to confirm the
+        // delegation compiles end-to-end.
+        let public =
+            crate::modmath_support::public_key_ct_from_be_bytes::<SmallUCt>(&[35u8], 5).unwrap();
+        let priv_key =
+            GenericRsaPrivateKey::from_components(public, wrap_value(SmallUCt::from(29u8)));
+        let mut signing_key = GenericSigningKey::<Sha1, _, _>::new(priv_key);
+        signing_key.zeroize();
+    }
+
+    #[test]
     fn generic_rsa_private_key_satisfies_traits() {
         // Compile-time assertion: GenericRsaPrivateKey<SmallUCt, ModMathParams<SmallUCt, Ct>>
         // satisfies both PublicKeyParts and GenericPrivateKeyParts at the

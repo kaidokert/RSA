@@ -135,12 +135,19 @@ where
     /// Sign a precomputed `prehash` (`D::output_size()` bytes) into
     /// `sig_storage`. The caller is responsible for the hash; this skips
     /// the internal `D::digest(msg)` step.
+    ///
+    /// Returns [`Error::InputNotHashed`] if `prehash.len()` doesn't match
+    /// `D::output_size()` — a mismatch would silently produce malformed
+    /// PKCS#1 v1.5 padding rather than a usable signature.
     pub fn try_sign_prehash_into<'sig>(
         &self,
         prehash: &[u8],
         em_storage: &mut [u8],
         sig_storage: &'sig mut [u8],
     ) -> Result<&'sig [u8]> {
+        if prehash.len() != <D as Digest>::output_size() {
+            return Err(crate::errors::Error::InputNotHashed);
+        }
         let k = self.inner.size();
         sign_into(
             self.inner.n_params(),
@@ -152,6 +159,22 @@ where
             em_storage,
             sig_storage,
         )
+    }
+}
+
+// Allow callers to wrap a `GenericSigningKey` in `zeroize::Zeroizing<_>`
+// or invoke `.zeroize()` directly. The prefix is public DigestInfo
+// material; only the inner `GenericRsaPrivateKey` carries secret bytes.
+// Same pattern as the canonical Zeroize impls on `GenericRsaPrivateKey`
+// (PR #24) and `ModMathForm` (PR #17).
+impl<D, T, M> Zeroize for GenericSigningKey<D, T, M>
+where
+    D: Digest,
+    T: UnsignedModularInt + Zeroize,
+    M: ModulusParams<Modulus = T>,
+{
+    fn zeroize(&mut self) {
+        self.inner.zeroize();
     }
 }
 
