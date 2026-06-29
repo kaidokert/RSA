@@ -113,47 +113,6 @@ where
     }
 }
 
-/// Bridge: every legacy [`PrivateKeyParts`] impl also satisfies the
-/// generic trait at the concrete `BoxedUint` substitution. Lets
-/// existing alloc-side consumers (and the upstream
-/// `algorithms::rsa::rsa_decrypt[_and_check]` path) be re-bound on
-/// `GenericPrivateKeyParts` incrementally without breaking compilation.
-/// Forwards the CRT accessors so the alloc-side CRT branch can run
-/// purely against the generic trait surface.
-#[cfg(feature = "private-key")]
-impl<K> GenericPrivateKeyParts<BoxedUint> for K
-where
-    K: PrivateKeyParts + PublicKeyParts<BoxedUint, MontyParams = BoxedMontyParams>,
-{
-    fn d(&self) -> &BoxedUint {
-        PrivateKeyParts::d(self)
-    }
-
-    fn primes(&self) -> &[BoxedUint] {
-        PrivateKeyParts::primes(self)
-    }
-
-    fn dp(&self) -> Option<&BoxedUint> {
-        PrivateKeyParts::dp(self)
-    }
-
-    fn dq(&self) -> Option<&BoxedUint> {
-        PrivateKeyParts::dq(self)
-    }
-
-    fn qinv(&self) -> Option<&BoxedMontyForm> {
-        PrivateKeyParts::qinv(self)
-    }
-
-    fn p_params(&self) -> Option<&BoxedMontyParams> {
-        PrivateKeyParts::p_params(self)
-    }
-
-    fn q_params(&self) -> Option<&BoxedMontyParams> {
-        PrivateKeyParts::q_params(self)
-    }
-}
-
 /// Components of an RSA private key.
 #[cfg(feature = "private-key")]
 pub trait PrivateKeyParts: PublicKeyParts<BoxedUint> {

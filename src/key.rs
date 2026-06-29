@@ -199,14 +199,14 @@ where
     T: UnsignedModularInt + Zeroize,
     M: ModulusParams<Modulus = T>,
 {
-    /// Construct from the components of a precomputed key. Caller is
-    /// responsible for the cryptographic relationship between `n`, `e`,
-    /// and `d` (typically `e * d ≡ 1 mod λ(n)`); no validation is
-    /// performed here. No CRT precompute is attached — use the
-    /// alloc-side constructors on `RsaPrivateKey` to add primes and
-    /// CRT acceleration. A future `with_primes`-style constructor on
-    /// the generic type will land in Fold-2b.
-    pub fn from_components(pubkey_components: GenericRsaPublicKey<T, M>, d: T) -> Self {
+    /// Construct from an already-built public key and the private
+    /// exponent `d`. Caller is responsible for the cryptographic
+    /// relationship between `n`, `e`, and `d` (typically
+    /// `e * d ≡ 1 mod λ(n)`); no validation is performed here. No CRT
+    /// precompute is attached — use the alloc-side
+    /// [`RsaPrivateKey::from_components`] to take raw `n`/`e`/`d` plus
+    /// primes and run validation + CRT precompute.
+    pub fn from_public_and_d(pubkey_components: GenericRsaPublicKey<T, M>, d: T) -> Self {
         Self {
             pubkey_components,
             d,
@@ -326,43 +326,24 @@ where
 {
 }
 
-/// Represents a whole RSA key, public and private parts.
+/// Boxed RSA private key alias used by the `alloc` code path. Equivalent
+/// to `GenericRsaPrivateKey<BoxedUint, BoxedMontyParams>`. Mirrors the
+/// [`RsaPublicKey`] alias and lets the public-API surface stay
+/// unchanged while the storage shape is shared with the heapless
+/// (`wip-private-key`) path.
 #[cfg(feature = "private-key")]
-#[derive(Clone)]
-pub struct RsaPrivateKey {
-    /// Public components of the private key.
-    pubkey_components: RsaPublicKey,
-    /// Private exponent
-    pub(crate) d: BoxedUint,
-    /// Prime factors of N, contains >= 2 elements.
-    pub(crate) primes: Vec<BoxedUint>,
-    /// Precomputed values to speed up private operations
-    pub(crate) precomputed: Option<PrecomputedValues<BoxedUint, BoxedMontyParams>>,
-}
+pub type RsaPrivateKey = GenericRsaPrivateKey<BoxedUint, BoxedMontyParams>;
+
+// `Debug`, `Drop`, `ZeroizeOnDrop`, and `PublicKeyParts<BoxedUint>` are
+// provided by the generic `GenericRsaPrivateKey<T, M>` impls and apply
+// automatically through the alias.
 
 #[cfg(feature = "private-key")]
-impl fmt::Debug for RsaPrivateKey {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let precomputed = if self.precomputed.is_some() {
-            "Some(...)"
-        } else {
-            "None"
-        };
-        f.debug_struct("RsaPrivateKey")
-            .field("pubkey_components", &self.pubkey_components)
-            .field("d", &"...")
-            .field("primes", &"&[...]")
-            .field("precomputed", &precomputed)
-            .finish()
-    }
-}
-
+impl Eq for GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {}
 #[cfg(feature = "private-key")]
-impl Eq for RsaPrivateKey {}
-#[cfg(feature = "private-key")]
-impl PartialEq for RsaPrivateKey {
+impl PartialEq for GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
     #[inline]
-    fn eq(&self, other: &RsaPrivateKey) -> bool {
+    fn eq(&self, other: &Self) -> bool {
         self.pubkey_components == other.pubkey_components
             && self.d == other.d
             && self.primes == other.primes
@@ -370,32 +351,22 @@ impl PartialEq for RsaPrivateKey {
 }
 
 #[cfg(feature = "private-key")]
-impl AsRef<RsaPublicKey> for RsaPrivateKey {
-    fn as_ref(&self) -> &RsaPublicKey {
+impl AsRef<GenericRsaPublicKey<BoxedUint, BoxedMontyParams>>
+    for GenericRsaPrivateKey<BoxedUint, BoxedMontyParams>
+{
+    fn as_ref(&self) -> &GenericRsaPublicKey<BoxedUint, BoxedMontyParams> {
         &self.pubkey_components
     }
 }
 
 #[cfg(feature = "private-key")]
-impl Hash for RsaPrivateKey {
+impl Hash for GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         // Domain separator for RSA private keys
         state.write(b"RsaPrivateKey");
         Hash::hash(&self.pubkey_components, state);
     }
 }
-
-#[cfg(feature = "private-key")]
-impl Drop for RsaPrivateKey {
-    fn drop(&mut self) {
-        self.d.zeroize();
-        self.primes.zeroize();
-        self.precomputed.zeroize();
-    }
-}
-
-#[cfg(feature = "private-key")]
-impl ZeroizeOnDrop for RsaPrivateKey {}
 
 #[cfg(feature = "private-key")]
 pub(crate) struct PrecomputedValues<T, M>
@@ -625,24 +596,7 @@ impl GenericRsaPublicKey<BoxedUint, BoxedMontyParams> {
 }
 
 #[cfg(feature = "private-key")]
-impl PublicKeyParts<BoxedUint> for RsaPrivateKey {
-    type MontyParams = BoxedMontyParams;
-
-    fn n(&self) -> &NonZero<BoxedUint> {
-        &self.pubkey_components.n
-    }
-
-    fn e(&self) -> &BoxedUint {
-        &self.pubkey_components.e
-    }
-
-    fn n_params(&self) -> &BoxedMontyParams {
-        &self.pubkey_components.n_params
-    }
-}
-
-#[cfg(feature = "private-key")]
-impl RsaPrivateKey {
+impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
     /// Default exponent for RSA keys.
     const EXP: u64 = 65537;
 
@@ -1044,7 +998,7 @@ impl RsaPrivateKey {
 }
 
 #[cfg(feature = "private-key")]
-impl PrivateKeyParts for RsaPrivateKey {
+impl PrivateKeyParts for GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
     fn d(&self) -> &BoxedUint {
         &self.d
     }
