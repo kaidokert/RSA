@@ -1135,7 +1135,7 @@ mod tests {
         let m = BoxedUint::from(42u64);
         let c = rsa_encrypt(&pub_key, &m).expect("encryption successful");
 
-        let m2 = rsa_decrypt_and_check::<ChaCha8Rng>(private_key, None, &c)
+        let m2 = rsa_decrypt_and_check::<ChaCha8Rng, _>(private_key, None, &c)
             .expect("unable to decrypt without blinding");
         assert_eq!(m, m2);
         let mut rng = ChaCha8Rng::from_seed([42; 32]);

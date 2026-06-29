@@ -18,7 +18,7 @@ use zeroize::Zeroize;
 #[cfg(not(feature = "private-key"))]
 use crate::traits::keys::PublicKeyParts;
 #[cfg(feature = "private-key")]
-use crate::traits::keys::{PrivateKeyParts, PublicKeyParts};
+use crate::traits::keys::{GenericPrivateKeyParts, PublicKeyParts};
 use crate::{
     errors::{Error, Result},
     traits::{
@@ -54,13 +54,16 @@ where
 /// or signature scheme. See the [module-level documentation][crate::hazmat] for more information.
 #[cfg(feature = "private-key")]
 #[inline]
-pub fn rsa_decrypt<R: TryCryptoRng + ?Sized>(
+pub fn rsa_decrypt<R: TryCryptoRng + ?Sized, K>(
     rng: Option<&mut R>,
-    priv_key: &impl PrivateKeyParts<MontyParams = BoxedMontyParams>,
+    priv_key: &K,
     c: &BoxedUint,
-) -> Result<BoxedUint> {
+) -> Result<BoxedUint>
+where
+    K: GenericPrivateKeyParts<BoxedUint, MontyParams = BoxedMontyParams>,
+{
     let n = priv_key.n();
-    let d = priv_key.d();
+    let d = GenericPrivateKeyParts::d(priv_key);
 
     if c.bits_precision() != n.as_ref().bits_precision() {
         return Err(Error::Decryption);
@@ -83,20 +86,28 @@ pub fn rsa_decrypt<R: TryCryptoRng + ?Sized>(
         c.try_resize(bits).ok_or(Error::Internal)?
     };
 
-    let is_multiprime = priv_key.primes().len() > 2;
+    // Bind once — `GenericPrivateKeyParts::primes` default returns `&[]`,
+    // so a key that overrides the CRT accessors but not `primes` could
+    // otherwise reach the CRT branch and panic on `[0]`/`[1]`. The
+    // `primes.len() >= 2` guard below makes that impossible regardless
+    // of how the trait is implemented.
+    let primes = GenericPrivateKeyParts::primes(priv_key);
+    let is_multiprime = primes.len() > 2;
 
     let m = match (
-        priv_key.dp(),
-        priv_key.dq(),
-        priv_key.qinv(),
-        priv_key.p_params(),
-        priv_key.q_params(),
+        GenericPrivateKeyParts::dp(priv_key),
+        GenericPrivateKeyParts::dq(priv_key),
+        GenericPrivateKeyParts::qinv(priv_key),
+        GenericPrivateKeyParts::p_params(priv_key),
+        GenericPrivateKeyParts::q_params(priv_key),
     ) {
-        (Some(dp), Some(dq), Some(qinv), Some(p_params), Some(q_params)) if !is_multiprime => {
+        (Some(dp), Some(dq), Some(qinv), Some(p_params), Some(q_params))
+            if !is_multiprime && primes.len() >= 2 =>
+        {
             // We have the precalculated values needed for the CRT.
 
-            let p = &priv_key.primes()[0];
-            let q = &priv_key.primes()[1];
+            let p = &primes[0];
+            let q = &primes[1];
 
             // precomputed: dP = (1/e) mod (p-1) = d mod (p-1)
             // precomputed: dQ = (1/e) mod (q-1) = d mod (q-1)
@@ -174,11 +185,14 @@ pub fn rsa_decrypt<R: TryCryptoRng + ?Sized>(
 /// or signature scheme. See the [module-level documentation][crate::hazmat] for more information.
 #[cfg(feature = "private-key")]
 #[inline]
-pub fn rsa_decrypt_and_check<R: TryCryptoRng + ?Sized>(
-    priv_key: &impl PrivateKeyParts<MontyParams = BoxedMontyParams>,
+pub fn rsa_decrypt_and_check<R: TryCryptoRng + ?Sized, K>(
+    priv_key: &K,
     rng: Option<&mut R>,
     c: &BoxedUint,
-) -> Result<BoxedUint> {
+) -> Result<BoxedUint>
+where
+    K: GenericPrivateKeyParts<BoxedUint, MontyParams = BoxedMontyParams>,
+{
     let m = rsa_decrypt(rng, priv_key, c)?;
 
     // In order to defend against errors in the CRT computation, m^e is

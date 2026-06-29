@@ -52,18 +52,20 @@ pub trait PublicKeyParts<T: UnsignedModularInt> {
 /// Generic components of an RSA private key — minimal trait for the
 /// heapless / wip-private-key port.
 ///
-/// Mirrors [`PublicKeyParts`] in shape: generic over both the integer
-/// type `T` and the Montgomery parameter type `M`, no concrete
-/// dependency on `BoxedUint`/`BoxedMontyParams`. The minimal surface
-/// is `d()` only — CRT accessors (`dp`/`dq`/`qinv`/`p_params`/`q_params`)
-/// are deliberately omitted from this trait; they'll arrive on a
-/// future `GenericCrtPrivateKeyParts` extension trait when CT modular
-/// inverse lands upstream and we can support CRT on the heapless path.
+/// Mirrors [`PublicKeyParts`] in shape: generic over the integer
+/// type `T`, no concrete dependency on `BoxedUint`/`BoxedMontyParams`.
+/// The base surface is `d()`; the CRT accessors (`dp`/`dq`/`qinv`/
+/// `p_params`/`q_params`) are gated on `feature = "private-key"` so
+/// they only exist on the alloc path — heapless callers physically
+/// can't reach them. Default impls return `None` so a generic key
+/// without precomputed CRT values (e.g. [`GenericRsaPrivateKey`])
+/// satisfies the trait with the minimum.
 ///
 /// The legacy [`PrivateKeyParts`] (alloc-bound, `BoxedUint`-concrete)
 /// is bridged to this trait via a blanket impl, so any existing
 /// `K: PrivateKeyParts` value also satisfies
-/// `GenericPrivateKeyParts<BoxedUint, BoxedMontyParams>`.
+/// `GenericPrivateKeyParts<BoxedUint>` — with the bridge forwarding
+/// the CRT accessors when present.
 #[cfg(any(feature = "private-key", feature = "wip-private-key"))]
 pub trait GenericPrivateKeyParts<T>: PublicKeyParts<T>
 where
@@ -71,6 +73,44 @@ where
 {
     /// Returns the private exponent of the key.
     fn d(&self) -> &T;
+
+    /// Returns the prime factors of the modulus. Returns `&[]` for keys
+    /// that don't store factors (the heapless default).
+    #[cfg(feature = "private-key")]
+    fn primes(&self) -> &[T] {
+        &[]
+    }
+
+    /// Returns the precomputed `dp = d mod (p - 1)` value, if available.
+    /// `None` for keys that didn't precompute CRT (the heapless default).
+    #[cfg(feature = "private-key")]
+    fn dp(&self) -> Option<&T> {
+        None
+    }
+
+    /// Returns the precomputed `dq = d mod (q - 1)` value, if available.
+    #[cfg(feature = "private-key")]
+    fn dq(&self) -> Option<&T> {
+        None
+    }
+
+    /// Returns the precomputed `qinv = q^-1 mod p` value, if available.
+    #[cfg(feature = "private-key")]
+    fn qinv(&self) -> Option<&<Self::MontyParams as ModulusParams>::MontgomeryForm> {
+        None
+    }
+
+    /// Returns the Montgomery parameters for `p`, if available.
+    #[cfg(feature = "private-key")]
+    fn p_params(&self) -> Option<&Self::MontyParams> {
+        None
+    }
+
+    /// Returns the Montgomery parameters for `q`, if available.
+    #[cfg(feature = "private-key")]
+    fn q_params(&self) -> Option<&Self::MontyParams> {
+        None
+    }
 }
 
 /// Bridge: every legacy [`PrivateKeyParts`] impl also satisfies the
@@ -78,13 +118,39 @@ where
 /// existing alloc-side consumers (and the upstream
 /// `algorithms::rsa::rsa_decrypt[_and_check]` path) be re-bound on
 /// `GenericPrivateKeyParts` incrementally without breaking compilation.
+/// Forwards the CRT accessors so the alloc-side CRT branch can run
+/// purely against the generic trait surface.
 #[cfg(feature = "private-key")]
 impl<K> GenericPrivateKeyParts<BoxedUint> for K
 where
-    K: PrivateKeyParts,
+    K: PrivateKeyParts + PublicKeyParts<BoxedUint, MontyParams = BoxedMontyParams>,
 {
     fn d(&self) -> &BoxedUint {
         PrivateKeyParts::d(self)
+    }
+
+    fn primes(&self) -> &[BoxedUint] {
+        PrivateKeyParts::primes(self)
+    }
+
+    fn dp(&self) -> Option<&BoxedUint> {
+        PrivateKeyParts::dp(self)
+    }
+
+    fn dq(&self) -> Option<&BoxedUint> {
+        PrivateKeyParts::dq(self)
+    }
+
+    fn qinv(&self) -> Option<&BoxedMontyForm> {
+        PrivateKeyParts::qinv(self)
+    }
+
+    fn p_params(&self) -> Option<&BoxedMontyParams> {
+        PrivateKeyParts::p_params(self)
+    }
+
+    fn q_params(&self) -> Option<&BoxedMontyParams> {
+        PrivateKeyParts::q_params(self)
     }
 }
 
