@@ -8,7 +8,7 @@ use rsa::{
     pkcs1v15,
     pkcs8::{DecodePrivateKey, DecodePublicKey, EncodePrivateKey, EncodePublicKey},
     pss,
-    traits::{PrivateKeyParts, PublicKeyParts},
+    traits::{GenericPrivateKeyParts, PublicKeyParts},
     RsaPrivateKey, RsaPublicKey,
 };
 use sha2::Sha256;

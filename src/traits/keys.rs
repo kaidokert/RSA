@@ -145,7 +145,17 @@ where
 }
 
 /// Components of an RSA private key.
+///
+/// **Deprecated** — superseded by [`GenericPrivateKeyParts`], which is
+/// generic over the integer / Montgomery-parameter backend. Existing
+/// `K: PrivateKeyParts` types still work but new code should bound on
+/// `GenericPrivateKeyParts<BoxedUint, MontyParams = BoxedMontyParams>`
+/// instead.
 #[cfg(feature = "private-key")]
+#[deprecated(
+    since = "0.3.0",
+    note = "use `GenericPrivateKeyParts<BoxedUint>` (generic over backend) instead; this trait will be removed in a future major version"
+)]
 pub trait PrivateKeyParts: PublicKeyParts<BoxedUint> {
     /// Returns the private exponent of the key.
     fn d(&self) -> &BoxedUint;

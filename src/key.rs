@@ -36,6 +36,7 @@ use crate::dummy_rng::DummyRng;
 use crate::errors::{Error, Result};
 use crate::traits::keys::PublicKeyParts;
 #[cfg(feature = "private-key")]
+#[allow(deprecated)]
 use crate::traits::keys::{CrtValue, PrivateKeyParts};
 #[cfg(any(feature = "private-key", feature = "wip-private-key"))]
 use crate::traits::keys::{GenericPrivateKeyParts, RawPrivateKeyConstructible};
@@ -1026,7 +1027,10 @@ impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
     }
 }
 
+// Kept impl'd for backwards compat with external consumers bounding on
+// the deprecated trait. New code should use `GenericPrivateKeyParts`.
 #[cfg(feature = "private-key")]
+#[allow(deprecated)]
 impl PrivateKeyParts for GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
     fn d(&self) -> &BoxedUint {
         &self.d
@@ -1212,7 +1216,7 @@ impl<'de> Deserialize<'de> for RsaPrivateKey {
 mod tests {
     use super::*;
     use crate::algorithms::rsa::{rsa_decrypt_and_check, rsa_encrypt};
-    use crate::traits::{PrivateKeyParts, PublicKeyParts};
+    use crate::traits::{GenericPrivateKeyParts, PublicKeyParts};
 
     use hex_literal::hex;
     use rand::rngs::ChaCha8Rng;
@@ -1248,7 +1252,8 @@ mod tests {
         private_key.validate().expect("invalid private key");
 
         assert!(
-            PrivateKeyParts::d(private_key) < PublicKeyParts::n(private_key).as_ref(),
+            GenericPrivateKeyParts::<BoxedUint>::d(private_key)
+                < PublicKeyParts::n(private_key).as_ref(),
             "private exponent too large"
         );
 
@@ -1542,7 +1547,7 @@ mod tests {
         let ref_key = RsaPrivateKey::from_pkcs8_der(RSA_2048_PRIV_DER).unwrap();
         assert_eq!(ref_key.validate(), Ok(()));
 
-        let primes = PrivateKeyParts::primes(&ref_key).to_vec();
+        let primes = GenericPrivateKeyParts::<BoxedUint>::primes(&ref_key).to_vec();
 
         let exp = PublicKeyParts::e(&ref_key);
         let key = RsaPrivateKey::from_primes(primes, exp.clone())
@@ -1551,10 +1556,19 @@ mod tests {
 
         assert_eq!(PublicKeyParts::n(&key), PublicKeyParts::n(&ref_key));
 
-        assert_eq!(PrivateKeyParts::dp(&key), PrivateKeyParts::dp(&ref_key));
-        assert_eq!(PrivateKeyParts::dq(&key), PrivateKeyParts::dq(&ref_key));
+        assert_eq!(
+            GenericPrivateKeyParts::<BoxedUint>::dp(&key),
+            GenericPrivateKeyParts::<BoxedUint>::dp(&ref_key)
+        );
+        assert_eq!(
+            GenericPrivateKeyParts::<BoxedUint>::dq(&key),
+            GenericPrivateKeyParts::<BoxedUint>::dq(&ref_key)
+        );
 
-        assert_eq!(PrivateKeyParts::d(&key), PrivateKeyParts::d(&ref_key));
+        assert_eq!(
+            GenericPrivateKeyParts::<BoxedUint>::d(&key),
+            GenericPrivateKeyParts::<BoxedUint>::d(&ref_key)
+        );
     }
 
     #[test]
@@ -1565,7 +1579,7 @@ mod tests {
         let ref_key = RsaPrivateKey::from_pkcs8_der(RSA_2048_SP800_PRIV_DER).unwrap();
         assert_eq!(ref_key.validate(), Ok(()));
 
-        let primes = PrivateKeyParts::primes(&ref_key).to_vec();
+        let primes = GenericPrivateKeyParts::<BoxedUint>::primes(&ref_key).to_vec();
         let exp = PublicKeyParts::e(&ref_key);
 
         let key = RsaPrivateKey::from_p_q(primes[0].clone(), primes[1].clone(), exp.clone())
@@ -1574,10 +1588,19 @@ mod tests {
 
         assert_eq!(PublicKeyParts::n(&key), PublicKeyParts::n(&ref_key));
 
-        assert_eq!(PrivateKeyParts::dp(&key), PrivateKeyParts::dp(&ref_key));
-        assert_eq!(PrivateKeyParts::dq(&key), PrivateKeyParts::dq(&ref_key));
+        assert_eq!(
+            GenericPrivateKeyParts::<BoxedUint>::dp(&key),
+            GenericPrivateKeyParts::<BoxedUint>::dp(&ref_key)
+        );
+        assert_eq!(
+            GenericPrivateKeyParts::<BoxedUint>::dq(&key),
+            GenericPrivateKeyParts::<BoxedUint>::dq(&ref_key)
+        );
 
-        assert_eq!(PrivateKeyParts::d(&key), PrivateKeyParts::d(&ref_key));
+        assert_eq!(
+            GenericPrivateKeyParts::<BoxedUint>::d(&key),
+            GenericPrivateKeyParts::<BoxedUint>::d(&ref_key)
+        );
     }
 
     #[test]
@@ -1621,7 +1644,10 @@ mod tests {
         let key_with_large_exp = key_with_large_exp.unwrap();
         assert_eq!(PublicKeyParts::e(&key_with_large_exp), &large_e);
         assert_eq!(PublicKeyParts::n(&key_with_large_exp).as_ref(), &n);
-        assert_eq!(PrivateKeyParts::d(&key_with_large_exp), &d);
+        assert_eq!(
+            GenericPrivateKeyParts::<BoxedUint>::d(&key_with_large_exp),
+            &d
+        );
 
         // Verify that the key is still cryptographically valid (de ≡ 1 mod λ(n))
         // by checking that validation with skip_exponent_size passes
