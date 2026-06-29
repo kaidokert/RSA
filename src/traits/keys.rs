@@ -11,6 +11,37 @@ use zeroize::Zeroize;
 
 use crate::traits::{modular::ModulusParams, NonZero, UnsignedModularInt};
 
+/// Marker trait gating the raw `(public_key, d)` constructor on
+/// [`crate::key::GenericRsaPrivateKey`] (`from_public_and_d`). Backends
+/// that impl this trait opt in to constructing private keys without
+/// `primes` or CRT precompute — suitable for the heapless /
+/// `wip-private-key` path where the caller already holds validated
+/// `(n, e, d)` material from outside (e.g. PEM/PKCS#8 on disk,
+/// HSM-derived).
+///
+/// **Intentionally NOT impl'd for [`BoxedUint`]** — alloc-side callers
+/// must use `RsaPrivateKey::from_components` / `from_p_q` /
+/// `from_primes`, which validate the key and populate `primes`
+/// (recovering them via NIST SP 800-56B § C.2 when not provided).
+/// Without that, empty `primes` would leak into CRT-aware APIs
+/// (`precompute`, `crt_coefficient`, PKCS#1 encoding) as `primes[0]`
+/// index panics.
+#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
+pub trait RawPrivateKeyConstructible: UnsignedModularInt {}
+
+// Heapless build: every `FixedWidthUnsignedInt + PartialOrd` matches
+// the heapless `UnsignedModularInt` blanket in `traits/modular.rs` and
+// gets the marker for free. `BoxedUint` isn't `Copy`, so it can never
+// satisfy `FixedWidthUnsignedInt` — excluded structurally.
+#[cfg(all(
+    any(feature = "private-key", feature = "wip-private-key"),
+    not(feature = "alloc")
+))]
+impl<T> RawPrivateKeyConstructible for T where
+    T: crate::traits::modular::FixedWidthUnsignedInt + PartialOrd
+{
+}
+
 /// Components of an RSA public key.
 pub trait PublicKeyParts<T: UnsignedModularInt> {
     /// Montgomery parameter type matching this modulus type.
@@ -110,47 +141,6 @@ where
     #[cfg(feature = "private-key")]
     fn q_params(&self) -> Option<&Self::MontyParams> {
         None
-    }
-}
-
-/// Bridge: every legacy [`PrivateKeyParts`] impl also satisfies the
-/// generic trait at the concrete `BoxedUint` substitution. Lets
-/// existing alloc-side consumers (and the upstream
-/// `algorithms::rsa::rsa_decrypt[_and_check]` path) be re-bound on
-/// `GenericPrivateKeyParts` incrementally without breaking compilation.
-/// Forwards the CRT accessors so the alloc-side CRT branch can run
-/// purely against the generic trait surface.
-#[cfg(feature = "private-key")]
-impl<K> GenericPrivateKeyParts<BoxedUint> for K
-where
-    K: PrivateKeyParts + PublicKeyParts<BoxedUint, MontyParams = BoxedMontyParams>,
-{
-    fn d(&self) -> &BoxedUint {
-        PrivateKeyParts::d(self)
-    }
-
-    fn primes(&self) -> &[BoxedUint] {
-        PrivateKeyParts::primes(self)
-    }
-
-    fn dp(&self) -> Option<&BoxedUint> {
-        PrivateKeyParts::dp(self)
-    }
-
-    fn dq(&self) -> Option<&BoxedUint> {
-        PrivateKeyParts::dq(self)
-    }
-
-    fn qinv(&self) -> Option<&BoxedMontyForm> {
-        PrivateKeyParts::qinv(self)
-    }
-
-    fn p_params(&self) -> Option<&BoxedMontyParams> {
-        PrivateKeyParts::p_params(self)
-    }
-
-    fn q_params(&self) -> Option<&BoxedMontyParams> {
-        PrivateKeyParts::q_params(self)
     }
 }
 

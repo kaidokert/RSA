@@ -264,6 +264,19 @@ where
     }
 }
 
+// Opt the alloc-side newtype into raw `(public_key, d)` private-key
+// construction. The heapless-build blanket on
+// `FixedWidthUnsignedInt + PartialOrd` doesn't reach `ModMathValue<T>`
+// (a newtype, not itself `FixedWidthUnsignedInt`), so impl it here.
+#[cfg(all(
+    feature = "alloc",
+    any(feature = "private-key", feature = "wip-private-key")
+))]
+impl<T> crate::traits::keys::RawPrivateKeyConstructible for ModMathValue<T> where
+    T: FixedWidthUnsignedInt + PartialOrd
+{
+}
+
 #[cfg(not(feature = "alloc"))]
 pub type ModMathValue<T> = T;
 
@@ -1139,7 +1152,7 @@ mod private_op_tests {
         let d = wrap_value(
             <U2048 as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(&D_2048).unwrap(),
         );
-        let priv_key = GenericRsaPrivateKey::from_components(public, d);
+        let priv_key = GenericRsaPrivateKey::from_public_and_d(public, d);
 
         let signing_key = GenericSigningKey::<Sha1, _, _>::new(priv_key);
         let verifying_key = GenericVerifyingKey::<Sha1, _, _>::new(public_clone);
@@ -1175,7 +1188,7 @@ mod private_op_tests {
         let d = wrap_value(
             <U2048 as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(&D_2048).unwrap(),
         );
-        let priv_key = GenericRsaPrivateKey::from_components(public, d);
+        let priv_key = GenericRsaPrivateKey::from_public_and_d(public, d);
         let signing_key = GenericSigningKey::<Sha1, _, _>::new(priv_key);
 
         let bad_prehash = [0u8; 21]; // SHA-1 outputs 20 bytes, not 21.
@@ -1203,7 +1216,7 @@ mod private_op_tests {
         let d = wrap_value(
             <U2048 as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(&D_2048).unwrap(),
         );
-        let priv_key = GenericRsaPrivateKey::from_components(key.clone(), d);
+        let priv_key = GenericRsaPrivateKey::from_public_and_d(key.clone(), d);
         // Salt length = 0 → deterministic encoding, easy roundtrip.
         let signing_key = GenericSigningKey::<Sha1, _, _>::new_with_salt_len(priv_key, 0);
 
@@ -1240,7 +1253,7 @@ mod private_op_tests {
         let d = wrap_value(
             <U2048 as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(&D_2048).unwrap(),
         );
-        let priv_key = GenericRsaPrivateKey::from_components(key, d);
+        let priv_key = GenericRsaPrivateKey::from_public_and_d(key, d);
         let signing_key = GenericSigningKey::<Sha1, _, _>::new_with_salt_len(priv_key, 0);
 
         let bad_prehash = [0u8; 21]; // SHA-1 is 20 bytes.
@@ -1269,7 +1282,7 @@ mod private_op_tests {
         let d = wrap_value(
             <U2048 as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(&D_2048).unwrap(),
         );
-        let priv_key = GenericRsaPrivateKey::from_components(key, d);
+        let priv_key = GenericRsaPrivateKey::from_public_and_d(key, d);
         // salt_len configured to 20; supply 16 -> mismatch.
         let signing_key = GenericSigningKey::<Sha1, _, _>::new_with_salt_len(priv_key, 20);
 
@@ -1299,7 +1312,7 @@ mod private_op_tests {
         let public =
             crate::modmath_support::public_key_ct_from_be_bytes::<SmallUCt>(&[35u8], 5).unwrap();
         let priv_key =
-            GenericRsaPrivateKey::from_components(public, wrap_value(SmallUCt::from(29u8)));
+            GenericRsaPrivateKey::from_public_and_d(public, wrap_value(SmallUCt::from(29u8)));
         let mut signing_key = GenericSigningKey::<Sha1, _, _>::new(priv_key);
         signing_key.zeroize();
     }
@@ -1319,7 +1332,7 @@ mod private_op_tests {
         let public =
             crate::modmath_support::public_key_ct_from_be_bytes::<SmallUCt>(&[35u8], 5).unwrap();
         let priv_key =
-            GenericRsaPrivateKey::from_components(public, wrap_value(SmallUCt::from(29u8)));
+            GenericRsaPrivateKey::from_public_and_d(public, wrap_value(SmallUCt::from(29u8)));
         let mut signing_key = GenericSigningKey::<Sha1, _, _>::new(priv_key);
         signing_key.zeroize();
     }
@@ -1349,7 +1362,7 @@ mod private_op_tests {
         // then attach a dummy d.
         let public =
             crate::modmath_support::public_key_ct_from_be_bytes::<SmallUCt>(&[35u8], 5).unwrap();
-        let key = GenericRsaPrivateKey::from_components(public, wrap_value(SmallUCt::from(29u8)));
+        let key = GenericRsaPrivateKey::from_public_and_d(public, wrap_value(SmallUCt::from(29u8)));
 
         assert_pub_parts::<_, ModMathValue<SmallUCt>>(&key);
         assert_priv_parts::<_, ModMathValue<SmallUCt>>(&key);
