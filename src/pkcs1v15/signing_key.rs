@@ -1,15 +1,3 @@
-//! Boxed RSASSA-PKCS1-v1_5 signing key — alloc-side type alias and
-//! specializations over [`super::GenericSigningKey`]. Mirrors the
-//! pattern on the verify side (`verifying_key.rs`).
-//!
-//! The struct, generic constructors (`new`, `new_unprefixed`), `Clone`,
-//! `Debug`, `AsRef<GenericRsaPrivateKey<T, M>>`, `Zeroize`, and the
-//! `try_sign_into` family all live on [`super::GenericSigningKey`].
-//! This file holds only what's tied to the boxed substitution:
-//! keygen-bearing constructors, the `signature::*Signer` trait
-//! family (which delegates to the alloc-side `sign(...)`), encoding,
-//! serde, and the legacy `Keypair` wiring.
-
 use super::{sign, GenericSigningKey, GenericVerifyingKey, Signature, VerifyingKey};
 use crate::{dummy_rng::DummyRng, Result, RsaPrivateKey};
 use const_oid::AssociatedOid;
@@ -37,9 +25,7 @@ use {
     serdect::serde::{de, ser, Deserialize, Serialize},
 };
 
-/// Signing key for `RSASSA-PKCS1-v1_5` signatures as described in
-/// [RFC8017 § 8.2]. Boxed alias over [`GenericSigningKey`] — equivalent
-/// to `GenericSigningKey<D, BoxedUint, BoxedMontyParams>`.
+/// Signing key for `RSASSA-PKCS1-v1_5` signatures as described in [RFC8017 § 8.2].
 ///
 /// [RFC8017 § 8.2]: https://datatracker.ietf.org/doc/html/rfc8017#section-8.2
 pub type SigningKey<D> = GenericSigningKey<D, BoxedUint, BoxedMontyParams>;
@@ -48,8 +34,7 @@ impl<D> GenericSigningKey<D, BoxedUint, BoxedMontyParams>
 where
     D: Digest + AssociatedOid,
 {
-    /// Generate a fresh RSA key pair of the given bit size, then wrap
-    /// it in a signing key with the DigestInfo prefix for `D`.
+    /// Generate a new signing key with a prefix for the digest `D`.
     pub fn random<R: CryptoRng + ?Sized>(rng: &mut R, bit_size: usize) -> Result<Self> {
         Ok(Self::new(RsaPrivateKey::new(rng, bit_size)?))
     }
@@ -59,8 +44,7 @@ impl<D> GenericSigningKey<D, BoxedUint, BoxedMontyParams>
 where
     D: Digest,
 {
-    /// Generate a fresh RSA key pair of the given bit size with an empty
-    /// prefix (raw signatures, no DigestInfo wrapper).
+    /// Generate a new signing key with an empty prefix.
     pub fn random_unprefixed<R: CryptoRng + ?Sized>(rng: &mut R, bit_size: usize) -> Result<Self> {
         Ok(Self::new_unprefixed(RsaPrivateKey::new(rng, bit_size)?))
     }
