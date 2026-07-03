@@ -57,7 +57,7 @@ where
 impl<T, M> RandomizedEncryptor for GenericEncryptingKey<T, M>
 where
     T: UnsignedModularInt,
-    M: ModulusParams<Modulus = T> + CtModulusParams,
+    M: CtModulusParams<Modulus = T>,
 {
     fn encrypt_with_rng_into<'a, R: rand_core::TryCryptoRng + ?Sized>(
         &self,

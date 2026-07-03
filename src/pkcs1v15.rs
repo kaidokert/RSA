@@ -97,6 +97,7 @@ impl Pkcs1v15Encrypt {
         R: TryCryptoRng + ?Sized,
         T: UnsignedModularInt,
         K: PublicKeyParts<T>,
+        K::MontyParams: crate::traits::modular::CtModulusParams,
     {
         let padded_len = pub_key.size();
         let em = pkcs1v15_encrypt_pad_into(rng, msg, padded_len, storage)?;
@@ -116,6 +117,7 @@ fn encrypt<R: TryCryptoRng + ?Sized, K, T>(rng: &mut R, pub_key: &K, msg: &[u8])
 where
     T: UnsignedModularInt,
     K: PublicKeyParts<T>,
+    K::MontyParams: crate::traits::modular::CtModulusParams,
 {
     let mut storage = vec![0u8; pub_key.size()];
     let ciphertext = Pkcs1v15Encrypt.encrypt_into(rng, pub_key, msg, &mut storage)?;
@@ -185,6 +187,7 @@ impl PaddingScheme for Pkcs1v15Encrypt {
         Rng: TryCryptoRng + ?Sized,
         T: UnsignedModularInt,
         K: PublicKeyParts<T>,
+        K::MontyParams: crate::traits::modular::CtModulusParams,
     {
         let mut storage = vec![0u8; pub_key.size()];
         let ciphertext = self.encrypt_into(rng, pub_key, msg, &mut storage)?;
@@ -295,6 +298,7 @@ where
     R: TryCryptoRng + ?Sized,
     T: UnsignedModularInt,
     K: PublicKeyParts<T>,
+    K::MontyParams: crate::traits::modular::CtModulusParams,
 {
     Pkcs1v15Encrypt.encrypt_into(rng, pub_key, msg, storage)
 }

@@ -93,7 +93,7 @@ where
     D: Digest,
     MGD: Digest + FixedOutputReset,
     T: UnsignedModularInt,
-    M: ModulusParams<Modulus = T> + CtModulusParams,
+    M: CtModulusParams<Modulus = T>,
 {
     fn encrypt_with_rng_into<'a, R: TryCryptoRng + ?Sized>(
         &self,
