@@ -176,7 +176,7 @@ where
         let k = self.inner.size();
         sign_into(
             self.inner.n_params(),
-            crate::traits::keys::GenericPrivateKeyParts::d(&self.inner),
+            crate::traits::keys::PrivateKeyParts::d(&self.inner),
             self.inner.e(),
             self.prefix.as_ref(),
             digest.as_ref(),
@@ -205,7 +205,7 @@ where
         let k = self.inner.size();
         sign_into(
             self.inner.n_params(),
-            crate::traits::keys::GenericPrivateKeyParts::d(&self.inner),
+            crate::traits::keys::PrivateKeyParts::d(&self.inner),
             self.inner.e(),
             self.prefix.as_ref(),
             prehash,

@@ -18,7 +18,7 @@ use zeroize::Zeroize;
 #[cfg(not(feature = "private-key"))]
 use crate::traits::keys::PublicKeyParts;
 #[cfg(feature = "private-key")]
-use crate::traits::keys::{GenericPrivateKeyParts, PublicKeyParts};
+use crate::traits::keys::{PrivateKeyParts, PublicKeyParts};
 use crate::{
     errors::{Error, Result},
     traits::{
@@ -60,10 +60,10 @@ pub fn rsa_decrypt<R: TryCryptoRng + ?Sized, K>(
     c: &BoxedUint,
 ) -> Result<BoxedUint>
 where
-    K: GenericPrivateKeyParts<BoxedUint, MontyParams = BoxedMontyParams>,
+    K: PrivateKeyParts<BoxedUint, MontyParams = BoxedMontyParams>,
 {
     let n = priv_key.n();
-    let d = GenericPrivateKeyParts::d(priv_key);
+    let d = PrivateKeyParts::d(priv_key);
 
     if c.bits_precision() != n.as_ref().bits_precision() {
         return Err(Error::Decryption);
@@ -86,20 +86,20 @@ where
         c.try_resize(bits).ok_or(Error::Internal)?
     };
 
-    // Bind once — `GenericPrivateKeyParts::primes` default returns `&[]`,
+    // Bind once — `PrivateKeyParts::primes` default returns `&[]`,
     // so a key that overrides the CRT accessors but not `primes` could
     // otherwise reach the CRT branch and panic on `[0]`/`[1]`. The
     // `primes.len() >= 2` guard below makes that impossible regardless
     // of how the trait is implemented.
-    let primes = GenericPrivateKeyParts::primes(priv_key);
+    let primes = PrivateKeyParts::primes(priv_key);
     let is_multiprime = primes.len() > 2;
 
     let m = match (
-        GenericPrivateKeyParts::dp(priv_key),
-        GenericPrivateKeyParts::dq(priv_key),
-        GenericPrivateKeyParts::qinv(priv_key),
-        GenericPrivateKeyParts::p_params(priv_key),
-        GenericPrivateKeyParts::q_params(priv_key),
+        PrivateKeyParts::dp(priv_key),
+        PrivateKeyParts::dq(priv_key),
+        PrivateKeyParts::qinv(priv_key),
+        PrivateKeyParts::p_params(priv_key),
+        PrivateKeyParts::q_params(priv_key),
     ) {
         (Some(dp), Some(dq), Some(qinv), Some(p_params), Some(q_params))
             if !is_multiprime && primes.len() >= 2 =>
@@ -191,7 +191,7 @@ pub fn rsa_decrypt_and_check<R: TryCryptoRng + ?Sized, K>(
     c: &BoxedUint,
 ) -> Result<BoxedUint>
 where
-    K: GenericPrivateKeyParts<BoxedUint, MontyParams = BoxedMontyParams>,
+    K: PrivateKeyParts<BoxedUint, MontyParams = BoxedMontyParams>,
 {
     let m = rsa_decrypt(rng, priv_key, c)?;
 
