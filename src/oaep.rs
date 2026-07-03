@@ -192,6 +192,7 @@ where
         Rng: TryCryptoRng + ?Sized,
         T: UnsignedModularInt,
         K: PublicKeyParts<T>,
+        K::MontyParams: crate::traits::modular::CtModulusParams,
     {
         let em = oaep_encrypt(
             rng,
@@ -292,6 +293,7 @@ where
     D: digest::Digest,
     MGD: digest::Digest + digest::FixedOutputReset,
     K: crate::traits::PublicKeyParts<T>,
+    K::MontyParams: crate::traits::modular::CtModulusParams,
     T: crate::traits::UnsignedModularInt,
 {
     let padded_len = pub_key.size();

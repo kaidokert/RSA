@@ -557,6 +557,17 @@ impl<T: ModMathIntCt> ModulusParams for ModMathParams<T, Ct> {
     }
 }
 
+// Opt the Ct personality into the CT-encrypt gate. Deliberately no
+// impl for `ModMathParams<T, Nct>` — Nct exponentiation is vartime in
+// the base, so `NctPublicKey`-derived encrypting keys fail the encrypt
+// trait bound at compile time. See
+// `crate::traits::modular::CtModulusParams`.
+impl<T: ModMathIntCt> crate::traits::modular::sealed::CtModulusParamsSealed
+    for ModMathParams<T, Ct>
+{
+}
+impl<T: ModMathIntCt> crate::traits::modular::CtModulusParams for ModMathParams<T, Ct> {}
+
 #[cfg(test)]
 #[cfg(all(feature = "alloc", feature = "private-key"))]
 mod tests {

@@ -542,13 +542,19 @@ where
     M: ModulusParams<Modulus = T>,
 {
     /// Encrypt the given message.
+    ///
+    /// Bound `M: CtModulusParams` — `NctPublicKey`-derived keys can't
+    /// reach this entry point.
     #[cfg(feature = "alloc")]
     pub fn encrypt<R: CryptoRng + ?Sized, P: PaddingScheme>(
         &self,
         rng: &mut R,
         padding: P,
         msg: &[u8],
-    ) -> Result<Vec<u8>> {
+    ) -> Result<Vec<u8>>
+    where
+        M: crate::traits::modular::CtModulusParams,
+    {
         padding.encrypt(rng, self, msg)
     }
 

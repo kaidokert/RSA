@@ -8,6 +8,7 @@ use rand_core::TryCryptoRng;
 use crate::errors::Result;
 #[cfg(feature = "private-key")]
 use crate::key::RsaPrivateKey;
+use crate::traits::modular::CtModulusParams;
 use crate::traits::{PublicKeyParts, UnsignedModularInt};
 
 /// Padding scheme used for encryption.
@@ -25,12 +26,18 @@ pub trait PaddingScheme {
     ) -> Result<Vec<u8>>;
 
     /// Encrypt the given message using the given public key.
+    ///
+    /// Bound `K::MontyParams: CtModulusParams` — `NctPublicKey`-derived
+    /// keys can't reach this entry point, matching the
+    /// [`crate::traits::RandomizedEncryptor`] gate on
+    /// `GenericEncryptingKey`.
     #[cfg(feature = "alloc")]
     fn encrypt<Rng, K, T>(self, rng: &mut Rng, pub_key: &K, msg: &[u8]) -> Result<Vec<u8>>
     where
         Rng: TryCryptoRng + ?Sized,
         T: UnsignedModularInt,
-        K: PublicKeyParts<T>;
+        K: PublicKeyParts<T>,
+        K::MontyParams: CtModulusParams;
 }
 
 /// Digital signature scheme.
