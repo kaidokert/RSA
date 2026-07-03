@@ -211,11 +211,6 @@ pub fn pkcs1v15_sign_pad_into<'a>(
 /// context. Higher-level callers should hash the input message themselves
 /// and prepend the appropriate digest-algorithm DigestInfo prefix.
 ///
-/// TODO: switch the final serialization step to `uint_to_zeroizing_be_pad_into`
-/// once fixed-bigint provides `Zeroize` for `BytesHolder`. The intermediate
-/// `T::Bytes` produced by `s.to_be_bytes()` carries the just-signed value
-/// briefly on the stack; today it's a soft-leak window, the future zeroizing
-/// path closes it.
 // Consumer (the heapless `SigningKey<D>` wrapper) lands in a later PR.
 #[allow(dead_code)]
 #[allow(clippy::too_many_arguments)] // Composing four byte/integer steps; splitting helps nothing.
@@ -232,6 +227,7 @@ pub fn sign_into<'sig, T, M>(
 ) -> Result<&'sig [u8]>
 where
     T: UnsignedModularInt,
+    T::Bytes: zeroize::Zeroize,
     M: ModulusParams<Modulus = T>,
     M::MontgomeryForm: Pow<M> + PowBoundedExp<M>,
 {
@@ -256,7 +252,7 @@ where
     let em_slice = pkcs1v15_sign_pad_into(prefix, hashed, k, em_storage)?;
     let em = T::try_from_be_bytes_vartime(em_slice)?;
     let s = crate::algorithms::rsa::rsa_private_op_and_check(&em, d, e, n_params)?;
-    crate::algorithms::pad::uint_to_be_pad_into(s, k, sig_storage)
+    crate::algorithms::pad::uint_to_zeroizing_be_pad_into(s, k, sig_storage)
 }
 
 #[inline]
