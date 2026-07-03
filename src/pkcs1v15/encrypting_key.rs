@@ -50,10 +50,6 @@ where
     }
 }
 
-// `M: CtModulusParams` — encrypt on an NCT-personality key would
-// silently downgrade the plaintext (secret!) to vartime work; refuse
-// to compile in that case. Signature verification stays personality-
-// agnostic.
 impl<T, M> RandomizedEncryptor for GenericEncryptingKey<T, M>
 where
     T: UnsignedModularInt,

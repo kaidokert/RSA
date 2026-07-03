@@ -1,16 +1,3 @@
-//! Boxed RSASSA-PSS signing key — alloc-side type alias and
-//! specializations over [`super::GenericSigningKey`]. Mirrors the
-//! pattern on the verify side (`verifying_key.rs`).
-//!
-//! The struct, generic constructors (`new`, `new_with_salt_len`),
-//! `Clone`, `Debug`, `AsRef<GenericRsaPrivateKey<T, M>>`, `Zeroize`,
-//! and the `try_sign_*_into` family all live on
-//! [`super::GenericSigningKey`]. This file holds only what's tied to
-//! the boxed substitution: keygen-bearing constructors, the
-//! `signature::*Signer` trait family (delegating to the alloc-side
-//! `sign_digest(...)`), encoding, serde, and the legacy `Keypair`
-//! wiring.
-
 use super::{sign_digest, GenericSigningKey, Signature, VerifyingKey};
 use crate::{Result, RsaPrivateKey};
 use crypto_bigint::{modular::BoxedMontyParams, BoxedUint};
@@ -47,8 +34,7 @@ use {
 };
 
 /// Signing key for producing RSASSA-PSS signatures as described in
-/// [RFC8017 § 8.1]. Boxed alias over [`GenericSigningKey`] — equivalent
-/// to `GenericSigningKey<D, BoxedUint, BoxedMontyParams>`.
+/// [RFC8017 § 8.1].
 ///
 /// [RFC8017 § 8.1]: https://datatracker.ietf.org/doc/html/rfc8017#section-8.1
 pub type SigningKey<D> = GenericSigningKey<D, BoxedUint, BoxedMontyParams>;
@@ -57,14 +43,13 @@ impl<D> GenericSigningKey<D, BoxedUint, BoxedMontyParams>
 where
     D: Digest,
 {
-    /// Generate a fresh RSASSA-PSS signing key. Digest output size is
-    /// used as a salt length.
+    /// Generate a new random RSASSA-PSS signing key.
+    /// Digest output size is used as a salt length.
     pub fn random<R: CryptoRng + ?Sized>(rng: &mut R, bit_size: usize) -> Result<Self> {
         Self::random_with_salt_len(rng, bit_size, <D as Digest>::output_size())
     }
 
-    /// Generate a fresh RSASSA-PSS signing key with a salt of the given
-    /// length.
+    /// Generate a new random RSASSA-PSS signing key with a salt of the given length.
     pub fn random_with_salt_len<R: CryptoRng + ?Sized>(
         rng: &mut R,
         bit_size: usize,

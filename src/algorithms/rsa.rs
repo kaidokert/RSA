@@ -86,11 +86,9 @@ where
         c.try_resize(bits).ok_or(Error::Internal)?
     };
 
-    // Bind once — `PrivateKeyParts::primes` default returns `&[]`,
-    // so a key that overrides the CRT accessors but not `primes` could
-    // otherwise reach the CRT branch and panic on `[0]`/`[1]`. The
-    // `primes.len() >= 2` guard below makes that impossible regardless
-    // of how the trait is implemented.
+    // `primes()` defaults to `&[]`; the `primes.len() >= 2` guard below
+    // keeps a key with CRT accessors but no primes off the `[0]`/`[1]`
+    // panic path.
     let primes = PrivateKeyParts::primes(priv_key);
     let is_multiprime = primes.len() > 2;
 
@@ -270,10 +268,9 @@ fn unblind(m: &BoxedUint, unblinder: &BoxedUint, n_params: &BoxedMontyParams) ->
 
 /// ⚠️ Performs the raw RSA private-key operation `c^d mod n`.
 ///
-/// This is the bare primitive that both signing and unblinded decryption reduce
-/// to. The operation is constant-time in both base and secret exponent when
-/// `M::MontgomeryForm: Pow<M>` resolves to a Ct-personality implementation
-/// (e.g. `modmath::Field<T, Ct>` via the heapless `modmath_support` adapter).
+/// The bare primitive both signing and unblinded decryption reduce to.
+/// Constant-time in base and exponent when `M::MontgomeryForm: Pow<M>`
+/// resolves to a Ct-personality impl.
 ///
 /// # ☢️️ WARNING: HAZARDOUS API ☢️
 ///
@@ -291,17 +288,10 @@ where
     pow_mod_params(c, d, n_params)
 }
 
-/// ⚠️ Performs `rsa_private_op` and verifies the result by re-encrypting
-/// and comparing against the input. This is the integrity check that
-/// PKCS#1 v1.5 / PSS signing reduce to (mirroring the upstream
-/// `rsa_decrypt_and_check` for the raw-exponent path).
-///
-/// Returns the recovered message `m = c^d mod n` only if `m^e mod n == c`,
-/// otherwise [`Error::Internal`]. Defends against transient compute errors
-/// that would otherwise emit a malformed signature (notably the class of
-/// fault attacks that try to leak `p`/`q` from a corrupted CRT step;
-/// today's heapless raw-exponent path doesn't take that branch but the
-/// check shape stays consistent with the upstream invariant).
+/// ⚠️ Performs `rsa_private_op`, then verifies by re-encrypting: returns
+/// `m = c^d mod n` only if `m^e mod n == c`, else [`Error::Internal`]. The
+/// signing-side analogue of `rsa_decrypt_and_check`; guards against
+/// transient compute/fault errors emitting a malformed signature.
 ///
 /// # ☢️️ WARNING: HAZARDOUS API ☢️
 ///
@@ -319,10 +309,9 @@ where
     M::MontgomeryForm: Pow<M> + PowBoundedExp<M>,
 {
     let m = rsa_private_op(c, d, n_params);
-    // `m < n` by construction (output of `rsa_private_op` is in `[0, n)` after
-    // Montgomery retrieve), so we route through `from_reduced` to skip the
-    // variable-time reduction `from_value` would perform on BoxedUint —
-    // `from_value -> rem_vartime` would otherwise leak `m` via timing.
+    // `m < n` by construction, so use `from_reduced` to skip the
+    // variable-time reduction `from_value` (→ `rem_vartime`) would do on
+    // BoxedUint and leak `m` via timing.
     let m_sized = m.clone().resize_unchecked(n_params.bits_precision());
     let m_mont = M::MontgomeryForm::from_reduced(m_sized, n_params);
     let check = m_mont.pow_bounded_exp(e, e.bits()).retrieve();
