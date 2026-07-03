@@ -204,27 +204,17 @@ where
 
 /// ⚠️ RSASSA-PSS sign — heapless-compatible, generic over the integer backend.
 ///
-/// Composes the four byte/integer steps of RSASSA-PSS-SIGN:
-///
-/// 1. [`emsa_pss_encode_into`] — build the EM encoding for `(m_hash, salt)`
-///    into `em_storage`. `em_bits = key_bits - 1` per RFC 8017 § 8.1.1 is
-///    derived internally from the actual modulus bit-length.
-/// 2. [`UnsignedModularInt::try_from_be_bytes_vartime`] — bytes → integer.
-/// 3. [`crate::algorithms::rsa::rsa_private_op_and_check`] — CT in the
-///    secret exponent on the Ct-personality heapless path, with a
-///    verify-after-sign integrity check on every backend.
-/// 4. `uint_to_be_pad_into` — integer → bytes, left-padded to `k`.
-///
-/// `k` is the byte length of the modulus `n` (matches
-/// `PublicKeyParts::size()`). `sig_storage.len() >= k` and
-/// `em_storage.len() >= em_len` are both checked up front; either
-/// produces a fast-fail error before any hashing or exponentiation runs.
+/// EMSA-PSS-encodes `(m_hash, salt)` (`em_bits = key_bits - 1`, RFC 8017
+/// § 8.1.1), computes `s = EM^d mod n` via
+/// [`rsa_private_op_and_check`](crate::algorithms::rsa::rsa_private_op_and_check)
+/// (verify-after-sign on every backend), and writes `s` left-padded to `k`
+/// bytes. `k` is the modulus byte length; `sig_storage`/`em_storage` are
+/// length-checked up front.
 ///
 /// # ☢️️ WARNING: HAZARDOUS API ☢️
 ///
-/// Caller is responsible for hashing the message and generating the random
-/// `salt`. This is the raw PSS sign primitive — wrap it in a higher-level
-/// `SigningKey<D>` for real use.
+/// The raw PSS sign primitive — the caller hashes the message and generates
+/// the random `salt`.
 ///
 // Consumer (the heapless `pss::SigningKey<D>` wrapper) lands in a later PR.
 #[allow(dead_code)]
@@ -248,17 +238,9 @@ where
     M::MontgomeryForm: Pow<M> + PowBoundedExp<M>,
     D: Digest + FixedOutputReset,
 {
-    // `k` must equal the ceiling-byte length of the modulus, matching
-    // `PublicKeyParts::size()` (which the public-side verifier uses for
-    // its own length check). Use the actual modulus bit-length, not the
-    // container width — for a shorter modulus stored in a wider integer
-    // (e.g. a 1024-bit RSA key on `U2048`) `bits_precision()` returns
-    // the container width and would reject the only valid `k`. Also
-    // `div_ceil` not floor — for a key whose bit-length isn't a
-    // multiple of 8 (e.g. an imported 2049-bit RSA modulus) the floor
-    // would reject the only `k` value that would actually round-trip.
-    // `em_bits = key_bits - 1` per RFC 8017 § 8.1.1 also needs the
-    // actual modulus bit-length.
+    // `k` = modulus byte length (matches `PublicKeyParts::size()`). Use the
+    // actual bit-length, not the container width, and `div_ceil` so a
+    // non-multiple-of-8 modulus still round-trips; `em_bits` needs it too.
     let key_bits = n_params.modulus().as_ref().bits() as usize;
     if k != key_bits.div_ceil(8) {
         return Err(Error::InvalidArguments);

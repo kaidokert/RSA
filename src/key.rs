@@ -98,17 +98,9 @@ where
 
 /// Generic RSA private key — heapless-compatible value type.
 ///
-/// Holds the public components plus the secret exponent `d`. Mirrors
-/// [`GenericRsaPublicKey`] in shape; satisfies both [`PublicKeyParts<T>`]
-/// (via delegation to the inner pubkey) and [`PrivateKeyParts<T>`]
-/// — the Montgomery parameter type `M` comes through `PublicKeyParts`'s
-/// `MontyParams` associated type.
-///
-/// Deliberately minimal: no `primes`, no `precomputed` CRT values, no
-/// keygen. This is the (n, e, d) private form suitable for the raw
-/// signing path. CRT support arrives later behind a separate
-/// extension trait when the dependency stack provides CT modular
-/// inverse — see the roadmap in `CLAUDE.md`.
+/// Holds the public components plus the secret exponent `d`. The raw
+/// `(n, e, d)` form: `primes`, `precomputed` CRT values, and keygen are
+/// alloc-gated and absent on the heapless path.
 #[cfg(any(feature = "private-key", feature = "wip-private-key"))]
 pub struct GenericRsaPrivateKey<T, M>
 where
@@ -119,24 +111,19 @@ where
     pubkey_components: GenericRsaPublicKey<T, M>,
     /// Private exponent.
     d: T,
-    /// Prime factors of N (≥ 2 elements when populated). Empty `Vec`
-    /// when constructed without primes — the heapless raw-`(n, e, d)`
-    /// path. Alloc-gated because `Vec` itself requires alloc; heapless
-    /// builds don't store primes.
+    /// Prime factors of N (≥ 2 elements when populated), empty when
+    /// constructed without primes. Alloc-gated (`Vec` needs alloc).
     #[cfg(feature = "alloc")]
     pub(crate) primes: alloc::vec::Vec<T>,
-    /// Precomputed CRT values, when available. Populated by
-    /// alloc-side constructors that do the CRT precompute; left
-    /// `None` by heapless / raw constructors.
+    /// Precomputed CRT values, when available; `None` on the raw path.
     #[cfg(feature = "private-key")]
     pub(crate) precomputed: Option<PrecomputedValues<T, M>>,
 }
 
-// Manual Clone impl — `#[derive(Clone)]` doesn't synthesize the
-// `M::MontgomeryForm: Clone` is only needed when the `precomputed`
-// field is present (private-key feature on). Heapless backends whose
-// `MontgomeryForm` doesn't impl `Clone` can still use the wip-private-key
-// build path — keep the extra bound off that variant.
+// Manual `Clone`: the `M::MontgomeryForm: Clone` bound is only needed
+// when the `precomputed` field exists (private-key on). Keep it off the
+// wip-private-key variant so backends without a `Clone` MontgomeryForm
+// still build.
 #[cfg(feature = "private-key")]
 impl<T, M> Clone for GenericRsaPrivateKey<T, M>
 where
@@ -170,9 +157,7 @@ where
     }
 }
 
-// Manual `Debug` impl — never print `d`. Mirrors the redaction in the
-// existing alloc-side `RsaPrivateKey::fmt` so `{:?}` on a key value
-// can't leak private material into logs.
+// Manual `Debug` — never print `d`, so `{:?}` can't leak private material.
 #[cfg(any(feature = "private-key", feature = "wip-private-key"))]
 impl<T, M> fmt::Debug for GenericRsaPrivateKey<T, M>
 where
@@ -189,13 +174,10 @@ where
 }
 
 // Raw `(public_key, d)` constructor — gated on
-// [`RawPrivateKeyConstructible`] so it isn't callable on the
-// `RsaPrivateKey = GenericRsaPrivateKey<BoxedUint, BoxedMontyParams>`
-// alias. `BoxedUint` deliberately doesn't impl the marker; alloc-side
-// callers must go through the validated `RsaPrivateKey::from_components`
-// / `from_p_q` / `from_primes` paths so empty `primes` can't leak into
-// CRT-aware APIs (`precompute`, `crt_coefficient`, PKCS#1 encoding) as
-// `primes[0]` index panics. Heapless backends opt in via the marker.
+// [`RawPrivateKeyConstructible`], which `BoxedUint` doesn't impl, so it's
+// unreachable on the `RsaPrivateKey` alias. Alloc callers must use the
+// validated `from_components` / `from_p_q` / `from_primes` paths so empty
+// `primes` can't leak into CRT-aware APIs as a `primes[0]` panic.
 #[cfg(any(feature = "private-key", feature = "wip-private-key"))]
 impl<T, M> GenericRsaPrivateKey<T, M>
 where
@@ -203,17 +185,9 @@ where
     M: ModulusParams<Modulus = T>,
 {
     /// Construct from an already-built public key and the private
-    /// exponent `d`. Caller is responsible for the cryptographic
-    /// relationship between `n`, `e`, and `d` (typically
-    /// `e * d ≡ 1 mod λ(n)`); no validation is performed here. No CRT
-    /// precompute is attached — use the alloc-side
-    /// [`RsaPrivateKey::from_components`] to take raw `n`/`e`/`d` plus
-    /// primes and run validation + CRT precompute.
-    ///
-    /// Gated on [`RawPrivateKeyConstructible`], which `BoxedUint`
-    /// deliberately doesn't impl, so this method is unreachable on
-    /// the `RsaPrivateKey` alias. See that alias's docstring for a
-    /// `compile_fail` doctest that locks the behavior in.
+    /// exponent `d`. No validation and no CRT precompute — the caller
+    /// owns the `e·d ≡ 1 mod λ(n)` relationship. For validated keys use
+    /// the alloc-side [`RsaPrivateKey::from_components`].
     pub fn from_public_and_d(pubkey_components: GenericRsaPublicKey<T, M>, d: T) -> Self {
         Self {
             pubkey_components,
@@ -269,9 +243,7 @@ where
         &self.d
     }
 
-    // Gate matches the `primes` field (which is `cfg(feature = "alloc")`).
-    // `private-key` implies `alloc` today, but be explicit so this stays
-    // consistent if the implication ever loosens.
+    // Gate matches the `primes` field (`cfg(alloc)`).
     #[cfg(all(feature = "private-key", feature = "alloc"))]
     fn primes(&self) -> &[T] {
         &self.primes
@@ -303,10 +275,8 @@ where
     }
 }
 
-// Canonical `Zeroize` shape: impl on the type, `Drop` delegates so
-// the wipe lives in one place, `ZeroizeOnDrop` is the load-bearing
-// marker callers can rely on. Mirrors the `ModMathForm` pattern from
-// PR #17. The pubkey is public material; only `d` needs wiping.
+// `Zeroize` on the type; `Drop` delegates so the wipe lives in one place.
+// Only `d` (and CRT precompute) is secret — the pubkey is public.
 #[cfg(any(feature = "private-key", feature = "wip-private-key"))]
 impl<T, M> Zeroize for GenericRsaPrivateKey<T, M>
 where
@@ -342,15 +312,10 @@ where
 }
 
 /// Boxed RSA private key alias used by the `alloc` code path. Equivalent
-/// to `GenericRsaPrivateKey<BoxedUint, BoxedMontyParams>`. Mirrors the
-/// [`RsaPublicKey`] alias and lets the public-API surface stay
-/// unchanged while the storage shape is shared with the heapless
-/// (`wip-private-key`) path.
+/// to `GenericRsaPrivateKey<BoxedUint, BoxedMontyParams>`.
 ///
-/// The raw `(public_key, d)` constructor on
-/// [`GenericRsaPrivateKey::from_public_and_d`] is gated on
-/// [`RawPrivateKeyConstructible`], which `BoxedUint` deliberately
-/// doesn't impl, so it's unreachable through this alias:
+/// `from_public_and_d` is unreachable through this alias — `BoxedUint`
+/// doesn't impl [`RawPrivateKeyConstructible`]:
 ///
 /// ```compile_fail
 /// use rsa_heapless::RsaPrivateKey;
@@ -361,9 +326,8 @@ where
 #[cfg(feature = "private-key")]
 pub type RsaPrivateKey = GenericRsaPrivateKey<BoxedUint, BoxedMontyParams>;
 
-// `Debug`, `Drop`, `ZeroizeOnDrop`, and `PublicKeyParts<BoxedUint>` are
-// provided by the generic `GenericRsaPrivateKey<T, M>` impls and apply
-// automatically through the alias.
+// `Debug`, `Drop`, `ZeroizeOnDrop`, `PublicKeyParts` come from the generic
+// impls above via the alias.
 
 #[cfg(feature = "private-key")]
 impl Eq for GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {}
@@ -414,9 +378,8 @@ where
     pub(crate) q_params: M,
 }
 
-// Manual Clone impl — `#[derive(Clone)]` doesn't synthesize the
-// `M::MontgomeryForm: Clone` bound, only `T: Clone` and `M: Clone`.
-// We need the associated-type bound explicit.
+// Manual `Clone` — `#[derive]` wouldn't add the `M::MontgomeryForm: Clone`
+// bound, only `T: Clone` / `M: Clone`.
 #[cfg(feature = "private-key")]
 impl<T, M> Clone for PrecomputedValues<T, M>
 where
@@ -452,21 +415,18 @@ where
     fn zeroize(&mut self) {
         self.dp.zeroize();
         self.dq.zeroize();
-        // KNOWN GAP: `qinv` (M::MontgomeryForm), `p_params` / `q_params`
-        // (M) are not wiped because the trait doesn't require them to
-        // impl `Zeroize`, and upstream `BoxedMontyForm` /
-        // `BoxedMontyParams` don't yet. Re-enable once the dep stack
-        // does:
+        // KNOWN GAP: `qinv`/`p_params`/`q_params` aren't wiped — the trait
+        // doesn't require `Zeroize` and upstream `BoxedMontyForm` /
+        // `BoxedMontyParams` don't impl it yet. Re-enable when they do:
         // self.qinv.zeroize();
         // self.p_params.zeroize();
         // self.q_params.zeroize();
     }
 }
 
-// `Drop` impl bounds must match the struct's exactly (Rust drop-check
-// rule). `T: UnsignedModularInt` already implies `T: Zeroize` via the
-// `FixedWidthUnsignedInt` supertrait, so the body's `self.zeroize()`
-// call resolves without an explicit `Zeroize` bound here.
+// Drop-check requires the bounds match the struct exactly. `T:
+// UnsignedModularInt` already implies `Zeroize` (via `FixedWidthUnsignedInt`),
+// so `self.zeroize()` resolves here.
 #[cfg(feature = "private-key")]
 impl<T, M> Drop for PrecomputedValues<T, M>
 where
@@ -539,9 +499,6 @@ where
     M: ModulusParams<Modulus = T>,
 {
     /// Encrypt the given message.
-    ///
-    /// Bound `M: CtModulusParams` — `NctPublicKey`-derived keys can't
-    /// reach this entry point.
     #[cfg(feature = "alloc")]
     pub fn encrypt<R: CryptoRng + ?Sized, P: PaddingScheme>(
         &self,

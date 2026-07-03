@@ -188,28 +188,16 @@ pub fn pkcs1v15_sign_pad_into<'a>(
 
 /// ⚠️ PKCS#1 v1.5 sign — heapless-compatible, generic over the integer backend.
 ///
-/// Composes the four byte/integer steps of `RSASSA-PKCS1-V1_5-SIGN`:
-///
-/// 1. Build the padded encoding
-///    `EM = 0x00 || 0x01 || PS || 0x00 || prefix || hashed` in
-///    caller-provided `em_storage`.
-/// 2. Convert the EM bytes to integer `T` via
-///    [`UnsignedModularInt::try_from_be_bytes_vartime`].
-/// 3. Compute `s = EM^d mod n` via
-///    [`crate::algorithms::rsa::rsa_private_op_and_check`] — CT in the secret
-///    exponent on the Ct-personality heapless path, with a verify-after-sign
-///    integrity check on every backend.
-/// 4. Serialize `s` to bytes, left-padded with zeros to length `k`, into
-///    caller-provided `sig_storage`.
-///
-/// `k` is the byte length of the modulus `n` and determines both the EM
-/// and signature lengths. Both scratch buffers must be at least `k` bytes.
+/// Pads `hashed` into `EM = 0x00 || 0x01 || PS || 0x00 || prefix || hashed`,
+/// computes `s = EM^d mod n` via
+/// [`rsa_private_op_and_check`](crate::algorithms::rsa::rsa_private_op_and_check)
+/// (verify-after-sign on every backend), and writes `s` left-padded to `k`
+/// bytes. `k` is the modulus byte length; both scratch buffers must be `>= k`.
 ///
 /// # ☢️️ WARNING: HAZARDOUS API ☢️
 ///
-/// This is the raw PKCS#1 v1.5 sign primitive over a precomputed modulus
-/// context. Higher-level callers should hash the input message themselves
-/// and prepend the appropriate digest-algorithm DigestInfo prefix.
+/// The raw PKCS#1 v1.5 sign primitive — the caller hashes the message and
+/// prepends the DigestInfo prefix.
 ///
 // Consumer (the heapless `SigningKey<D>` wrapper) lands in a later PR.
 #[allow(dead_code)]
@@ -231,21 +219,14 @@ where
     M: ModulusParams<Modulus = T>,
     M::MontgomeryForm: Pow<M> + PowBoundedExp<M>,
 {
-    // `k` must equal the ceiling-byte length of the modulus, matching
-    // `PublicKeyParts::size()` (which the public-side verifier uses for
-    // its own length check). Use the actual modulus bit-length, not the
-    // container width — for a shorter modulus stored in a wider integer
-    // (e.g. a 1024-bit RSA key on `U2048`) `bits_precision()` returns
-    // the container width and would reject the only valid `k`. Also
-    // `div_ceil` not floor — for a key whose bit-length isn't a
-    // multiple of 8 (e.g. an imported 2049-bit RSA modulus) the floor
-    // would reject the only `k` value that would actually round-trip.
+    // `k` = modulus byte length (matches `PublicKeyParts::size()`). Use the
+    // actual bit-length, not the container width (`bits_precision()` would
+    // over-count a short modulus in a wide integer), and `div_ceil` so a
+    // non-multiple-of-8 modulus still round-trips.
     if k != (n_params.modulus().as_ref().bits() as usize).div_ceil(8) {
         return Err(Error::InvalidArguments);
     }
-    // Fail fast on a too-small `sig_storage` rather than letting
-    // `uint_to_be_pad_into` surface `OutputBufferTooSmall` after the
-    // exponentiation work is already done.
+    // Fail fast before the exponentiation instead of after.
     if sig_storage.len() < k {
         return Err(Error::OutputBufferTooSmall);
     }

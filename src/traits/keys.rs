@@ -5,28 +5,20 @@ use alloc::boxed::Box;
 
 use crate::traits::{modular::ModulusParams, NonZero, UnsignedModularInt};
 
-/// Marker trait gating the raw `(public_key, d)` constructor on
-/// [`crate::key::GenericRsaPrivateKey`] (`from_public_and_d`). Backends
-/// that impl this trait opt in to constructing private keys without
-/// `primes` or CRT precompute — suitable for the heapless /
-/// `wip-private-key` path where the caller already holds validated
-/// `(n, e, d)` material from outside (e.g. PEM/PKCS#8 on disk,
-/// HSM-derived).
+/// Marker trait gating the raw `(public_key, d)` constructor
+/// [`crate::key::GenericRsaPrivateKey::from_public_and_d`]. Backends opt
+/// in to building private keys without `primes` or CRT precompute — the
+/// heapless path, where the caller already holds validated `(n, e, d)`.
 ///
-/// **Intentionally NOT impl'd for [`BoxedUint`]** — alloc-side callers
-/// must use `RsaPrivateKey::from_components` / `from_p_q` /
-/// `from_primes`, which validate the key and populate `primes`
-/// (recovering them via NIST SP 800-56B § C.2 when not provided).
-/// Without that, empty `primes` would leak into CRT-aware APIs
-/// (`precompute`, `crt_coefficient`, PKCS#1 encoding) as `primes[0]`
-/// index panics.
+/// **Not impl'd for [`BoxedUint`]**: alloc callers must use the validated
+/// `RsaPrivateKey::from_components` / `from_p_q` / `from_primes` paths, so
+/// empty `primes` can't leak into CRT-aware APIs as a `primes[0]` panic.
 #[cfg(any(feature = "private-key", feature = "wip-private-key"))]
 pub trait RawPrivateKeyConstructible: UnsignedModularInt {}
 
-// Heapless build: every `FixedWidthUnsignedInt + PartialOrd` matches
-// the heapless `UnsignedModularInt` blanket in `traits/modular.rs` and
-// gets the marker for free. `BoxedUint` isn't `Copy`, so it can never
-// satisfy `FixedWidthUnsignedInt` — excluded structurally.
+// Heapless build: `FixedWidthUnsignedInt + PartialOrd` matches the
+// `UnsignedModularInt` blanket and gets the marker for free. `BoxedUint`
+// isn't `Copy`, so it can't satisfy `FixedWidthUnsignedInt`.
 #[cfg(all(
     any(feature = "private-key", feature = "wip-private-key"),
     not(feature = "alloc")
@@ -77,14 +69,10 @@ pub trait PublicKeyParts<T: UnsignedModularInt> {
 /// Components of an RSA private key — generic over the integer /
 /// Montgomery-parameter backend.
 ///
-/// Mirrors [`PublicKeyParts`] in shape: generic over the integer
-/// type `T`, no concrete dependency on `BoxedUint`/`BoxedMontyParams`.
 /// The base surface is `d()`; the CRT accessors (`dp`/`dq`/`qinv`/
-/// `p_params`/`q_params`) are gated on `feature = "private-key"` so
-/// they only exist on the alloc path — heapless callers physically
-/// can't reach them. Default impls return `None` so a generic key
-/// without precomputed CRT values (e.g. [`GenericRsaPrivateKey`])
-/// satisfies the trait with the minimum.
+/// `p_params`/`q_params`) are `private-key`-gated to the alloc path and
+/// default to `None`, so a key without CRT precompute satisfies the trait
+/// with just `d()`.
 #[cfg(any(feature = "private-key", feature = "wip-private-key"))]
 pub trait PrivateKeyParts<T>: PublicKeyParts<T>
 where

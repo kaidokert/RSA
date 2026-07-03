@@ -26,13 +26,7 @@ use {
 
 /// Signing key for producing "blinded" RSASSA-PSS signatures as described in
 /// [draft-irtf-cfrg-rsa-blind-signatures](https://datatracker.ietf.org/doc/draft-irtf-cfrg-rsa-blind-signatures/).
-///
-/// Thin newtype over [`SigningKey`] — same storage, same encoding /
-/// serde / keypair / `AsRef<RsaPrivateKey>` behavior. The only
-/// behavioral difference: the `signature::*Signer` impls pass
-/// `blinded = true` to the underlying `sign_digest`, applying
-/// blinding to the private-key operation.
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub struct BlindedSigningKey<D>(SigningKey<D>)
 where
     D: Digest;
@@ -42,7 +36,8 @@ where
     D: Digest,
 {
     /// Create a new RSASSA-PSS signing key which produces "blinded"
-    /// signatures. Digest output size is used as a salt length.
+    /// signatures.
+    /// Digest output size is used as a salt length.
     pub fn new(key: RsaPrivateKey) -> Self {
         Self(SigningKey::new(key))
     }
@@ -54,7 +49,8 @@ where
     }
 
     /// Create a new random RSASSA-PSS signing key which produces "blinded"
-    /// signatures. Digest output size is used as a salt length.
+    /// signatures.
+    /// Digest output size is used as a salt length.
     pub fn random<R: CryptoRng + ?Sized>(rng: &mut R, bit_size: usize) -> Result<Self> {
         SigningKey::random(rng, bit_size).map(Self)
     }
@@ -76,10 +72,7 @@ where
 }
 
 //
-// `*Signer` trait impls — the only carriers of the blinded behavior.
-// Delegate through `SigningKey<D>`'s public accessors (`AsRef<RsaPrivateKey>`
-// and `salt_len()`) to call `sign_digest` with `blinded = true`, keeping
-// the wrapper independent of `SigningKey`'s field layout.
+// `*Signer` trait impls
 //
 
 impl<D> RandomizedSigner<Signature> for BlindedSigningKey<D>
@@ -161,7 +154,7 @@ where
 }
 
 //
-// Other trait impls — all delegate to the inner `SigningKey<D>`.
+// Other trait impls
 //
 
 impl<D> AsRef<RsaPrivateKey> for BlindedSigningKey<D>
