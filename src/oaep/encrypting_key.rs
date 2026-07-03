@@ -1,7 +1,10 @@
 use super::encrypt_digest_into;
 #[cfg(not(feature = "alloc"))]
 use super::Label;
-use crate::traits::{modular::ModulusParams, PublicKeyParts, UnsignedModularInt};
+use crate::traits::{
+    modular::{CtModulusParams, ModulusParams},
+    PublicKeyParts, UnsignedModularInt,
+};
 use crate::{traits::RandomizedEncryptor, GenericRsaPublicKey, Result};
 #[cfg(feature = "alloc")]
 use alloc::{boxed::Box, vec::Vec};
@@ -81,12 +84,16 @@ where
     }
 }
 
+// `M: CtModulusParams` — encrypt on an NCT-personality key would
+// silently downgrade the plaintext (secret!) to vartime work; refuse
+// to compile in that case. Signature verification stays personality-
+// agnostic.
 impl<D, MGD, T, M> RandomizedEncryptor for GenericEncryptingKey<D, MGD, T, M>
 where
     D: Digest,
     MGD: Digest + FixedOutputReset,
     T: UnsignedModularInt,
-    M: ModulusParams<Modulus = T>,
+    M: CtModulusParams<Modulus = T>,
 {
     fn encrypt_with_rng_into<'a, R: TryCryptoRng + ?Sized>(
         &self,
