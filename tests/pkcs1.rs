@@ -6,7 +6,7 @@ use crypto_bigint::{BoxedUint, CtEq};
 use hex_literal::hex;
 use rsa::{
     pkcs1::{DecodeRsaPrivateKey, DecodeRsaPublicKey, EncodeRsaPrivateKey, EncodeRsaPublicKey},
-    traits::{PrivateKeyParts, PublicKeyParts},
+    traits::{GenericPrivateKeyParts, PublicKeyParts},
     RsaPrivateKey, RsaPublicKey,
 };
 

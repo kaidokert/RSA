@@ -6,7 +6,7 @@
 #![cfg(feature = "encoding")]
 
 use crate::{
-    traits::{PrivateKeyParts, PublicKeyParts},
+    traits::{GenericPrivateKeyParts, PublicKeyParts},
     RsaPrivateKey, RsaPublicKey,
 };
 use core::convert::{TryFrom, TryInto};
