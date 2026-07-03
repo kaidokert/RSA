@@ -270,8 +270,6 @@ pub use sha2;
 
 #[cfg(feature = "alloc")]
 pub use crate::key::RsaPublicKey;
-#[cfg(all(feature = "alloc", feature = "private-key"))]
-pub use crate::traits::keys::CrtValue;
 pub use crate::{
     errors::{Error, Result},
     key::GenericRsaPublicKey,

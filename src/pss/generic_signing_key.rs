@@ -198,7 +198,7 @@ where
         let mut hash = D::new();
         sign_into(
             self.inner.n_params(),
-            crate::traits::keys::GenericPrivateKeyParts::d(&self.inner),
+            crate::traits::keys::PrivateKeyParts::d(&self.inner),
             self.inner.e(),
             prehash,
             salt,
@@ -232,7 +232,7 @@ where
         let mut hash = D::new();
         sign_into(
             self.inner.n_params(),
-            crate::traits::keys::GenericPrivateKeyParts::d(&self.inner),
+            crate::traits::keys::PrivateKeyParts::d(&self.inner),
             self.inner.e(),
             prehash,
             salt,

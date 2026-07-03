@@ -1191,7 +1191,7 @@ mod private_op_tests {
         assert!(matches!(result, Err(Error::InvalidArguments)));
     }
 
-    // ─── Phase 1 trait surgery: GenericPrivateKeyParts smoke tests ──────
+    // ─── Phase 1 trait surgery: PrivateKeyParts smoke tests ──────
 
     #[test]
     fn pkcs1v15_signing_key_round_trip_2048_sha1() {
@@ -1399,11 +1399,11 @@ mod private_op_tests {
     #[test]
     fn generic_rsa_private_key_satisfies_traits() {
         // Compile-time assertion: GenericRsaPrivateKey<SmallUCt, ModMathParams<SmallUCt, Ct>>
-        // satisfies both PublicKeyParts and GenericPrivateKeyParts at the
+        // satisfies both PublicKeyParts and PrivateKeyParts at the
         // matching (T, M) substitution. The fn-bound dance below is the
         // standard "type-satisfies-trait" check.
         use crate::key::GenericRsaPrivateKey;
-        use crate::traits::keys::{GenericPrivateKeyParts, PublicKeyParts};
+        use crate::traits::keys::{PrivateKeyParts, PublicKeyParts};
         fn assert_pub_parts<K, T>(_: &K)
         where
             T: UnsignedModularInt,
@@ -1413,7 +1413,7 @@ mod private_op_tests {
         fn assert_priv_parts<K, T>(_: &K)
         where
             T: UnsignedModularInt,
-            K: GenericPrivateKeyParts<T>,
+            K: PrivateKeyParts<T>,
         {
         }
 
@@ -1427,10 +1427,7 @@ mod private_op_tests {
         assert_priv_parts::<_, ModMathValue<SmallUCt>>(&key);
 
         // Round-trip: accessors return the values we constructed it with.
-        assert_eq!(
-            GenericPrivateKeyParts::d(&key),
-            &wrap_value(SmallUCt::from(29u8))
-        );
+        assert_eq!(PrivateKeyParts::d(&key), &wrap_value(SmallUCt::from(29u8)));
         assert_eq!(key.as_public().e(), &wrap_value(SmallUCt::from(5u8)));
     }
 }

@@ -2,12 +2,6 @@
 
 #[cfg(feature = "alloc")]
 use alloc::boxed::Box;
-#[cfg(feature = "private-key")]
-use crypto_bigint::{
-    modular::{BoxedMontyForm, BoxedMontyParams},
-    BoxedUint,
-};
-use zeroize::Zeroize;
 
 use crate::traits::{modular::ModulusParams, NonZero, UnsignedModularInt};
 
@@ -80,8 +74,8 @@ pub trait PublicKeyParts<T: UnsignedModularInt> {
     }
 }
 
-/// Generic components of an RSA private key — minimal trait for the
-/// heapless / wip-private-key port.
+/// Components of an RSA private key — generic over the integer /
+/// Montgomery-parameter backend.
 ///
 /// Mirrors [`PublicKeyParts`] in shape: generic over the integer
 /// type `T`, no concrete dependency on `BoxedUint`/`BoxedMontyParams`.
@@ -91,14 +85,8 @@ pub trait PublicKeyParts<T: UnsignedModularInt> {
 /// can't reach them. Default impls return `None` so a generic key
 /// without precomputed CRT values (e.g. [`GenericRsaPrivateKey`])
 /// satisfies the trait with the minimum.
-///
-/// The legacy [`PrivateKeyParts`] (alloc-bound, `BoxedUint`-concrete)
-/// is bridged to this trait via a blanket impl, so any existing
-/// `K: PrivateKeyParts` value also satisfies
-/// `GenericPrivateKeyParts<BoxedUint>` — with the bridge forwarding
-/// the CRT accessors when present.
 #[cfg(any(feature = "private-key", feature = "wip-private-key"))]
-pub trait GenericPrivateKeyParts<T>: PublicKeyParts<T>
+pub trait PrivateKeyParts<T>: PublicKeyParts<T>
 where
     T: UnsignedModularInt,
 {
@@ -141,71 +129,5 @@ where
     #[cfg(feature = "private-key")]
     fn q_params(&self) -> Option<&Self::MontyParams> {
         None
-    }
-}
-
-/// Components of an RSA private key.
-///
-/// **Deprecated** — superseded by [`GenericPrivateKeyParts`], which is
-/// generic over the integer / Montgomery-parameter backend. Existing
-/// `K: PrivateKeyParts` types still work but new code should bound on
-/// `GenericPrivateKeyParts<BoxedUint, MontyParams = BoxedMontyParams>`
-/// instead.
-#[cfg(feature = "private-key")]
-#[deprecated(
-    since = "0.3.0",
-    note = "use `GenericPrivateKeyParts<BoxedUint, MontyParams = BoxedMontyParams>` (generic over backend) instead; this trait will be removed in a future major version"
-)]
-pub trait PrivateKeyParts: PublicKeyParts<BoxedUint> {
-    /// Returns the private exponent of the key.
-    fn d(&self) -> &BoxedUint;
-
-    /// Returns the prime factors.
-    fn primes(&self) -> &[BoxedUint];
-
-    /// Returns the precomputed dp value, D mod (P-1)
-    fn dp(&self) -> Option<&BoxedUint>;
-
-    /// Returns the precomputed dq value, D mod (Q-1)
-    fn dq(&self) -> Option<&BoxedUint>;
-
-    /// Returns the precomputed qinv value, Q^-1 mod P
-    fn qinv(&self) -> Option<&BoxedMontyForm>;
-
-    /// Returns an iterator over the CRT Values
-    fn crt_values(&self) -> Option<&[CrtValue]>;
-
-    /// Returns the params for `p` if precomputed.
-    fn p_params(&self) -> Option<&BoxedMontyParams>;
-
-    /// Returns the params for `q` if precomputed.
-    fn q_params(&self) -> Option<&BoxedMontyParams>;
-}
-
-/// Contains the precomputed Chinese remainder theorem values.
-#[cfg(feature = "private-key")]
-#[derive(Debug, Clone)]
-pub struct CrtValue {
-    /// D mod (prime - 1)
-    pub(crate) exp: BoxedUint,
-    /// R·Coeff ≡ 1 mod Prime.
-    pub(crate) coeff: BoxedUint,
-    /// product of primes prior to this (inc p and q)
-    pub(crate) r: BoxedUint,
-}
-
-#[cfg(feature = "private-key")]
-impl Zeroize for CrtValue {
-    fn zeroize(&mut self) {
-        self.exp.zeroize();
-        self.coeff.zeroize();
-        self.r.zeroize();
-    }
-}
-
-#[cfg(feature = "private-key")]
-impl Drop for CrtValue {
-    fn drop(&mut self) {
-        self.zeroize();
     }
 }
