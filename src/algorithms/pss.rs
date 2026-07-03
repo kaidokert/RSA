@@ -226,11 +226,6 @@ where
 /// `salt`. This is the raw PSS sign primitive — wrap it in a higher-level
 /// `SigningKey<D>` for real use.
 ///
-/// TODO: switch the final serialization to `uint_to_zeroizing_be_pad_into`
-/// once fixed-bigint provides `Zeroize` for `BytesHolder`. The
-/// intermediate `T::Bytes` produced by `s.to_be_bytes()` carries the
-/// just-signed value briefly on the stack; today it's a soft-leak window
-/// the future zeroizing path closes.
 // Consumer (the heapless `pss::SigningKey<D>` wrapper) lands in a later PR.
 #[allow(dead_code)]
 #[allow(clippy::too_many_arguments)] // Composing four byte/integer steps; splitting helps nothing.
@@ -248,6 +243,7 @@ pub fn sign_into<'sig, T, M, D>(
 ) -> Result<&'sig [u8]>
 where
     T: UnsignedModularInt,
+    T::Bytes: zeroize::Zeroize,
     M: ModulusParams<Modulus = T>,
     M::MontgomeryForm: Pow<M> + PowBoundedExp<M>,
     D: Digest + FixedOutputReset,
@@ -278,7 +274,7 @@ where
     let em_slice = emsa_pss_encode_into(m_hash, em_bits, salt, hash, em_storage)?;
     let em = T::try_from_be_bytes_vartime(em_slice)?;
     let s = crate::algorithms::rsa::rsa_private_op_and_check(&em, d, e, n_params)?;
-    crate::algorithms::pad::uint_to_be_pad_into(s, k, sig_storage)
+    crate::algorithms::pad::uint_to_zeroizing_be_pad_into(s, k, sig_storage)
 }
 
 fn emsa_pss_verify_pre<'a>(

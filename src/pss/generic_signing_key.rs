@@ -145,6 +145,7 @@ impl<D, T, M> GenericSigningKey<D, T, M>
 where
     D: Digest + FixedOutputReset,
     T: UnsignedModularInt + Zeroize,
+    T::Bytes: Zeroize,
     M: ModulusParams<Modulus = T>,
     M::MontgomeryForm: Pow<M> + PowBoundedExp<M>,
 {
