@@ -584,11 +584,14 @@ impl<T: ModMathIntCt + HasPersonality<P = Ct>> ModulusParams for ModMathParams<T
 // the base, so `NctPublicKey`-derived encrypting keys fail the encrypt
 // trait bound at compile time. See
 // `crate::traits::modular::CtModulusParams`.
-impl<T: ModMathIntCt> crate::traits::modular::sealed::CtModulusParamsSealed
+impl<T: ModMathIntCt + HasPersonality<P = Ct>> crate::traits::modular::sealed::CtModulusParamsSealed
     for ModMathParams<T, Ct>
 {
 }
-impl<T: ModMathIntCt> crate::traits::modular::CtModulusParams for ModMathParams<T, Ct> {}
+impl<T: ModMathIntCt + HasPersonality<P = Ct>> crate::traits::modular::CtModulusParams
+    for ModMathParams<T, Ct>
+{
+}
 
 #[cfg(test)]
 #[cfg(all(feature = "alloc", feature = "private-key"))]
