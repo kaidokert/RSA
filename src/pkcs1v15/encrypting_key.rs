@@ -1,7 +1,10 @@
 use super::encrypt_into;
 use crate::{
     key::GenericRsaPublicKey,
-    traits::{modular::ModulusParams, PublicKeyParts, RandomizedEncryptor, UnsignedModularInt},
+    traits::{
+        modular::{CtModulusParams, ModulusParams},
+        PublicKeyParts, RandomizedEncryptor, UnsignedModularInt,
+    },
     Result,
 };
 #[cfg(feature = "alloc")]
@@ -47,10 +50,14 @@ where
     }
 }
 
+// `M: CtModulusParams` — encrypt on an NCT-personality key would
+// silently downgrade the plaintext (secret!) to vartime work; refuse
+// to compile in that case. Signature verification stays personality-
+// agnostic.
 impl<T, M> RandomizedEncryptor for GenericEncryptingKey<T, M>
 where
     T: UnsignedModularInt,
-    M: ModulusParams<Modulus = T>,
+    M: ModulusParams<Modulus = T> + CtModulusParams,
 {
     fn encrypt_with_rng_into<'a, R: rand_core::TryCryptoRng + ?Sized>(
         &self,

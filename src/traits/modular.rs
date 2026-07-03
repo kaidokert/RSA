@@ -347,6 +347,25 @@ pub trait ModulusParams: Sized {
     fn bits_precision(&self) -> u32;
 }
 
+/// Marker trait for [`ModulusParams`] backends whose Montgomery
+/// exponentiation is constant-time in the base (secret) value.
+///
+/// Bound the public-key encryption path on this so plaintext (which
+/// **is** secret) can't be silently exposed to variable-time work.
+/// Signature verification stays unbounded — the "base" there is the
+/// public signature, so vartime is fine.
+///
+/// **Implemented for [`crypto_bigint::modular::BoxedMontyParams`]**
+/// unconditionally (its `BoxedMontyForm` is CT internally). Heapless
+/// backends opt in on the CT-personality substitution only — see
+/// [`crate::modmath_support::ModMathParams`], which impls this on
+/// `<T, Ct>` but *not* on `<T, Nct>`, so `NctPublicKey`-derived
+/// encrypting keys fail to compile the encrypt trait bound.
+pub trait CtModulusParams: ModulusParams {}
+
+#[cfg(feature = "alloc")]
+impl CtModulusParams for BoxedMontyParams {}
+
 #[cfg(feature = "alloc")]
 impl ModulusParams for BoxedMontyParams {
     type Modulus = BoxedUint;
