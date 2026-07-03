@@ -237,11 +237,14 @@ where
 {
     // `k` must equal the ceiling-byte length of the modulus, matching
     // `PublicKeyParts::size()` (which the public-side verifier uses for
-    // its own length check). `div_ceil` not floor div — for a key whose
-    // `bits_precision()` is not a multiple of 8 (e.g. an imported
-    // 2049-bit RSA modulus on the BoxedUint backend) the floor would
-    // reject the only `k` value that would actually round-trip.
-    if k != (n_params.bits_precision() as usize).div_ceil(8) {
+    // its own length check). Use the actual modulus bit-length, not the
+    // container width — for a shorter modulus stored in a wider integer
+    // (e.g. a 1024-bit RSA key on `U2048`) `bits_precision()` returns
+    // the container width and would reject the only valid `k`. Also
+    // `div_ceil` not floor — for a key whose bit-length isn't a
+    // multiple of 8 (e.g. an imported 2049-bit RSA modulus) the floor
+    // would reject the only `k` value that would actually round-trip.
+    if k != (n_params.modulus().as_ref().bits() as usize).div_ceil(8) {
         return Err(Error::InvalidArguments);
     }
     // Fail fast on a too-small `sig_storage` rather than letting

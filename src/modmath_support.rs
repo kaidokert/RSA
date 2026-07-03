@@ -779,6 +779,20 @@ mod private_op_tests {
         ModMathParams::<SmallUCt, Ct>::new(SmallUCt::from(35u8)).unwrap()
     }
 
+    // A 512-bit odd modulus used by the `sign_into` defensive-error
+    // tests below — they need the actual modulus bit-length (checked
+    // by `sign_into` since the codex-P2 fix) to match `SMALL_K * 8`
+    // so `k` passes the up-front width check and the specific error
+    // path (small buffer, wrong hash length, etc.) is what fires.
+    // Value is `2^511 + 1`: MSB set, LSB=1 (odd).
+    fn toy_params_wide() -> ModMathParams<SmallUCt, Ct> {
+        let mut bytes = [0u8; 64];
+        bytes[0] = 0x80;
+        bytes[63] = 0x01;
+        let n = <SmallUCt as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(&bytes).unwrap();
+        ModMathParams::<SmallUCt, Ct>::new(n).unwrap()
+    }
+
     #[test]
     fn rsa_private_op_round_trip_heapless_ct() {
         let n_params = toy_params();
@@ -993,7 +1007,7 @@ mod private_op_tests {
     #[test]
     fn pkcs1v15_sign_into_rejects_small_sig_storage() {
         use crate::algorithms::pkcs1v15::sign_into;
-        let n_params = toy_params();
+        let n_params = toy_params_wide();
         let (d, e) = dummy_de();
         let mut em = [0u8; SMALL_K];
         let mut sig = [0u8; SMALL_K - 1]; // one byte short
@@ -1015,7 +1029,7 @@ mod private_op_tests {
         // prefix + hashed + 11 > k → `pkcs1v15_sign_pad_into` returns
         // MessageTooLong. Confirms errors from the padding step bubble up.
         use crate::algorithms::pkcs1v15::sign_into;
-        let n_params = toy_params();
+        let n_params = toy_params_wide();
         let (d, e) = dummy_de();
         let mut em = [0u8; SMALL_K];
         let mut sig = [0u8; SMALL_K];
@@ -1038,7 +1052,7 @@ mod private_op_tests {
         use crate::algorithms::pss::sign_into;
         use digest::Digest;
         use sha1::Sha1;
-        let n_params = toy_params();
+        let n_params = toy_params_wide();
         let (d, e) = dummy_de();
         let mut em = [0u8; SMALL_K];
         let mut sig = [0u8; SMALL_K];
@@ -1062,7 +1076,7 @@ mod private_op_tests {
         use crate::algorithms::pss::sign_into;
         use digest::Digest;
         use sha1::Sha1;
-        let n_params = toy_params();
+        let n_params = toy_params_wide();
         let (d, e) = dummy_de();
         let mut em = [0u8; SMALL_K];
         let mut sig = [0u8; SMALL_K - 1];
@@ -1086,7 +1100,7 @@ mod private_op_tests {
         use crate::algorithms::pss::sign_into;
         use digest::Digest;
         use sha1::Sha1;
-        let n_params = toy_params();
+        let n_params = toy_params_wide();
         let (d, e) = dummy_de();
         // em_bits = key_bits - 1 = 511 → em_len = 64. Pass 63 to fail.
         let mut em = [0u8; SMALL_K - 1];
@@ -1113,7 +1127,7 @@ mod private_op_tests {
         use crate::algorithms::pss::sign_into;
         use digest::Digest;
         use sha1::Sha1;
-        let n_params = toy_params();
+        let n_params = toy_params_wide();
         let (d, e) = dummy_de();
         let mut em = [0u8; SMALL_K];
         let mut sig = [0u8; SMALL_K];
@@ -1130,6 +1144,63 @@ mod private_op_tests {
             &mut sig,
         );
         assert!(matches!(result, Err(Error::InputNotHashed)));
+    }
+
+    // Regression for the codex-P2 fix — `sign_into`'s `k` check must
+    // use the actual modulus bit-length, not the container's
+    // `bits_precision()`, otherwise a shorter modulus stored in a
+    // wider container spuriously rejects the only valid `k`.
+    #[test]
+    fn pkcs1v15_sign_into_k_uses_modulus_bits_not_container() {
+        use crate::algorithms::pkcs1v15::sign_into;
+        // 128-byte (1024-bit) container storing a ~512-bit modulus.
+        type WideUCt = FixedUInt<u8, 128, Ct>;
+        let mut mod_bytes = [0u8; 128];
+        mod_bytes[64] = 0x80; // MSB of the low 512 bits
+        mod_bytes[127] = 0x01; // LSB odd
+        let n = <WideUCt as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(&mod_bytes).unwrap();
+        let n_params = ModMathParams::<WideUCt, Ct>::new(n).unwrap();
+        let d = wrap_value(WideUCt::from(29u8));
+        let e = wrap_value(WideUCt::from(5u8));
+
+        const CORRECT_K: usize = 64; // 512 modulus bits div_ceil 8
+        const CONTAINER_K: usize = 128; // what `bits_precision()` would say
+
+        // Old buggy behavior: k=64 would return InvalidArguments because
+        // it didn't match container width. Post-fix: k=64 passes the
+        // width check (and only afterwards fails on the toy (d, e)).
+        let mut em = [0u8; CORRECT_K];
+        let mut sig = [0u8; CORRECT_K];
+        let result = sign_into(
+            &n_params,
+            &d,
+            &e,
+            &[],
+            &[0u8; 20],
+            CORRECT_K,
+            &mut em,
+            &mut sig,
+        );
+        assert!(
+            !matches!(result, Err(Error::InvalidArguments)),
+            "correct k (= modulus_bits.div_ceil(8)) must pass the width check, got {:?}",
+            result
+        );
+
+        // Container-width k must be rejected — that's the whole point.
+        let mut em = [0u8; CONTAINER_K];
+        let mut sig = [0u8; CONTAINER_K];
+        let result = sign_into(
+            &n_params,
+            &d,
+            &e,
+            &[],
+            &[0u8; 20],
+            CONTAINER_K,
+            &mut em,
+            &mut sig,
+        );
+        assert!(matches!(result, Err(Error::InvalidArguments)));
     }
 
     // ─── Phase 1 trait surgery: GenericPrivateKeyParts smoke tests ──────

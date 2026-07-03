@@ -208,7 +208,7 @@ where
 ///
 /// 1. [`emsa_pss_encode_into`] — build the EM encoding for `(m_hash, salt)`
 ///    into `em_storage`. `em_bits = key_bits - 1` per RFC 8017 § 8.1.1 is
-///    derived internally from `n_params.bits_precision()`.
+///    derived internally from the actual modulus bit-length.
 /// 2. [`UnsignedModularInt::try_from_be_bytes_vartime`] — bytes → integer.
 /// 3. [`crate::algorithms::rsa::rsa_private_op_and_check`] — CT in the
 ///    secret exponent on the Ct-personality heapless path, with a
@@ -254,11 +254,16 @@ where
 {
     // `k` must equal the ceiling-byte length of the modulus, matching
     // `PublicKeyParts::size()` (which the public-side verifier uses for
-    // its own length check). `div_ceil` not floor div — for a key whose
-    // `bits_precision()` is not a multiple of 8 (e.g. an imported
-    // 2049-bit RSA modulus on the BoxedUint backend) the floor would
-    // reject the only `k` value that would actually round-trip.
-    let key_bits = n_params.bits_precision() as usize;
+    // its own length check). Use the actual modulus bit-length, not the
+    // container width — for a shorter modulus stored in a wider integer
+    // (e.g. a 1024-bit RSA key on `U2048`) `bits_precision()` returns
+    // the container width and would reject the only valid `k`. Also
+    // `div_ceil` not floor — for a key whose bit-length isn't a
+    // multiple of 8 (e.g. an imported 2049-bit RSA modulus) the floor
+    // would reject the only `k` value that would actually round-trip.
+    // `em_bits = key_bits - 1` per RFC 8017 § 8.1.1 also needs the
+    // actual modulus bit-length.
+    let key_bits = n_params.modulus().as_ref().bits() as usize;
     if k != key_bits.div_ceil(8) {
         return Err(Error::InvalidArguments);
     }
