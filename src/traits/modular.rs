@@ -372,8 +372,10 @@ impl Pow<BoxedMontyParams> for BoxedMontyForm {
 /// against carrier width) and bail with a permanent error before
 /// entering the retry loop.
 ///
-/// Consumed by [`crate::algorithms::rsa::rsa_private_op_blinded`] for
-/// the sign-path blinding body.
+/// Consumed by `crate::algorithms::rsa::rsa_private_op_blinded` for
+/// the sign-path blinding body. Plain code span rather than an
+/// intra-doc link because the target is feature-gated and would
+/// break `cargo doc --no-default-features`.
 pub trait InvertCt<M: ModulusParams>: Sized {
     fn invert_ct(&self) -> Option<Self>;
 }
@@ -398,8 +400,10 @@ impl InvertCt<BoxedMontyParams> for BoxedMontyForm {
 /// (invariant: same modulus / same Montgomery R). We don't check that
 /// at the type level; the impls take it as an unchecked precondition.
 ///
-/// Consumed by [`crate::algorithms::rsa::rsa_private_op_blinded`] for
-/// the two Mont-form multiplies per signature.
+/// Consumed by `crate::algorithms::rsa::rsa_private_op_blinded` for
+/// the two Mont-form multiplies per signature. Plain code span
+/// rather than an intra-doc link because the target is feature-gated
+/// and would break `cargo doc --no-default-features`.
 pub trait MulCt<M: ModulusParams>: Sized {
     fn mul_ct(&self, rhs: &Self) -> Self;
 }

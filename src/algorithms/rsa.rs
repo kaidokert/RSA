@@ -339,24 +339,33 @@ where
 /// then unblinds by `r⁻¹`. Blinding hides `c` from side-channel
 /// analysis on the private-key operation.
 ///
-/// # Preconditions on `blinding_r`
+/// # Preconditions
 ///
+/// - **`blinding_r < n`** — the blinding factor must already be
+///   reduced modulo `n`. The primitive uses `from_reduced` to convert
+///   to Montgomery form and would leak `r`'s value on the
+///   `BoxedMontyForm` backend via `rem_vartime` if we accepted
+///   unreduced input. Callers should sample `r` from `[1, n)`
+///   directly (via the random-mod primitive landing in the follow-up
+///   PR).
+/// - **`c < n`** — same reason applied to the (secret) message. The
+///   sign path's padded EM always satisfies this (leading 0x00 byte
+///   → `EM < 2^{8(k-1)} < n`).
 /// - `gcd(blinding_r, n) = 1` — required for `r⁻¹ mod n` to exist.
 ///   For random `r` against RSA `n = p·q`, non-coprime is
 ///   astronomically rare. Retry-on-`Err` at the caller side is the
-///   standard defense. See the doc on
-///   [`crate::traits::modular::InvertCt`] for the two `None` failure
-///   modes (retryable vs deterministic) — this primitive returns
-///   [`Error::Internal`] for both without distinguishing; the caller
-///   is responsible for preflight (carrier-headroom check on modmath)
-///   and retry policy.
+///   standard defense. See the doc on `crate::traits::modular::InvertCt`
+///   for the two `None` failure modes (retryable vs deterministic) —
+///   this primitive returns `Error::Internal` for both without
+///   distinguishing; the caller is responsible for the preflight
+///   (carrier-headroom check on modmath) and retry policy.
 /// - `blinding_r` is the caller-owned blinding factor. This primitive
 ///   does not sample or validate its randomness. Follow-up PR wraps
 ///   this with an RNG-taking entry point.
 ///
 /// # Returns
 ///
-/// The unblinded plaintext `m = c^d mod n`, or [`Error::Internal`] if
+/// The unblinded plaintext `m = c^d mod n`, or `Error::Internal` if
 /// the inverse could not be computed.
 ///
 /// # ☢️️ WARNING: HAZARDOUS API ☢️
@@ -373,17 +382,28 @@ where
     M: ModulusParams<Modulus = T> + crate::traits::modular::CtModulusParams,
     M::MontgomeryForm: Pow<M> + PowBoundedExp<M> + InvertCt<M> + MulCt<M>,
 {
-    // r → Montgomery form; invert. `invert_ct` returns `None` for
-    // both retryable (non-coprime) and deterministic (carrier-tight)
-    // cases — caller preflights the deterministic case.
-    let r_mont = reduce_vartime(blinding_r, n_params);
+    // `blinding_r < n` and `c < n` are caller preconditions — use
+    // `from_reduced` on both to skip the variable-time `rem_vartime`
+    // that `from_value` (via `reduce_vartime`) would do on the
+    // `BoxedMontyForm` backend. Vartime on `r` in particular would
+    // leak the very value that's meant to *defend* against timing
+    // analysis of `c` and `d`.
+    let r_sized = blinding_r
+        .clone()
+        .resize_unchecked(n_params.bits_precision());
+    let r_mont = M::MontgomeryForm::from_reduced(r_sized, n_params);
+    // `invert_ct` returns `None` for both retryable (non-coprime) and
+    // deterministic (carrier-tight) cases — caller preflights the
+    // deterministic case.
     let r_inv_mont = r_mont.invert_ct().ok_or(Error::Internal)?;
     // r^e (in Montgomery form). Public exponent `e`, so
     // `pow_bounded_exp` (variable-time-in-exponent semantics) is fine.
     let r_e_mont = r_mont.pow_bounded_exp(e, e.bits());
+    // c → Montgomery form via `from_reduced` (same reason as `r`).
+    let c_sized = c.clone().resize_unchecked(n_params.bits_precision());
+    let c_mont = M::MontgomeryForm::from_reduced(c_sized, n_params);
     // c · r^e (Montgomery mul). Blinded ciphertext masks `c` from
     // subsequent timing analysis on the private op.
-    let c_mont = reduce_vartime(c, n_params);
     let blinded_mont = c_mont.mul_ct(&r_e_mont);
     // Private op on the blinded value — CT ladder in `d`.
     let s_prime_mont = blinded_mont.pow(d);
