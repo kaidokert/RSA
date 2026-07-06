@@ -342,11 +342,35 @@ impl Pow<BoxedMontyParams> for BoxedMontyForm {
 /// Constant-time multiplicative inverse in Montgomery form.
 ///
 /// Returns `Some(self⁻¹ mod n)` when the value is coprime to the
-/// modulus (which for RSA `n = p·q` fails only on the astronomically
-/// unlikely case that the caller's random value happens to share a
-/// factor with `n` — retry-on-`None` is the standard defense).
-/// Bridged to backends whose native return is `subtle::CtOption` via
-/// `.into_option()` — same pattern as `NonZero::new`.
+/// modulus and the backend can compute the inverse. Bridged from
+/// `subtle::CtOption` via `.into_option()` — same pattern as
+/// `NonZero::new` — on backends whose native return is `CtOption`.
+///
+/// # Failure modes — non-interchangeable
+///
+/// `None` conflates two distinct cases; **callers must not treat them
+/// as interchangeable "retry with fresh input"**:
+///
+/// 1. **Value not coprime to `n`** — retryable. Astronomically rare
+///    when `self` was constructed from a fresh random against RSA
+///    `n = p·q`, but real. Retry with a fresh random up to a small
+///    constant number of times.
+///
+/// 2. **Backend precondition unmet** — **deterministic**. On the
+///    modmath backend, `Field<T, Ct>::inv_safegcd_ct` requires the
+///    carrier `T` to have one bit of headroom over the modulus (see
+///    modmath's docs on the `2·modulus ≤ T::MAX` precondition). When
+///    the modulus fills the carrier's full width (e.g. `U2048` for a
+///    2048-bit RSA modulus at 32-bit limbs), every call returns
+///    `None`. Retrying does not help. Pick `T` one bit wider than
+///    the modulus (e.g. `U2080` for a 2048-bit modulus). The
+///    `BoxedUint` backend has no fixed carrier and does not exhibit
+///    this case.
+///
+/// A blinding loop built on this primitive should preflight the
+/// carrier headroom for the modmath backend (compare modulus MSB
+/// against carrier width) and bail with a permanent error before
+/// entering the retry loop.
 ///
 /// Foundation for the sign-path blinding primitive; consumer lands in
 /// a follow-up PR alongside the RNG-taking `rsa_private_op_blinded`.

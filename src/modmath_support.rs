@@ -567,12 +567,15 @@ impl<T: ModMathIntCt + HasPersonality<P = Ct>> PowBoundedExp<ModMathParams<T, Ct
 }
 
 // CT modular inverse for RSA-blinding on the modmath backend. Routes
-// to modmath's `Field<T, Ct>::inv_safegcd_ct` (Bernstein-Yang). Returns
-// `None` when the value shares a factor with `n` (astronomically rare
-// for random `r` against a composite modulus) or when the carrier `T`
-// lacks one bit of headroom over the modulus — see the modmath doc on
-// `inv_safegcd_ct` for the precondition detail. Callers should retry
-// with a fresh random on `None`.
+// to modmath's `Field<T, Ct>::inv_safegcd_ct` (Bernstein-Yang).
+//
+// See the `InvertCt` trait doc for the two `None` cases — retryable
+// (value not coprime with `n`, astronomically rare) vs deterministic
+// (carrier `T` lacks the safegcd headroom bit over the modulus).
+// **These are not interchangeable**: for a 2048-bit modulus in
+// exactly `U2048`, every call returns `None` and no amount of
+// retrying helps — pick a wider carrier (e.g. `U2080` at 32-bit
+// limbs). A blinding loop must preflight this.
 impl<T> crate::traits::modular::InvertCt<ModMathParams<T, Ct>> for ModMathForm<T, Ct>
 where
     T: ModMathIntCt
