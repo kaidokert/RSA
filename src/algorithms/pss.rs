@@ -242,6 +242,11 @@ where
     // actual bit-length, not the container width, and `div_ceil` so a
     // non-multiple-of-8 modulus still round-trips; `em_bits` needs it too.
     let key_bits = n_params.modulus().as_ref().bits() as usize;
+    // Guard against degenerate moduli — `em_bits = key_bits - 1` would
+    // otherwise underflow and surface as `OutputBufferTooSmall`.
+    if key_bits < 2 {
+        return Err(Error::InvalidArguments);
+    }
     if k != key_bits.div_ceil(8) {
         return Err(Error::InvalidArguments);
     }
