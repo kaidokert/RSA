@@ -1,6 +1,5 @@
-use super::{sign_digest, Signature, VerifyingKey};
+use super::{sign_digest, Signature, SigningKey, VerifyingKey};
 use crate::{Result, RsaPrivateKey};
-use core::marker::PhantomData;
 use digest::{Digest, FixedOutputReset, HashMarker, Update};
 use rand_core::{CryptoRng, TryCryptoRng};
 use signature::{
@@ -28,14 +27,9 @@ use {
 /// Signing key for producing "blinded" RSASSA-PSS signatures as described in
 /// [draft-irtf-cfrg-rsa-blind-signatures](https://datatracker.ietf.org/doc/draft-irtf-cfrg-rsa-blind-signatures/).
 #[derive(Debug, Clone)]
-pub struct BlindedSigningKey<D>
+pub struct BlindedSigningKey<D>(SigningKey<D>)
 where
-    D: Digest,
-{
-    inner: RsaPrivateKey,
-    salt_len: usize,
-    phantom: PhantomData<D>,
-}
+    D: Digest;
 
 impl<D> BlindedSigningKey<D>
 where
@@ -45,24 +39,20 @@ where
     /// signatures.
     /// Digest output size is used as a salt length.
     pub fn new(key: RsaPrivateKey) -> Self {
-        Self::new_with_salt_len(key, <D as Digest>::output_size())
+        Self(SigningKey::new(key))
     }
 
     /// Create a new RSASSA-PSS signing key which produces "blinded"
     /// signatures with a salt of the given length.
     pub fn new_with_salt_len(key: RsaPrivateKey, salt_len: usize) -> Self {
-        Self {
-            inner: key,
-            salt_len,
-            phantom: Default::default(),
-        }
+        Self(SigningKey::new_with_salt_len(key, salt_len))
     }
 
     /// Create a new random RSASSA-PSS signing key which produces "blinded"
     /// signatures.
     /// Digest output size is used as a salt length.
     pub fn random<R: CryptoRng + ?Sized>(rng: &mut R, bit_size: usize) -> Result<Self> {
-        Self::random_with_salt_len(rng, bit_size, <D as Digest>::output_size())
+        SigningKey::random(rng, bit_size).map(Self)
     }
 
     /// Create a new random RSASSA-PSS signing key which produces "blinded"
@@ -72,16 +62,12 @@ where
         bit_size: usize,
         salt_len: usize,
     ) -> Result<Self> {
-        Ok(Self {
-            inner: RsaPrivateKey::new(rng, bit_size)?,
-            salt_len,
-            phantom: Default::default(),
-        })
+        SigningKey::random_with_salt_len(rng, bit_size, salt_len).map(Self)
     }
 
     /// Return specified salt length for this key
     pub fn salt_len(&self) -> usize {
-        self.salt_len
+        self.0.salt_len()
     }
 }
 
@@ -114,9 +100,15 @@ where
         let mut digest = D::new();
         msg.iter()
             .for_each(|slice| <D as Digest>::update(&mut digest, slice));
-        sign_digest::<_, D>(rng, true, &self.inner, &digest.finalize(), self.salt_len)?
-            .as_slice()
-            .try_into()
+        sign_digest::<_, D>(
+            rng,
+            true,
+            self.0.as_ref(),
+            &digest.finalize(),
+            self.0.salt_len(),
+        )?
+        .as_slice()
+        .try_into()
     }
 }
 
@@ -134,9 +126,15 @@ where
     ) -> signature::Result<Signature> {
         let mut digest = D::default();
         f(&mut digest)?;
-        sign_digest::<_, D>(rng, true, &self.inner, &digest.finalize(), self.salt_len)?
-            .as_slice()
-            .try_into()
+        sign_digest::<_, D>(
+            rng,
+            true,
+            self.0.as_ref(),
+            &digest.finalize(),
+            self.0.salt_len(),
+        )?
+        .as_slice()
+        .try_into()
     }
 }
 
@@ -149,7 +147,7 @@ where
         rng: &mut R,
         prehash: &[u8],
     ) -> signature::Result<Signature> {
-        sign_digest::<_, D>(rng, true, &self.inner, prehash, self.salt_len)?
+        sign_digest::<_, D>(rng, true, self.0.as_ref(), prehash, self.0.salt_len())?
             .as_slice()
             .try_into()
     }
@@ -164,7 +162,7 @@ where
     D: Digest,
 {
     fn as_ref(&self) -> &RsaPrivateKey {
-        &self.inner
+        self.0.as_ref()
     }
 }
 
@@ -184,7 +182,7 @@ where
     D: Digest + AssociatedOid,
 {
     fn signature_algorithm_identifier(&self) -> spki::Result<AlgorithmIdentifierOwned> {
-        get_pss_signature_algo_id::<D>(self.salt_len as u8)
+        get_pss_signature_algo_id::<D>(self.0.salt_len() as u8)
     }
 }
 
@@ -194,7 +192,7 @@ where
     D: Digest,
 {
     fn to_pkcs8_der(&self) -> pkcs8::Result<SecretDocument> {
-        self.inner.to_pkcs8_der()
+        self.0.to_pkcs8_der()
     }
 }
 
@@ -212,7 +210,7 @@ where
     D: Digest,
 {
     fn from(key: BlindedSigningKey<D>) -> Self {
-        key.inner
+        key.0.into()
     }
 }
 
@@ -221,12 +219,9 @@ where
     D: Digest,
 {
     type VerifyingKey = VerifyingKey<D>;
+
     fn verifying_key(&self) -> Self::VerifyingKey {
-        VerifyingKey {
-            inner: self.inner.to_public_key(),
-            salt_len: Some(self.salt_len),
-            phantom: Default::default(),
-        }
+        Keypair::verifying_key(&self.0)
     }
 }
 
@@ -238,7 +233,7 @@ where
     type Error = pkcs8::Error;
 
     fn try_from(private_key_info: pkcs8::PrivateKeyInfoRef<'_>) -> pkcs8::Result<Self> {
-        RsaPrivateKey::try_from(private_key_info).map(Self::new)
+        SigningKey::try_from(private_key_info).map(Self)
     }
 }
 
@@ -249,7 +244,7 @@ where
     D: Digest,
 {
     fn eq(&self, other: &Self) -> bool {
-        self.inner == other.inner && self.salt_len == other.salt_len
+        self.0 == other.0
     }
 }
 

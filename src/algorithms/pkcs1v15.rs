@@ -15,6 +15,11 @@ use rand_core::TryCryptoRng;
 use zeroize::Zeroizing;
 
 use crate::errors::{Error, Result};
+#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
+use crate::traits::{
+    modular::{ModulusParams, Pow, PowBoundedExp},
+    UnsignedModularInt,
+};
 
 /// Fills the provided slice with random values, which are guaranteed
 /// to not be zero.
@@ -179,6 +184,56 @@ pub fn pkcs1v15_sign_pad_into<'a>(
     em[k - hash_len..k].copy_from_slice(hashed);
 
     Ok(em)
+}
+
+/// ⚠️ PKCS#1 v1.5 sign — heapless-compatible, generic over the integer backend.
+///
+/// Pads `hashed` into `EM = 0x00 || 0x01 || PS || 0x00 || prefix || hashed`,
+/// computes `s = EM^d mod n` via
+/// [`rsa_private_op_and_check`](crate::algorithms::rsa::rsa_private_op_and_check)
+/// (verify-after-sign on every backend), and writes `s` left-padded to `k`
+/// bytes. `k` is the modulus byte length; both scratch buffers must be `>= k`.
+///
+/// # ☢️️ WARNING: HAZARDOUS API ☢️
+///
+/// The raw PKCS#1 v1.5 sign primitive — the caller hashes the message and
+/// prepends the DigestInfo prefix.
+///
+// Consumer (the heapless `SigningKey<D>` wrapper) lands in a later PR.
+#[allow(dead_code)]
+#[allow(clippy::too_many_arguments)] // Composing four byte/integer steps; splitting helps nothing.
+#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
+pub fn sign_into<'sig, T, M>(
+    n_params: &M,
+    d: &T,
+    e: &T,
+    prefix: &[u8],
+    hashed: &[u8],
+    k: usize,
+    em_storage: &mut [u8],
+    sig_storage: &'sig mut [u8],
+) -> Result<&'sig [u8]>
+where
+    T: UnsignedModularInt,
+    T::Bytes: zeroize::Zeroize,
+    M: ModulusParams<Modulus = T> + crate::traits::modular::CtModulusParams,
+    M::MontgomeryForm: Pow<M> + PowBoundedExp<M>,
+{
+    // `k` = modulus byte length (matches `PublicKeyParts::size()`). Use the
+    // actual bit-length, not the container width (`bits_precision()` would
+    // over-count a short modulus in a wide integer), and `div_ceil` so a
+    // non-multiple-of-8 modulus still round-trips.
+    if k != (n_params.modulus().as_ref().bits() as usize).div_ceil(8) {
+        return Err(Error::InvalidArguments);
+    }
+    // Fail fast before the exponentiation instead of after.
+    if sig_storage.len() < k {
+        return Err(Error::OutputBufferTooSmall);
+    }
+    let em_slice = pkcs1v15_sign_pad_into(prefix, hashed, k, em_storage)?;
+    let em = T::try_from_be_bytes_vartime(em_slice)?;
+    let s = crate::algorithms::rsa::rsa_private_op_and_check(&em, d, e, n_params)?;
+    crate::algorithms::pad::uint_to_zeroizing_be_pad_into(s, k, sig_storage)
 }
 
 #[inline]

@@ -6,9 +6,8 @@ pub(crate) mod modular;
 mod padding;
 
 pub use encryption::{Decryptor, EncryptingKeypair, RandomizedDecryptor, RandomizedEncryptor};
-#[cfg(not(feature = "private-key"))]
+#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
+pub use keys::PrivateKeyParts;
 pub use keys::PublicKeyParts;
-#[cfg(feature = "private-key")]
-pub use keys::{PrivateKeyParts, PublicKeyParts};
 pub use modular::{FixedWidthUnsignedInt, IntegerResize, NonZero, Odd, UnsignedModularInt};
 pub use padding::{PaddingScheme, SignatureScheme};

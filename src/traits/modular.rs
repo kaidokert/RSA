@@ -5,6 +5,10 @@ use core::borrow::Borrow;
 
 #[cfg(feature = "alloc")]
 use alloc::boxed::Box;
+use const_num_traits::PrimBits;
+#[cfg(not(feature = "modmath"))]
+use const_num_traits::PrimInt;
+use const_num_traits::{FromBytes as NumFromBytes, ToBytes as NumToBytes, Zero};
 #[cfg(feature = "alloc")]
 use crypto_bigint::{
     modular::{BoxedMontyForm, BoxedMontyParams},
@@ -12,10 +16,6 @@ use crypto_bigint::{
 };
 #[cfg(feature = "alloc")]
 use crypto_bigint::{NonZero as CryptoNonZero, Odd as CryptoOdd};
-use const_num_traits::PrimBits;
-#[cfg(not(feature = "modmath"))]
-use const_num_traits::PrimInt;
-use const_num_traits::{FromBytes as NumFromBytes, ToBytes as NumToBytes, Zero};
 use zeroize::Zeroize;
 
 use crate::errors::{Error, Result};
@@ -345,6 +345,51 @@ pub trait ModulusParams: Sized {
     fn modulus(&self) -> &Odd<Self::Modulus>;
     fn bits_precision(&self) -> u32;
 }
+
+pub(crate) mod sealed {
+    /// Prevents external crates from implementing
+    /// [`super::CtModulusParams`] on backends we haven't audited —
+    /// see the security note on that trait.
+    pub trait CtModulusParamsSealed {}
+}
+
+/// Marker trait for [`ModulusParams`] backends whose Montgomery
+/// exponentiation itself is constant-time in the base value.
+///
+/// Bound the public-key encryption path on this so plaintext (which
+/// **is** secret) can't be routed through a vartime `pow_bounded_exp`.
+/// Signature verification stays unbounded — the "base" there is the
+/// public signature, so vartime is fine.
+///
+/// The trait is sealed — only backends impl'd by this crate can opt
+/// in. Downstream crates cannot claim the guarantee for their own
+/// backends without inviting the exact side-channel this bound is
+/// meant to keep out.
+///
+/// # Backends
+///
+/// - Under `feature = "alloc"`, `crypto_bigint::modular::BoxedMontyParams`
+///   opts in. Its `BoxedMontyForm::pow_bounded_exp` is CT in the
+///   base. **Caveat:** the pre-exponentiation conversion (see
+///   `IntoMontyForm::from_value` for `BoxedMontyForm`) still uses a
+///   vartime reduction (`BoxedUint::rem_vartime`) inherited from
+///   upstream `RustCrypto/RSA`. Callers requiring rigorous CT
+///   guarantees over the whole encrypt chain should use the no-alloc
+///   modmath backend at the `Ct` personality (below). The alloc
+///   impl is included primarily for API-surface compatibility with
+///   upstream and to keep the default alloc encrypt path functional.
+/// - Under `feature = "modmath"`, `ModMathParams<T, Ct>` opts in —
+///   the no-alloc CT-personality substitution, honestly CT top to
+///   bottom.
+/// - `ModMathParams<T, Nct>` **deliberately does not** opt in;
+///   `NctPublicKey`-derived encrypting keys fail the encrypt trait
+///   bound at compile time.
+pub trait CtModulusParams: ModulusParams + sealed::CtModulusParamsSealed {}
+
+#[cfg(feature = "alloc")]
+impl sealed::CtModulusParamsSealed for BoxedMontyParams {}
+#[cfg(feature = "alloc")]
+impl CtModulusParams for BoxedMontyParams {}
 
 #[cfg(feature = "alloc")]
 impl ModulusParams for BoxedMontyParams {

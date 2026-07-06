@@ -8,11 +8,11 @@
 use alloc::boxed::Box;
 use core::ops::{Shr, ShrAssign};
 
-use const_num_traits::{Ct, Nct, Personality};
-use modmath::{CiosMontMul, CiosMontMulCt, Field as ModmathField, Parity, WideMul};
 use const_num_traits::ops::overflowing::OverflowingAdd;
 use const_num_traits::ops::wrapping::{WrappingAdd, WrappingMul, WrappingSub};
+use const_num_traits::{Ct, HasPersonality, Nct, Personality};
 use const_num_traits::{One, Zero};
+use modmath::{CiosMontMul, CiosMontMulCt, Field as ModmathField, Parity, WideMul};
 use zeroize::Zeroize;
 
 use crate::{
@@ -43,6 +43,7 @@ pub trait ModMathInt:
     + ShrAssign<usize>
     + core::ops::Add<Output = Self>
     + core::ops::Mul<Output = Self>
+    + HasPersonality
 {
 }
 
@@ -64,6 +65,7 @@ impl<T> ModMathInt for T where
         + ShrAssign<usize>
         + core::ops::Add<Output = Self>
         + core::ops::Mul<Output = Self>
+        + HasPersonality
 {
 }
 
@@ -88,6 +90,8 @@ pub trait ModMathIntCt:
     + core::ops::BitAnd<Output = Self>
     + core::ops::Add<Output = Self>
     + core::ops::Mul<Output = Self>
+    + HasPersonality
+    + const_num_traits::CtIsZero
 {
 }
 
@@ -112,6 +116,8 @@ impl<T> ModMathIntCt for T where
         + core::ops::BitAnd<Output = Self>
         + core::ops::Add<Output = Self>
         + core::ops::Mul<Output = Self>
+        + HasPersonality
+        + const_num_traits::CtIsZero
 {
 }
 
@@ -258,6 +264,19 @@ where
     }
 }
 
+// Opt the alloc-side newtype into raw `(public_key, d)` private-key
+// construction. The heapless-build blanket on
+// `FixedWidthUnsignedInt + PartialOrd` doesn't reach `ModMathValue<T>`
+// (a newtype, not itself `FixedWidthUnsignedInt`), so impl it here.
+#[cfg(all(
+    feature = "alloc",
+    any(feature = "private-key", feature = "wip-private-key")
+))]
+impl<T> crate::traits::keys::RawPrivateKeyConstructible for ModMathValue<T> where
+    T: FixedWidthUnsignedInt + PartialOrd
+{
+}
+
 #[cfg(not(feature = "alloc"))]
 pub type ModMathValue<T> = T;
 
@@ -275,7 +294,7 @@ pub struct ModMathParams<T, P: Personality = Nct> {
     modulus_odd: Odd<ModMathValue<T>>,
 }
 
-impl<T: ModMathInt> ModMathParams<T, Nct> {
+impl<T: ModMathInt + HasPersonality<P = Nct>> ModMathParams<T, Nct> {
     pub fn new(modulus: T) -> Result<Self> {
         let field = ModmathField::<T, Nct>::new(modulus).ok_or(Error::InvalidModulus)?;
         let modulus_odd = Odd::new(wrap_value(modulus)).ok_or(Error::InvalidModulus)?;
@@ -283,7 +302,7 @@ impl<T: ModMathInt> ModMathParams<T, Nct> {
     }
 }
 
-impl<T: ModMathIntCt> ModMathParams<T, Ct> {
+impl<T: ModMathIntCt + HasPersonality<P = Ct>> ModMathParams<T, Ct> {
     /// Create CT (encrypt) Montgomery parameters for an odd, non-zero
     /// modulus.
     pub fn new(modulus: T) -> Result<Self> {
@@ -306,7 +325,7 @@ pub fn public_key_from_be_bytes<T>(
     exponent: u32,
 ) -> Result<GenericRsaPublicKey<ModMathValue<T>, ModMathParams<T, Nct>>>
 where
-    T: ModMathInt,
+    T: ModMathInt + HasPersonality<P = Nct>,
 {
     let n = wrap_value(<T as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(
         modulus,
@@ -325,7 +344,7 @@ pub fn rsa_public_op<T>(
     input: &[u8],
 ) -> Result<<ModMathValue<T> as UnsignedModularInt>::Bytes>
 where
-    T: ModMathInt,
+    T: ModMathInt + HasPersonality<P = Nct>,
 {
     let input = wrap_value(<T as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(
         input,
@@ -342,7 +361,7 @@ pub fn public_key_ct_from_be_bytes<T>(
     exponent: u32,
 ) -> Result<GenericRsaPublicKey<ModMathValue<T>, ModMathParams<T, Ct>>>
 where
-    T: ModMathIntCt,
+    T: ModMathIntCt + HasPersonality<P = Ct>,
 {
     let n = wrap_value(<T as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(
         modulus,
@@ -359,7 +378,7 @@ pub fn rsa_public_op_ct<T>(
     input: &[u8],
 ) -> Result<<ModMathValue<T> as UnsignedModularInt>::Bytes>
 where
-    T: ModMathIntCt,
+    T: ModMathIntCt + HasPersonality<P = Ct>,
 {
     let input = wrap_value(<T as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(
         input,
@@ -399,7 +418,9 @@ where
 
 impl<T, P: Personality> zeroize::ZeroizeOnDrop for ModMathForm<T, P> where T: Clone + Zeroize {}
 
-impl<T: ModMathInt> IntoMontyForm<ModMathParams<T, Nct>> for ModMathForm<T, Nct> {
+impl<T: ModMathInt + HasPersonality<P = Nct>> IntoMontyForm<ModMathParams<T, Nct>>
+    for ModMathForm<T, Nct>
+{
     fn from_reduced(integer: ModMathValue<T>, params: &ModMathParams<T, Nct>) -> Self {
         let field = params.field();
         let r = field.reduce(unwrap_value_ref(&integer));
@@ -417,7 +438,7 @@ impl<T: ModMathInt> IntoMontyForm<ModMathParams<T, Nct>> for ModMathForm<T, Nct>
     }
 }
 
-impl<T: ModMathInt> ModMathForm<T, Nct> {
+impl<T: ModMathInt + HasPersonality<P = Nct>> ModMathForm<T, Nct> {
     fn pow_loop(&self, exp_raw: T) -> T {
         let field = self.params.field();
         let base = field.residue_from_mont(unwrap_value(&self.integer_mont));
@@ -431,7 +452,7 @@ impl<T: ModMathInt> ModMathForm<T, Nct> {
     }
 }
 
-impl<T: ModMathInt> Pow<ModMathParams<T, Nct>> for ModMathForm<T, Nct> {
+impl<T: ModMathInt + HasPersonality<P = Nct>> Pow<ModMathParams<T, Nct>> for ModMathForm<T, Nct> {
     fn pow(&self, exp: &ModMathValue<T>) -> Self {
         let result_mont = self.pow_loop(unwrap_value(exp));
         Self {
@@ -441,7 +462,9 @@ impl<T: ModMathInt> Pow<ModMathParams<T, Nct>> for ModMathForm<T, Nct> {
     }
 }
 
-impl<T: ModMathInt> PowBoundedExp<ModMathParams<T, Nct>> for ModMathForm<T, Nct> {
+impl<T: ModMathInt + HasPersonality<P = Nct>> PowBoundedExp<ModMathParams<T, Nct>>
+    for ModMathForm<T, Nct>
+{
     fn pow_bounded_exp(&self, exp: &ModMathValue<T>, _exp_bits: u32) -> Self {
         // The LSB-first loop exits naturally when the exponent reaches zero,
         // so the `_exp_bits` hint is unused here.
@@ -457,7 +480,7 @@ impl<T: ModMathInt> PowBoundedExp<ModMathParams<T, Nct>> for ModMathForm<T, Nct>
     }
 }
 
-impl<T: ModMathInt> ModulusParams for ModMathParams<T, Nct> {
+impl<T: ModMathInt + HasPersonality<P = Nct>> ModulusParams for ModMathParams<T, Nct> {
     type Modulus = ModMathValue<T>;
     type MontgomeryForm = ModMathForm<T, Nct>;
 
@@ -470,7 +493,9 @@ impl<T: ModMathInt> ModulusParams for ModMathParams<T, Nct> {
     }
 }
 
-impl<T: ModMathIntCt> IntoMontyForm<ModMathParams<T, Ct>> for ModMathForm<T, Ct> {
+impl<T: ModMathIntCt + HasPersonality<P = Ct>> IntoMontyForm<ModMathParams<T, Ct>>
+    for ModMathForm<T, Ct>
+{
     fn from_reduced(integer: ModMathValue<T>, params: &ModMathParams<T, Ct>) -> Self {
         let field = params.field();
         let r = field.reduce(unwrap_value_ref(&integer));
@@ -487,8 +512,22 @@ impl<T: ModMathIntCt> IntoMontyForm<ModMathParams<T, Ct>> for ModMathForm<T, Ct>
     }
 }
 
-impl<T: ModMathIntCt> ModMathForm<T, Ct> {
-    fn pow_loop(&self, exp_raw: T) -> T {
+impl<T: ModMathIntCt + HasPersonality<P = Ct>> ModMathForm<T, Ct> {
+    // Secret-exponent ladder. Used by `Pow::pow`, which is the path RSA
+    // signing and unblinded decryption reduce to — the exponent is `d`,
+    // never disclosed in timing. Routes to modmath's `Field<T, Ct>::exp`,
+    // a fixed-iteration Montgomery ladder with branchless per-bit select.
+    fn pow_loop_ct(&self, exp_raw: T) -> T {
+        let field = self.params.field();
+        let base = field.residue_from_mont(unwrap_value(&self.integer_mont));
+        *field.exp(&base, &exp_raw).mont_value()
+    }
+
+    // Public-exponent ladder. Used by `PowBoundedExp::pow_bounded_exp`,
+    // which acknowledges variable-time-in-exponent semantics — the
+    // exponent is `e` (RSA public verify/encrypt), already disclosed.
+    // Routes to modmath's `Field<T, Ct>::exp_public_exp`.
+    fn pow_loop_public_exp(&self, exp_raw: T) -> T {
         let field = self.params.field();
         let base = field.residue_from_mont(unwrap_value(&self.integer_mont));
         *field.exp_public_exp(&base, &exp_raw).mont_value()
@@ -501,9 +540,9 @@ impl<T: ModMathIntCt> ModMathForm<T, Ct> {
     }
 }
 
-impl<T: ModMathIntCt> Pow<ModMathParams<T, Ct>> for ModMathForm<T, Ct> {
+impl<T: ModMathIntCt + HasPersonality<P = Ct>> Pow<ModMathParams<T, Ct>> for ModMathForm<T, Ct> {
     fn pow(&self, exp: &ModMathValue<T>) -> Self {
-        let result_mont = self.pow_loop(unwrap_value(exp));
+        let result_mont = self.pow_loop_ct(unwrap_value(exp));
         Self {
             integer_mont: wrap_value(result_mont),
             params: self.params.clone(),
@@ -511,9 +550,11 @@ impl<T: ModMathIntCt> Pow<ModMathParams<T, Ct>> for ModMathForm<T, Ct> {
     }
 }
 
-impl<T: ModMathIntCt> PowBoundedExp<ModMathParams<T, Ct>> for ModMathForm<T, Ct> {
+impl<T: ModMathIntCt + HasPersonality<P = Ct>> PowBoundedExp<ModMathParams<T, Ct>>
+    for ModMathForm<T, Ct>
+{
     fn pow_bounded_exp(&self, exp: &ModMathValue<T>, _exp_bits: u32) -> Self {
-        let result_mont = self.pow_loop(unwrap_value(exp));
+        let result_mont = self.pow_loop_public_exp(unwrap_value(exp));
         Self {
             integer_mont: wrap_value(result_mont),
             params: self.params.clone(),
@@ -525,7 +566,7 @@ impl<T: ModMathIntCt> PowBoundedExp<ModMathParams<T, Ct>> for ModMathForm<T, Ct>
     }
 }
 
-impl<T: ModMathIntCt> ModulusParams for ModMathParams<T, Ct> {
+impl<T: ModMathIntCt + HasPersonality<P = Ct>> ModulusParams for ModMathParams<T, Ct> {
     type Modulus = ModMathValue<T>;
     type MontgomeryForm = ModMathForm<T, Ct>;
 
@@ -536,6 +577,20 @@ impl<T: ModMathIntCt> ModulusParams for ModMathParams<T, Ct> {
     fn bits_precision(&self) -> u32 {
         FixedWidthUnsignedInt::bits_precision(self.field.modulus())
     }
+}
+
+// Opt the Ct personality into the CT-encrypt gate. Deliberately no
+// impl for `ModMathParams<T, Nct>` — Nct exponentiation is vartime in
+// the base, so `NctPublicKey`-derived encrypting keys fail the encrypt
+// trait bound at compile time. See
+// `crate::traits::modular::CtModulusParams`.
+impl<T: ModMathIntCt + HasPersonality<P = Ct>> crate::traits::modular::sealed::CtModulusParamsSealed
+    for ModMathParams<T, Ct>
+{
+}
+impl<T: ModMathIntCt + HasPersonality<P = Ct>> crate::traits::modular::CtModulusParams
+    for ModMathParams<T, Ct>
+{
 }
 
 #[cfg(test)]
@@ -717,5 +772,689 @@ mod tests {
             .unwrap();
 
         assert_eq!(modmath_ciphertext, boxed_ciphertext.as_slice());
+    }
+}
+
+// Tests for the `rsa_private_op` primitive on the heapless / Ct path.
+// Gated independently of the alloc+private-key block above so the
+// `wip-private-key` feature (which doesn't imply alloc) can compile
+// and run them in no_alloc mode.
+#[cfg(test)]
+#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
+mod private_op_tests {
+    use super::*;
+    use const_num_traits::Ct;
+    use fixed_bigint::FixedUInt;
+
+    type SmallUCt = FixedUInt<u8, 64, Ct>;
+
+    // n = 35 = 5 · 7, φ(n) = 24. e = 5, d = 29 (since 5·29 = 145 ≡ 1 mod 24).
+    // m = 2 → c = 2^5 mod 35 = 32 → m_recovered = 32^29 mod 35 = 2.
+    fn toy_params() -> ModMathParams<SmallUCt, Ct> {
+        ModMathParams::<SmallUCt, Ct>::new(SmallUCt::from(35u8)).unwrap()
+    }
+
+    // A 512-bit odd modulus used by the `sign_into` defensive-error
+    // tests below — they need the actual modulus bit-length (checked
+    // by `sign_into` since the codex-P2 fix) to match `SMALL_K * 8`
+    // so `k` passes the up-front width check and the specific error
+    // path (small buffer, wrong hash length, etc.) is what fires.
+    // Value is `2^511 + 1`: MSB set, LSB=1 (odd).
+    fn toy_params_wide() -> ModMathParams<SmallUCt, Ct> {
+        let mut bytes = [0u8; 64];
+        bytes[0] = 0x80;
+        bytes[63] = 0x01;
+        let n = <SmallUCt as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(&bytes).unwrap();
+        ModMathParams::<SmallUCt, Ct>::new(n).unwrap()
+    }
+
+    #[test]
+    fn rsa_private_op_round_trip_heapless_ct() {
+        let n_params = toy_params();
+        let c = wrap_value(SmallUCt::from(32u8));
+        let d = wrap_value(SmallUCt::from(29u8));
+        let expected = wrap_value(SmallUCt::from(2u8));
+        let recovered = crate::algorithms::rsa::rsa_private_op(&c, &d, &n_params);
+        assert_eq!(recovered, expected);
+    }
+
+    #[test]
+    fn rsa_private_op_and_check_round_trip_heapless_ct() {
+        let n_params = toy_params();
+        let c = wrap_value(SmallUCt::from(32u8));
+        let d = wrap_value(SmallUCt::from(29u8));
+        let e = wrap_value(SmallUCt::from(5u8));
+        let expected = wrap_value(SmallUCt::from(2u8));
+        let recovered =
+            crate::algorithms::rsa::rsa_private_op_and_check(&c, &d, &e, &n_params).unwrap();
+        assert_eq!(recovered, expected);
+    }
+
+    #[test]
+    fn rsa_private_op_and_check_rejects_wrong_exponent() {
+        // Same modulus + e, but a wrong `d` (11 instead of 29). The recovered
+        // `m` won't re-encrypt back to `c`, so the integrity check should fail.
+        let n_params = toy_params();
+        let c = wrap_value(SmallUCt::from(32u8));
+        let bad_d = wrap_value(SmallUCt::from(11u8));
+        let e = wrap_value(SmallUCt::from(5u8));
+        let result = crate::algorithms::rsa::rsa_private_op_and_check(&c, &bad_d, &e, &n_params);
+        assert!(result.is_err());
+    }
+
+    // 2048-bit RSA keypair fixture — same `(n, e=65537, d)` used in
+    // `algorithms::rsa::tests::recover_primes_works`. Pulled in here so the
+    // heapless wip-private-key test path can roundtrip-sign without
+    // requiring `alloc`. `e` is rendered as 3-byte BE (`0x010001`) and
+    // resized into `U2048` at test time.
+    const N_2048: [u8; 256] = hex_literal::hex!(
+        "d397b84d98a4c26138ed1b695a8106ead91d553bf06041b62d3fdc50a041e222
+         b8f4529689c1b82c5e71554f5dd69fa2f4b6158cf0dbeb57811a0fc327e1f28e
+         74fe74d3bc166c1eabdc1b8b57b934ca8be5b00b4f29975bcc99acaf415b59bb
+         28a6782bb41a2c3c2976b3c18dbadef62f00c6bb226640095096c0cc60d22fe7
+         ef987d75c6a81b10d96bf292028af110dc7cc1bbc43d22adab379a0cd5d8078c
+         c780ff5cd6209dea34c922cf784f7717e428d75b5aec8ff30e5f0141510766e2
+         e0ab8d473c84e8710b2b98227c3db095337ad3452f19e2b9bfbccdd8148abf67
+         76fa552775e6e75956e45229ae5a9c46949bab1e622f0e48f56524a84ed3483b"
+    );
+    const D_2048: [u8; 256] = hex_literal::hex!(
+        "c4e70c689162c94c660828191b52b4d8392115df486a9adbe831e458d7395832
+         0dc1b755456e93701e9702d76fb0b92f90e01d1fe248153281fe79aa9763a92f
+         ae69d8d7ecd144de29fa135bd14f9573e349e45031e3b76982f583003826c552
+         e89a397c1a06bd2163488630d92e8c2bb643d7abef700da95d685c941489a46f
+         54b5316f62b5d2c3a7f1bbd134cb37353a44683fdc9d95d36458de22f6c44057
+         fe74a0a436c4308f73f4da42f35c47ac16a7138d483afc91e41dc3a1127382e0
+         c0f5119b0221b4fc639d6b9c38177a6de9b526ebd88c38d7982c07f98a0efd87
+         7d508aae275b946915c02e2e1106d175d74ec6777f5e80d12c053d9c7be1e341"
+    );
+
+    #[test]
+    fn pkcs1v15_sign_into_round_trip_2048_sha1() {
+        use crate::algorithms::pkcs1v15::{
+            pkcs1v15_generate_prefix_into, pkcs1v15_sign_pad_into, sign_into,
+        };
+        use crate::traits::PublicKeyParts;
+        use sha1::Sha1;
+
+        type U2048 = FixedUInt<u8, 256, Ct>;
+        const K: usize = 256;
+
+        let key = public_key_ct_from_be_bytes::<U2048>(&N_2048, 65537).unwrap();
+        let d_int = <U2048 as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(&D_2048).unwrap();
+        let d = wrap_value(d_int);
+        let e_int =
+            <U2048 as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(&[0x01, 0x00, 0x01])
+                .unwrap();
+        let e = wrap_value(e_int);
+
+        let digest = [0xAAu8; 20];
+        let mut prefix_storage = [0u8; 32];
+        let prefix = pkcs1v15_generate_prefix_into::<Sha1>(&mut prefix_storage).unwrap();
+
+        let mut em_storage = [0u8; K];
+        let mut sig_storage = [0u8; K];
+        let sig = sign_into(
+            key.n_params(),
+            &d,
+            &e,
+            prefix,
+            &digest,
+            K,
+            &mut em_storage,
+            &mut sig_storage,
+        )
+        .unwrap();
+        assert_eq!(sig.len(), K);
+
+        // Roundtrip via public op: `sig^e mod n` must recover the padded EM
+        // that `pkcs1v15_sign_pad_into` produces for the same (prefix, digest).
+        let recovered = public_key_op_ct(&key, sig).unwrap();
+        let mut expected_em_storage = [0u8; K];
+        let expected_em =
+            pkcs1v15_sign_pad_into(prefix, &digest, K, &mut expected_em_storage).unwrap();
+        assert_eq!(recovered.as_ref(), expected_em);
+    }
+
+    #[test]
+    fn pss_sign_into_round_trip_2048_sha1() {
+        use crate::algorithms::pss::{emsa_pss_verify, sign_into};
+        use crate::traits::PublicKeyParts;
+        use digest::Digest;
+        use sha1::Sha1;
+
+        type U2048 = FixedUInt<u8, 256, Ct>;
+        const K: usize = 256;
+        const KEY_BITS: usize = 2048;
+
+        let key = public_key_ct_from_be_bytes::<U2048>(&N_2048, 65537).unwrap();
+        let d = wrap_value(
+            <U2048 as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(&D_2048).unwrap(),
+        );
+        let e = wrap_value(
+            <U2048 as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(&[0x01, 0x00, 0x01])
+                .unwrap(),
+        );
+
+        let digest = [0xAAu8; 20];
+        let salt: &[u8] = &[]; // empty salt → deterministic encoding
+        let mut hash = Sha1::new();
+
+        let mut em_storage = [0u8; K];
+        let mut sig_storage = [0u8; K];
+        let sig = sign_into(
+            key.n_params(),
+            &d,
+            &e,
+            &digest,
+            salt,
+            K,
+            &mut hash,
+            &mut em_storage,
+            &mut sig_storage,
+        )
+        .unwrap();
+        assert_eq!(sig.len(), K);
+
+        // Roundtrip via public op: `sig^e mod n` must yield a valid PSS-encoded
+        // EM for `(digest, salt)`. `emsa_pss_verify` modifies `em` in place
+        // (MGF unmask), so copy the recovered bytes into a mutable buffer.
+        let recovered = public_key_op_ct(&key, sig).unwrap();
+        let mut em_copy = [0u8; K];
+        em_copy.copy_from_slice(recovered.as_ref());
+        let mut verify_hash = Sha1::new();
+        emsa_pss_verify(
+            &digest,
+            &mut em_copy,
+            Some(salt.len()),
+            &mut verify_hash,
+            KEY_BITS,
+        )
+        .unwrap();
+    }
+
+    // Local alias for `rsa_public_op_ct` — keeps the test's call-site short.
+    fn public_key_op_ct<T>(
+        key: &crate::key::GenericRsaPublicKey<ModMathValue<T>, ModMathParams<T, Ct>>,
+        input: &[u8],
+    ) -> Result<<ModMathValue<T> as UnsignedModularInt>::Bytes>
+    where
+        T: ModMathIntCt + HasPersonality<P = Ct>,
+    {
+        crate::modmath_support::rsa_public_op_ct(key, input)
+    }
+
+    // ─── defensive-error tests for `sign_into` upfront checks ───────────
+    //
+    // These tests trip the fast-fail guards added on PR #21 / #22 review.
+    // None reach the RSA exponentiation, so `d`/`e` can be dummy values
+    // and the toy `SmallUCt` (512-bit) `n_params` is sufficient.
+
+    fn dummy_de() -> (ModMathValue<SmallUCt>, ModMathValue<SmallUCt>) {
+        (
+            wrap_value(SmallUCt::from(1u8)),
+            wrap_value(SmallUCt::from(1u8)),
+        )
+    }
+
+    // SmallUCt = FixedUInt<u8, 64, Ct> → bits_precision = 512 → k = 64.
+    const SMALL_K: usize = 64;
+
+    #[test]
+    fn pkcs1v15_sign_into_rejects_wrong_k() {
+        use crate::algorithms::pkcs1v15::sign_into;
+        let n_params = toy_params();
+        let (d, e) = dummy_de();
+        let mut em = [0u8; SMALL_K];
+        let mut sig = [0u8; SMALL_K];
+        let result = sign_into(
+            &n_params,
+            &d,
+            &e,
+            &[],
+            &[0u8; 20],
+            SMALL_K - 1, // wrong: should be SMALL_K
+            &mut em,
+            &mut sig,
+        );
+        assert!(matches!(result, Err(Error::InvalidArguments)));
+    }
+
+    #[test]
+    fn pkcs1v15_sign_into_rejects_small_sig_storage() {
+        use crate::algorithms::pkcs1v15::sign_into;
+        let n_params = toy_params_wide();
+        let (d, e) = dummy_de();
+        let mut em = [0u8; SMALL_K];
+        let mut sig = [0u8; SMALL_K - 1]; // one byte short
+        let result = sign_into(
+            &n_params,
+            &d,
+            &e,
+            &[],
+            &[0u8; 20],
+            SMALL_K,
+            &mut em,
+            &mut sig,
+        );
+        assert!(matches!(result, Err(Error::OutputBufferTooSmall)));
+    }
+
+    #[test]
+    fn pkcs1v15_sign_into_propagates_message_too_long() {
+        // prefix + hashed + 11 > k → `pkcs1v15_sign_pad_into` returns
+        // MessageTooLong. Confirms errors from the padding step bubble up.
+        use crate::algorithms::pkcs1v15::sign_into;
+        let n_params = toy_params_wide();
+        let (d, e) = dummy_de();
+        let mut em = [0u8; SMALL_K];
+        let mut sig = [0u8; SMALL_K];
+        let oversize_prefix = [0u8; SMALL_K]; // 64-byte prefix alone exceeds k - 11
+        let result = sign_into(
+            &n_params,
+            &d,
+            &e,
+            &oversize_prefix,
+            &[0u8; 20],
+            SMALL_K,
+            &mut em,
+            &mut sig,
+        );
+        assert!(matches!(result, Err(Error::MessageTooLong)));
+    }
+
+    #[test]
+    fn pss_sign_into_rejects_wrong_k() {
+        use crate::algorithms::pss::sign_into;
+        use digest::Digest;
+        use sha1::Sha1;
+        let n_params = toy_params_wide();
+        let (d, e) = dummy_de();
+        let mut em = [0u8; SMALL_K];
+        let mut sig = [0u8; SMALL_K];
+        let mut hash = Sha1::new();
+        let result = sign_into(
+            &n_params,
+            &d,
+            &e,
+            &[0u8; 20],
+            &[],
+            SMALL_K - 1, // wrong
+            &mut hash,
+            &mut em,
+            &mut sig,
+        );
+        assert!(matches!(result, Err(Error::InvalidArguments)));
+    }
+
+    #[test]
+    fn pss_sign_into_rejects_small_sig_storage() {
+        use crate::algorithms::pss::sign_into;
+        use digest::Digest;
+        use sha1::Sha1;
+        let n_params = toy_params_wide();
+        let (d, e) = dummy_de();
+        let mut em = [0u8; SMALL_K];
+        let mut sig = [0u8; SMALL_K - 1];
+        let mut hash = Sha1::new();
+        let result = sign_into(
+            &n_params,
+            &d,
+            &e,
+            &[0u8; 20],
+            &[],
+            SMALL_K,
+            &mut hash,
+            &mut em,
+            &mut sig,
+        );
+        assert!(matches!(result, Err(Error::OutputBufferTooSmall)));
+    }
+
+    #[test]
+    fn pss_sign_into_rejects_small_em_storage() {
+        use crate::algorithms::pss::sign_into;
+        use digest::Digest;
+        use sha1::Sha1;
+        let n_params = toy_params_wide();
+        let (d, e) = dummy_de();
+        // em_bits = key_bits - 1 = 511 → em_len = 64. Pass 63 to fail.
+        let mut em = [0u8; SMALL_K - 1];
+        let mut sig = [0u8; SMALL_K];
+        let mut hash = Sha1::new();
+        let result = sign_into(
+            &n_params,
+            &d,
+            &e,
+            &[0u8; 20],
+            &[],
+            SMALL_K,
+            &mut hash,
+            &mut em,
+            &mut sig,
+        );
+        assert!(matches!(result, Err(Error::OutputBufferTooSmall)));
+    }
+
+    #[test]
+    fn pss_sign_into_rejects_wrong_hash_length() {
+        // emsa_pss_encode_into returns InputNotHashed when m_hash.len()
+        // != hash output size. Confirms errors from the encode step bubble up.
+        use crate::algorithms::pss::sign_into;
+        use digest::Digest;
+        use sha1::Sha1;
+        let n_params = toy_params_wide();
+        let (d, e) = dummy_de();
+        let mut em = [0u8; SMALL_K];
+        let mut sig = [0u8; SMALL_K];
+        let mut hash = Sha1::new();
+        let result = sign_into(
+            &n_params,
+            &d,
+            &e,
+            &[0u8; 21], // SHA-1 produces 20 bytes, not 21
+            &[],
+            SMALL_K,
+            &mut hash,
+            &mut em,
+            &mut sig,
+        );
+        assert!(matches!(result, Err(Error::InputNotHashed)));
+    }
+
+    // Regression for the codex-P2 fix — `sign_into`'s `k` check must
+    // use the actual modulus bit-length, not the container's
+    // `bits_precision()`, otherwise a shorter modulus stored in a
+    // wider container spuriously rejects the only valid `k`.
+    #[test]
+    fn pkcs1v15_sign_into_k_uses_modulus_bits_not_container() {
+        use crate::algorithms::pkcs1v15::sign_into;
+        // 128-byte (1024-bit) container storing a ~512-bit modulus.
+        type WideUCt = FixedUInt<u8, 128, Ct>;
+        let mut mod_bytes = [0u8; 128];
+        mod_bytes[64] = 0x80; // MSB of the low 512 bits
+        mod_bytes[127] = 0x01; // LSB odd
+        let n = <WideUCt as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(&mod_bytes).unwrap();
+        let n_params = ModMathParams::<WideUCt, Ct>::new(n).unwrap();
+        let d = wrap_value(WideUCt::from(29u8));
+        let e = wrap_value(WideUCt::from(5u8));
+
+        const CORRECT_K: usize = 64; // 512 modulus bits div_ceil 8
+        const CONTAINER_K: usize = 128; // what `bits_precision()` would say
+
+        // Old buggy behavior: k=64 would return InvalidArguments because
+        // it didn't match container width. Post-fix: k=64 passes the
+        // width check (and only afterwards fails on the toy (d, e)).
+        let mut em = [0u8; CORRECT_K];
+        let mut sig = [0u8; CORRECT_K];
+        let result = sign_into(
+            &n_params,
+            &d,
+            &e,
+            &[],
+            &[0u8; 20],
+            CORRECT_K,
+            &mut em,
+            &mut sig,
+        );
+        assert!(
+            !matches!(result, Err(Error::InvalidArguments)),
+            "correct k (= modulus_bits.div_ceil(8)) must pass the width check, got {:?}",
+            result
+        );
+
+        // Container-width k must be rejected — that's the whole point.
+        let mut em = [0u8; CONTAINER_K];
+        let mut sig = [0u8; CONTAINER_K];
+        let result = sign_into(
+            &n_params,
+            &d,
+            &e,
+            &[],
+            &[0u8; 20],
+            CONTAINER_K,
+            &mut em,
+            &mut sig,
+        );
+        assert!(matches!(result, Err(Error::InvalidArguments)));
+    }
+
+    // ─── Phase 1 trait surgery: PrivateKeyParts smoke tests ──────
+
+    #[test]
+    fn pkcs1v15_signing_key_round_trip_2048_sha1() {
+        use crate::key::{GenericRsaPrivateKey, GenericRsaPublicKey};
+        use crate::pkcs1v15::{GenericSignature, GenericSigningKey, GenericVerifyingKey};
+        use digest::Digest;
+        use sha1::Sha1;
+        use signature::hazmat::PrehashVerifier;
+
+        type U2048 = FixedUInt<u8, 256, Ct>;
+        const K: usize = 256;
+
+        let public =
+            crate::modmath_support::public_key_ct_from_be_bytes::<U2048>(&N_2048, 65537).unwrap();
+        let public_clone: GenericRsaPublicKey<ModMathValue<U2048>, ModMathParams<U2048, Ct>> =
+            public.clone();
+        let d = wrap_value(
+            <U2048 as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(&D_2048).unwrap(),
+        );
+        let priv_key = GenericRsaPrivateKey::from_public_and_d(public, d);
+
+        let signing_key = GenericSigningKey::<Sha1, _, _>::new(priv_key);
+        let verifying_key = GenericVerifyingKey::<Sha1, _, _>::new(public_clone);
+
+        let msg: &[u8] = b"deterministic test message";
+        let mut em_storage = [0u8; K];
+        let mut sig_storage = [0u8; K];
+        let sig_slice = signing_key
+            .try_sign_into(msg, &mut em_storage, &mut sig_storage)
+            .unwrap();
+        assert_eq!(sig_slice.len(), K);
+
+        // Round-trip: build a `GenericSignature` over the same modulus type
+        // and verify against the prehash via the existing verifier.
+        let sig_int =
+            <U2048 as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(sig_slice).unwrap();
+        let sig = GenericSignature::from(wrap_value(sig_int));
+        let digest = Sha1::digest(msg);
+        verifying_key.verify_prehash(&digest, &sig).unwrap();
+    }
+
+    #[test]
+    fn pkcs1v15_signing_key_rejects_wrong_prehash_length() {
+        use crate::key::GenericRsaPrivateKey;
+        use crate::pkcs1v15::GenericSigningKey;
+        use sha1::Sha1;
+
+        type U2048 = FixedUInt<u8, 256, Ct>;
+        const K: usize = 256;
+
+        let public =
+            crate::modmath_support::public_key_ct_from_be_bytes::<U2048>(&N_2048, 65537).unwrap();
+        let d = wrap_value(
+            <U2048 as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(&D_2048).unwrap(),
+        );
+        let priv_key = GenericRsaPrivateKey::from_public_and_d(public, d);
+        let signing_key = GenericSigningKey::<Sha1, _, _>::new(priv_key);
+
+        let bad_prehash = [0u8; 21]; // SHA-1 outputs 20 bytes, not 21.
+        let mut em_storage = [0u8; K];
+        let mut sig_storage = [0u8; K];
+        let result =
+            signing_key.try_sign_prehash_into(&bad_prehash, &mut em_storage, &mut sig_storage);
+        assert!(matches!(result, Err(Error::InputNotHashed)));
+    }
+
+    #[test]
+    fn pss_signing_key_round_trip_2048_sha1() {
+        use crate::algorithms::pss::emsa_pss_verify;
+        use crate::key::GenericRsaPrivateKey;
+        use crate::pss::GenericSigningKey;
+        use digest::Digest;
+        use sha1::Sha1;
+
+        type U2048 = FixedUInt<u8, 256, Ct>;
+        const K: usize = 256;
+        const KEY_BITS: usize = 2048;
+
+        let key =
+            crate::modmath_support::public_key_ct_from_be_bytes::<U2048>(&N_2048, 65537).unwrap();
+        let d = wrap_value(
+            <U2048 as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(&D_2048).unwrap(),
+        );
+        let priv_key = GenericRsaPrivateKey::from_public_and_d(key.clone(), d);
+        // Salt length = 0 → deterministic encoding, easy roundtrip.
+        let signing_key = GenericSigningKey::<Sha1, _, _>::new_with_salt_len(priv_key, 0);
+
+        let msg: &[u8] = b"pss-roundtrip test message";
+        let digest = Sha1::digest(msg);
+        let mut em_storage = [0u8; K];
+        let mut sig_storage = [0u8; K];
+        let sig_slice = signing_key
+            .try_sign_prehash_with_salt_into(&digest, &[], &mut em_storage, &mut sig_storage)
+            .unwrap();
+        assert_eq!(sig_slice.len(), K);
+
+        // Roundtrip: `sig^e mod n` should yield a valid PSS-encoded EM
+        // for `(digest, salt_len=0)`. `emsa_pss_verify` modifies em
+        // in place (MGF unmask), so copy first.
+        let recovered = public_key_op_ct(&key, sig_slice).unwrap();
+        let mut em_copy = [0u8; K];
+        em_copy.copy_from_slice(recovered.as_ref());
+        let mut verify_hash = Sha1::new();
+        emsa_pss_verify(&digest, &mut em_copy, Some(0), &mut verify_hash, KEY_BITS).unwrap();
+    }
+
+    #[test]
+    fn pss_signing_key_rejects_wrong_prehash_length() {
+        use crate::key::GenericRsaPrivateKey;
+        use crate::pss::GenericSigningKey;
+        use sha1::Sha1;
+
+        type U2048 = FixedUInt<u8, 256, Ct>;
+        const K: usize = 256;
+
+        let key =
+            crate::modmath_support::public_key_ct_from_be_bytes::<U2048>(&N_2048, 65537).unwrap();
+        let d = wrap_value(
+            <U2048 as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(&D_2048).unwrap(),
+        );
+        let priv_key = GenericRsaPrivateKey::from_public_and_d(key, d);
+        let signing_key = GenericSigningKey::<Sha1, _, _>::new_with_salt_len(priv_key, 0);
+
+        let bad_prehash = [0u8; 21]; // SHA-1 is 20 bytes.
+        let mut em_storage = [0u8; K];
+        let mut sig_storage = [0u8; K];
+        let result = signing_key.try_sign_prehash_with_salt_into(
+            &bad_prehash,
+            &[],
+            &mut em_storage,
+            &mut sig_storage,
+        );
+        assert!(matches!(result, Err(Error::InputNotHashed)));
+    }
+
+    #[test]
+    fn pss_signing_key_rejects_salt_len_mismatch() {
+        use crate::key::GenericRsaPrivateKey;
+        use crate::pss::GenericSigningKey;
+        use sha1::Sha1;
+
+        type U2048 = FixedUInt<u8, 256, Ct>;
+        const K: usize = 256;
+
+        let key =
+            crate::modmath_support::public_key_ct_from_be_bytes::<U2048>(&N_2048, 65537).unwrap();
+        let d = wrap_value(
+            <U2048 as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(&D_2048).unwrap(),
+        );
+        let priv_key = GenericRsaPrivateKey::from_public_and_d(key, d);
+        // salt_len configured to 20; supply 16 -> mismatch.
+        let signing_key = GenericSigningKey::<Sha1, _, _>::new_with_salt_len(priv_key, 20);
+
+        let prehash = [0u8; 20];
+        let wrong_salt = [0u8; 16];
+        let mut em_storage = [0u8; K];
+        let mut sig_storage = [0u8; K];
+        let result = signing_key.try_sign_prehash_with_salt_into(
+            &prehash,
+            &wrong_salt,
+            &mut em_storage,
+            &mut sig_storage,
+        );
+        assert!(matches!(result, Err(Error::InvalidArguments)));
+    }
+
+    #[test]
+    fn pss_signing_key_satisfies_zeroize() {
+        use crate::key::GenericRsaPrivateKey;
+        use crate::pss::GenericSigningKey;
+        use sha1::Sha1;
+        fn assert_zeroize<Z: Zeroize>() {}
+        assert_zeroize::<
+            GenericSigningKey<Sha1, ModMathValue<SmallUCt>, ModMathParams<SmallUCt, Ct>>,
+        >();
+
+        let public =
+            crate::modmath_support::public_key_ct_from_be_bytes::<SmallUCt>(&[35u8], 5).unwrap();
+        let priv_key =
+            GenericRsaPrivateKey::from_public_and_d(public, wrap_value(SmallUCt::from(29u8)));
+        let mut signing_key = GenericSigningKey::<Sha1, _, _>::new(priv_key);
+        signing_key.zeroize();
+    }
+
+    #[test]
+    fn pkcs1v15_signing_key_satisfies_zeroize() {
+        use crate::key::GenericRsaPrivateKey;
+        use crate::pkcs1v15::GenericSigningKey;
+        use sha1::Sha1;
+        fn assert_zeroize<Z: Zeroize>() {}
+        assert_zeroize::<
+            GenericSigningKey<Sha1, ModMathValue<SmallUCt>, ModMathParams<SmallUCt, Ct>>,
+        >();
+
+        // Construct one and exercise .zeroize() at runtime to confirm the
+        // delegation compiles end-to-end.
+        let public =
+            crate::modmath_support::public_key_ct_from_be_bytes::<SmallUCt>(&[35u8], 5).unwrap();
+        let priv_key =
+            GenericRsaPrivateKey::from_public_and_d(public, wrap_value(SmallUCt::from(29u8)));
+        let mut signing_key = GenericSigningKey::<Sha1, _, _>::new(priv_key);
+        signing_key.zeroize();
+    }
+
+    #[test]
+    fn generic_rsa_private_key_satisfies_traits() {
+        // Compile-time assertion: GenericRsaPrivateKey<SmallUCt, ModMathParams<SmallUCt, Ct>>
+        // satisfies both PublicKeyParts and PrivateKeyParts at the
+        // matching (T, M) substitution. The fn-bound dance below is the
+        // standard "type-satisfies-trait" check.
+        use crate::key::GenericRsaPrivateKey;
+        use crate::traits::keys::{PrivateKeyParts, PublicKeyParts};
+        fn assert_pub_parts<K, T>(_: &K)
+        where
+            T: UnsignedModularInt,
+            K: PublicKeyParts<T>,
+        {
+        }
+        fn assert_priv_parts<K, T>(_: &K)
+        where
+            T: UnsignedModularInt,
+            K: PrivateKeyParts<T>,
+        {
+        }
+
+        // Use the existing public-key constructor for the pubkey side,
+        // then attach a dummy d.
+        let public =
+            crate::modmath_support::public_key_ct_from_be_bytes::<SmallUCt>(&[35u8], 5).unwrap();
+        let key = GenericRsaPrivateKey::from_public_and_d(public, wrap_value(SmallUCt::from(29u8)));
+
+        assert_pub_parts::<_, ModMathValue<SmallUCt>>(&key);
+        assert_priv_parts::<_, ModMathValue<SmallUCt>>(&key);
+
+        // Round-trip: accessors return the values we constructed it with.
+        assert_eq!(PrivateKeyParts::d(&key), &wrap_value(SmallUCt::from(29u8)));
+        assert_eq!(key.as_public().e(), &wrap_value(SmallUCt::from(5u8)));
     }
 }

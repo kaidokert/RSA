@@ -1,7 +1,10 @@
 use super::encrypt_into;
 use crate::{
     key::GenericRsaPublicKey,
-    traits::{modular::ModulusParams, PublicKeyParts, RandomizedEncryptor, UnsignedModularInt},
+    traits::{
+        modular::{CtModulusParams, ModulusParams},
+        PublicKeyParts, RandomizedEncryptor, UnsignedModularInt,
+    },
     Result,
 };
 #[cfg(feature = "alloc")]
@@ -50,7 +53,7 @@ where
 impl<T, M> RandomizedEncryptor for GenericEncryptingKey<T, M>
 where
     T: UnsignedModularInt,
-    M: ModulusParams<Modulus = T>,
+    M: CtModulusParams<Modulus = T>,
 {
     fn encrypt_with_rng_into<'a, R: rand_core::TryCryptoRng + ?Sized>(
         &self,

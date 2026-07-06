@@ -54,13 +54,16 @@ where
 /// or signature scheme. See the [module-level documentation][crate::hazmat] for more information.
 #[cfg(feature = "private-key")]
 #[inline]
-pub fn rsa_decrypt<R: TryCryptoRng + ?Sized>(
+pub fn rsa_decrypt<R: TryCryptoRng + ?Sized, K>(
     rng: Option<&mut R>,
-    priv_key: &impl PrivateKeyParts<MontyParams = BoxedMontyParams>,
+    priv_key: &K,
     c: &BoxedUint,
-) -> Result<BoxedUint> {
+) -> Result<BoxedUint>
+where
+    K: PrivateKeyParts<BoxedUint, MontyParams = BoxedMontyParams>,
+{
     let n = priv_key.n();
-    let d = priv_key.d();
+    let d = PrivateKeyParts::d(priv_key);
 
     if c.bits_precision() != n.as_ref().bits_precision() {
         return Err(Error::Decryption);
@@ -83,20 +86,26 @@ pub fn rsa_decrypt<R: TryCryptoRng + ?Sized>(
         c.try_resize(bits).ok_or(Error::Internal)?
     };
 
-    let is_multiprime = priv_key.primes().len() > 2;
+    // `primes()` defaults to `&[]`; the `primes.len() >= 2` guard below
+    // keeps a key with CRT accessors but no primes off the `[0]`/`[1]`
+    // panic path.
+    let primes = PrivateKeyParts::primes(priv_key);
+    let is_multiprime = primes.len() > 2;
 
     let m = match (
-        priv_key.dp(),
-        priv_key.dq(),
-        priv_key.qinv(),
-        priv_key.p_params(),
-        priv_key.q_params(),
+        PrivateKeyParts::dp(priv_key),
+        PrivateKeyParts::dq(priv_key),
+        PrivateKeyParts::qinv(priv_key),
+        PrivateKeyParts::p_params(priv_key),
+        PrivateKeyParts::q_params(priv_key),
     ) {
-        (Some(dp), Some(dq), Some(qinv), Some(p_params), Some(q_params)) if !is_multiprime => {
+        (Some(dp), Some(dq), Some(qinv), Some(p_params), Some(q_params))
+            if !is_multiprime && primes.len() >= 2 =>
+        {
             // We have the precalculated values needed for the CRT.
 
-            let p = &priv_key.primes()[0];
-            let q = &priv_key.primes()[1];
+            let p = &primes[0];
+            let q = &primes[1];
 
             // precomputed: dP = (1/e) mod (p-1) = d mod (p-1)
             // precomputed: dQ = (1/e) mod (q-1) = d mod (q-1)
@@ -147,7 +156,7 @@ pub fn rsa_decrypt<R: TryCryptoRng + ?Sized>(
         }
         _ => {
             // c^d (mod n)
-            pow_mod_params(&c, d, n_params)
+            rsa_private_op(&c, d, n_params)
         }
     };
 
@@ -174,11 +183,14 @@ pub fn rsa_decrypt<R: TryCryptoRng + ?Sized>(
 /// or signature scheme. See the [module-level documentation][crate::hazmat] for more information.
 #[cfg(feature = "private-key")]
 #[inline]
-pub fn rsa_decrypt_and_check<R: TryCryptoRng + ?Sized>(
-    priv_key: &impl PrivateKeyParts<MontyParams = BoxedMontyParams>,
+pub fn rsa_decrypt_and_check<R: TryCryptoRng + ?Sized, K>(
+    priv_key: &K,
     rng: Option<&mut R>,
     c: &BoxedUint,
-) -> Result<BoxedUint> {
+) -> Result<BoxedUint>
+where
+    K: PrivateKeyParts<BoxedUint, MontyParams = BoxedMontyParams>,
+{
     let m = rsa_decrypt(rng, priv_key, c)?;
 
     // In order to defend against errors in the CRT computation, m^e is
@@ -252,6 +264,61 @@ fn unblind(m: &BoxedUint, unblinder: &BoxedUint, n_params: &BoxedMontyParams) ->
     );
 
     m.mul_mod(unblinder, n_params.modulus().as_nz_ref())
+}
+
+/// ⚠️ Performs the raw RSA private-key operation `c^d mod n`.
+///
+/// The bare primitive both signing and unblinded decryption reduce to.
+/// Constant-time in base and exponent when `M::MontgomeryForm: Pow<M>`
+/// resolves to a Ct-personality impl.
+///
+/// # ☢️️ WARNING: HAZARDOUS API ☢️
+///
+/// Raw RSA must be wrapped in a padding/signature scheme (PKCS#1 v1.5, PSS,
+/// OAEP) to be secure. See the [module-level documentation][crate::hazmat]
+/// for more information.
+#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
+#[inline]
+pub fn rsa_private_op<T, M>(c: &T, d: &T, n_params: &M) -> T
+where
+    T: UnsignedModularInt,
+    M: ModulusParams<Modulus = T> + crate::traits::modular::CtModulusParams,
+    M::MontgomeryForm: Pow<M>,
+{
+    pow_mod_params(c, d, n_params)
+}
+
+/// ⚠️ Performs `rsa_private_op`, then verifies by re-encrypting: returns
+/// `m = c^d mod n` only if `m^e mod n == c`, else [`Error::Internal`]. The
+/// signing-side analogue of `rsa_decrypt_and_check`; guards against
+/// transient compute/fault errors emitting a malformed signature.
+///
+/// # ☢️️ WARNING: HAZARDOUS API ☢️
+///
+/// Raw RSA must be wrapped in a padding/signature scheme (PKCS#1 v1.5, PSS,
+/// OAEP) to be secure. See the [module-level documentation][crate::hazmat]
+/// for more information.
+// Consumer (the heapless `pkcs1v15` / `pss` sign port) lands in a later PR.
+#[allow(dead_code)]
+#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
+#[inline]
+pub fn rsa_private_op_and_check<T, M>(c: &T, d: &T, e: &T, n_params: &M) -> Result<T>
+where
+    T: UnsignedModularInt,
+    M: ModulusParams<Modulus = T> + crate::traits::modular::CtModulusParams,
+    M::MontgomeryForm: Pow<M> + PowBoundedExp<M>,
+{
+    let m = rsa_private_op(c, d, n_params);
+    // `m < n` by construction, so use `from_reduced` to skip the
+    // variable-time reduction `from_value` (→ `rem_vartime`) would do on
+    // BoxedUint and leak `m` via timing.
+    let m_sized = m.clone().resize_unchecked(n_params.bits_precision());
+    let m_mont = M::MontgomeryForm::from_reduced(m_sized, n_params);
+    let check = m_mont.pow_bounded_exp(e, e.bits()).retrieve();
+    if *c != check {
+        return Err(Error::Internal);
+    }
+    Ok(m)
 }
 
 /// Computes `base.pow_mod(exp, n)` with precomputed `n_params`.

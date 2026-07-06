@@ -8,6 +8,7 @@ use rand_core::TryCryptoRng;
 use crate::errors::Result;
 #[cfg(feature = "private-key")]
 use crate::key::RsaPrivateKey;
+use crate::traits::modular::CtModulusParams;
 use crate::traits::{PublicKeyParts, UnsignedModularInt};
 
 /// Padding scheme used for encryption.
@@ -30,7 +31,8 @@ pub trait PaddingScheme {
     where
         Rng: TryCryptoRng + ?Sized,
         T: UnsignedModularInt,
-        K: PublicKeyParts<T>;
+        K: PublicKeyParts<T>,
+        K::MontyParams: CtModulusParams;
 }
 
 /// Digital signature scheme.
