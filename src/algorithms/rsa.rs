@@ -332,6 +332,70 @@ where
     base.pow(exp).retrieve()
 }
 
+/// ⚠️ Raw RSA private op with base-blinding: `m = ((c · r^e)^d · r⁻¹) mod n`.
+///
+/// Mathematically equivalent to [`rsa_private_op`] but multiplies `c`
+/// by a caller-supplied blinding factor `r` before exponentiating,
+/// then unblinds by `r⁻¹`. Blinding hides `c` from side-channel
+/// analysis on the private-key operation.
+///
+/// # Preconditions on `blinding_r`
+///
+/// - `gcd(blinding_r, n) = 1` — required for `r⁻¹ mod n` to exist.
+///   For random `r` against RSA `n = p·q`, non-coprime is
+///   astronomically rare. Retry-on-`Err` at the caller side is the
+///   standard defense. See the doc on
+///   [`crate::traits::modular::InvertCt`] for the two `None` failure
+///   modes (retryable vs deterministic) — this primitive returns
+///   [`Error::Internal`] for both without distinguishing; the caller
+///   is responsible for preflight (carrier-headroom check on modmath)
+///   and retry policy.
+/// - `blinding_r` is the caller-owned blinding factor. This primitive
+///   does not sample or validate its randomness. Follow-up PR wraps
+///   this with an RNG-taking entry point.
+///
+/// # Returns
+///
+/// The unblinded plaintext `m = c^d mod n`, or [`Error::Internal`] if
+/// the inverse could not be computed.
+///
+/// # ☢️️ WARNING: HAZARDOUS API ☢️
+///
+/// Raw RSA. Must be wrapped in a padding scheme. See
+/// [module-level docs][crate::hazmat].
+// Consumer (the RNG-taking `rsa_private_op_and_check(rng, ...)` extension
+// + heapless sign wrappers) lands in a later PR.
+#[allow(dead_code)]
+#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
+pub fn rsa_private_op_blinded<T, M>(blinding_r: &T, c: &T, d: &T, e: &T, n_params: &M) -> Result<T>
+where
+    T: UnsignedModularInt,
+    M: ModulusParams<Modulus = T> + crate::traits::modular::CtModulusParams,
+    M::MontgomeryForm: Pow<M>
+        + PowBoundedExp<M>
+        + crate::traits::modular::InvertCt<M>
+        + crate::traits::modular::MulCt<M>,
+{
+    use crate::traits::modular::{InvertCt, MulCt};
+    // r → Montgomery form; invert. `invert_ct` returns `None` for
+    // both retryable (non-coprime) and deterministic (carrier-tight)
+    // cases — caller preflights the deterministic case.
+    let r_mont = reduce_vartime(blinding_r, n_params);
+    let r_inv_mont = r_mont.invert_ct().ok_or(Error::Internal)?;
+    // r^e (in Montgomery form). Public exponent `e`, so
+    // `pow_bounded_exp` (variable-time-in-exponent semantics) is fine.
+    let r_e_mont = r_mont.pow_bounded_exp(e, e.bits());
+    // c · r^e (Montgomery mul). Blinded ciphertext masks `c` from
+    // subsequent timing analysis on the private op.
+    let c_mont = reduce_vartime(c, n_params);
+    let blinded_mont = c_mont.mul_ct(&r_e_mont);
+    // Private op on the blinded value — CT ladder in `d`.
+    let s_prime_mont = blinded_mont.pow(d);
+    // Unblind: multiply by `r⁻¹` in Montgomery form, retrieve.
+    let s_mont = s_prime_mont.mul_ct(&r_inv_mont);
+    Ok(<M::MontgomeryForm as PowBoundedExp<M>>::retrieve(&s_mont))
+}
+
 /// Computes `base.pow_mod(exp, n)` with a bounded exponent and precomputed `n_params`.
 ///
 /// The exponent bit length `exp_bits` may be leaked in the time pattern.
