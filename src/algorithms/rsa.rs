@@ -461,8 +461,10 @@ where
     const BLINDING_RETRIES: u32 = 10;
     let n = n_params.modulus().as_ref();
     for _ in 0..BLINDING_RETRIES {
-        let r = T::try_random_mod(rng, n)?;
-        let m = match rsa_private_op_blinded(&r, c, d, e, n_params) {
+        // `r` is secret — wrap in `Zeroizing` so it's wiped when we
+        // drop out of scope on `continue`, verify-fail, or success.
+        let r = zeroize::Zeroizing::new(T::try_random_mod(rng, n)?);
+        let m = match rsa_private_op_blinded(&*r, c, d, e, n_params) {
             Ok(m) => m,
             Err(_) => continue,
         };
