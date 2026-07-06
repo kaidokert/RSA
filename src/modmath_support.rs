@@ -884,6 +884,39 @@ mod private_op_tests {
         assert_eq!(recovered, expected);
     }
 
+    // Blinded RSA private op must produce the same plaintext as the
+    // unblinded op, regardless of the caller-supplied `r`. Toy modulus
+    // n = 35, e = 5, d = 29, c = 32; expected m = 2. r = 6 (coprime
+    // with 35). The blinded body should recover m = 2 the same way
+    // rsa_private_op does.
+    #[test]
+    fn rsa_private_op_blinded_matches_unblinded_heapless_ct() {
+        let n_params = toy_params();
+        let c = wrap_value(SmallUCt::from(32u8));
+        let d = wrap_value(SmallUCt::from(29u8));
+        let e = wrap_value(SmallUCt::from(5u8));
+        let r = wrap_value(SmallUCt::from(6u8));
+        let expected = wrap_value(SmallUCt::from(2u8));
+        let recovered =
+            crate::algorithms::rsa::rsa_private_op_blinded(&r, &c, &d, &e, &n_params).unwrap();
+        assert_eq!(recovered, expected);
+    }
+
+    // Blinded op must fail if `r` shares a factor with `n` — inverse
+    // doesn't exist, `invert_ct` returns None, primitive returns Err.
+    // Toy: n = 35 = 5·7, r = 5 (shares factor with n). No retry at
+    // the primitive level — caller policy.
+    #[test]
+    fn rsa_private_op_blinded_rejects_non_coprime_r() {
+        let n_params = toy_params();
+        let c = wrap_value(SmallUCt::from(32u8));
+        let d = wrap_value(SmallUCt::from(29u8));
+        let e = wrap_value(SmallUCt::from(5u8));
+        let r_bad = wrap_value(SmallUCt::from(5u8));
+        let result = crate::algorithms::rsa::rsa_private_op_blinded(&r_bad, &c, &d, &e, &n_params);
+        assert!(result.is_err());
+    }
+
     #[test]
     fn rsa_private_op_and_check_round_trip_heapless_ct() {
         let n_params = toy_params();
