@@ -604,6 +604,34 @@ where
     }
 }
 
+// CT Montgomery multiplication. Both operands share this
+// `ModMathParams` (invariant, not type-checked). Routes to modmath's
+// `Field<T, Ct>::mul` — the CIOS-Ct primitive, branchless in both
+// inputs.
+impl<T: ModMathIntCt + HasPersonality<P = Ct>> crate::traits::modular::MulCt<ModMathParams<T, Ct>>
+    for ModMathForm<T, Ct>
+{
+    fn mul_ct(&self, rhs: &Self) -> Self {
+        // Guard: MulCt's precondition is that both operands share the
+        // same modulus. `debug_assert_eq!` would need `T: Debug` for
+        // the failure message; use `debug_assert!` with a fixed
+        // message to avoid widening the trait bound just for a
+        // debug-only check.
+        debug_assert!(
+            self.params.modulus_odd == rhs.params.modulus_odd,
+            "MulCt operands must share the same modulus"
+        );
+        let field = self.params.field();
+        let lhs_res = field.residue_from_mont(unwrap_value(&self.integer_mont));
+        let rhs_res = field.residue_from_mont(unwrap_value(&rhs.integer_mont));
+        let product = field.mul(&lhs_res, &rhs_res);
+        Self {
+            integer_mont: wrap_value(*product.mont_value()),
+            params: self.params.clone(),
+        }
+    }
+}
+
 impl<T: ModMathIntCt + HasPersonality<P = Ct>> ModulusParams for ModMathParams<T, Ct> {
     type Modulus = ModMathValue<T>;
     type MontgomeryForm = ModMathForm<T, Ct>;
@@ -880,6 +908,22 @@ mod private_op_tests {
         let mont_inv = mont_three.invert_ct().expect("3 is coprime to 35");
         let recovered = PowBoundedExp::<ModMathParams<SmallUCt, Ct>>::retrieve(&mont_inv);
         assert_eq!(recovered, wrap_value(SmallUCt::from(12u8)));
+    }
+
+    // Verify the new `MulCt` primitive on the modmath backend against a
+    // known-answer product. n = 35, 3·12 = 36 ≡ 1 (mod 35). Exercises
+    // the modmath `Field::mul` bridge; also completes the round-trip
+    // with `InvertCt` — inverting 3 and multiplying back gives 1.
+    #[test]
+    fn mul_ct_modmath_inverse_round_trip() {
+        use crate::traits::modular::{IntoMontyForm, InvertCt, MulCt, PowBoundedExp};
+        let n_params = toy_params();
+        let three = wrap_value(SmallUCt::from(3u8));
+        let mont_three = ModMathForm::<SmallUCt, Ct>::from_reduced(three, &n_params);
+        let mont_inv = mont_three.invert_ct().expect("3 is coprime to 35");
+        let product = mont_three.mul_ct(&mont_inv);
+        let recovered = PowBoundedExp::<ModMathParams<SmallUCt, Ct>>::retrieve(&product);
+        assert_eq!(recovered, wrap_value(SmallUCt::from(1u8)));
     }
 
     #[test]
