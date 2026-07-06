@@ -386,6 +386,33 @@ impl InvertCt<BoxedMontyParams> for BoxedMontyForm {
     }
 }
 
+/// Constant-time multiplication in Montgomery form.
+///
+/// The Montgomery form's native multiplication — already CT on both
+/// backends we support (`BoxedMontyForm`'s `Mul` via crypto-bigint,
+/// `ModMathForm<T, Ct>`'s `Field::mul` via modmath's CIOS-Ct). Bounded
+/// on the sign-path blinding body, which does two Mont-form multiplies
+/// per signature: `mont(c) * mont(r^e)` (blind) and
+/// `mont(s') * mont(r⁻¹)` (unblind).
+///
+/// Both operands must share the same `ModulusParams` instance
+/// (invariant: same modulus / same Montgomery R). We don't check that
+/// at the type level; the impls take it as an unchecked precondition.
+///
+/// Foundation for the sign-path blinding primitive; consumer lands
+/// alongside `rsa_private_op_blinded` in a follow-up PR.
+#[allow(dead_code)]
+pub trait MulCt<M: ModulusParams>: Sized {
+    fn mul_ct(&self, rhs: &Self) -> Self;
+}
+
+#[cfg(feature = "alloc")]
+impl MulCt<BoxedMontyParams> for BoxedMontyForm {
+    fn mul_ct(&self, rhs: &Self) -> Self {
+        self * rhs
+    }
+}
+
 pub trait ModulusParams: Sized {
     type Modulus: UnsignedModularInt;
     type MontgomeryForm: IntoMontyForm<Self> + PowBoundedExp<Self>;
