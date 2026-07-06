@@ -783,7 +783,8 @@ mod tests {
 #[cfg(any(feature = "private-key", feature = "wip-private-key"))]
 mod private_op_tests {
     use super::*;
-    use fixed_bigint::{Ct, FixedUInt};
+    use const_num_traits::Ct;
+    use fixed_bigint::FixedUInt;
 
     type SmallUCt = FixedUInt<u8, 64, Ct>;
 
@@ -977,7 +978,7 @@ mod private_op_tests {
         input: &[u8],
     ) -> Result<<ModMathValue<T> as UnsignedModularInt>::Bytes>
     where
-        T: ModMathIntCt,
+        T: ModMathIntCt + HasPersonality<P = Ct>,
     {
         crate::modmath_support::rsa_public_op_ct(key, input)
     }
