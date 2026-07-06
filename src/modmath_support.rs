@@ -594,7 +594,7 @@ where
         let field = self.params.field();
         let residue = field.residue_from_mont(unwrap_value(&self.integer_mont));
         let ct_option = field.inv_safegcd_ct(&residue);
-        Option::from(ct_option).map(|inv_res: modmath::Residue<'_, T, Ct>| Self {
+        ct_option.into_option().map(|inv_res| Self {
             integer_mont: wrap_value(*inv_res.mont_value()),
             params: self.params.clone(),
         })
