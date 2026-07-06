@@ -280,6 +280,96 @@ impl<T> crate::traits::keys::RawPrivateKeyConstructible for ModMathValue<T> wher
 #[cfg(not(feature = "alloc"))]
 pub type ModMathValue<T> = T;
 
+// Shared rejection-sampled `try_random_mod` body for the modmath
+// backend. Called from both the alloc-side `ModMathValue<T>` newtype
+// impl and the no-alloc `T` impl below — the only difference is the
+// wrapping function applied to the sampled `T` before the modulus
+// check.
+//
+// **Critical: mask the sampled candidate down to `modulus.bits()`
+// bits before checking.** For the intended use case (blinding on
+// modmath), `T` is wider than the modulus by design (the safegcd
+// headroom precondition — e.g. 2048-bit RSA modulus in a 2080-bit
+// `T`). Without masking, the acceptance rate against a 2048-bit
+// modulus in `U2080` is ~2⁻³², and `MAX_TRIES = 128` would exhaust
+// almost every time. After masking to `modulus.bits()` bits, we
+// sample from `[0, 2^k)` where the modulus's top bit is set, so
+// acceptance is ≥ 50%.
+//
+// See the `TryRandomMod` trait doc for the CT-property discussion.
+#[cfg(feature = "modmath")]
+fn try_random_mod_masked<R, T, W, F>(
+    rng: &mut R,
+    leading_zero_bits: u32,
+    modulus: &W,
+    wrap: F,
+) -> Result<W>
+where
+    R: rand_core::TryCryptoRng + ?Sized,
+    T: FixedWidthUnsignedInt,
+    W: PartialOrd,
+    F: Fn(T) -> W,
+{
+    let zero_bytes = (leading_zero_bits / 8) as usize;
+    let zero_bits_in_next = (leading_zero_bits % 8) as u8;
+
+    const MAX_TRIES: u32 = 128;
+    let mut bytes = <T as FixedWidthUnsignedInt>::Bytes::default();
+    for _ in 0..MAX_TRIES {
+        rng.try_fill_bytes(bytes.as_mut()).map_err(|_| Error::Rng)?;
+        // Big-endian: top bytes are the leading bytes.
+        let buf = bytes.as_mut();
+        for byte in buf.iter_mut().take(zero_bytes) {
+            *byte = 0;
+        }
+        if zero_bytes < buf.len() && zero_bits_in_next > 0 {
+            buf[zero_bytes] &= 0xFFu8 >> zero_bits_in_next;
+        }
+        let candidate = <T as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(bytes.as_ref())?;
+        let wrapped = wrap(candidate);
+        if wrapped < *modulus {
+            return Ok(wrapped);
+        }
+    }
+    Err(Error::Internal)
+}
+
+#[cfg(feature = "alloc")]
+impl<T> crate::traits::modular::TryRandomMod for ModMathValue<T>
+where
+    T: FixedWidthUnsignedInt + PartialOrd,
+{
+    fn try_random_mod<R>(rng: &mut R, modulus: &Self) -> Result<Self>
+    where
+        R: rand_core::TryCryptoRng + ?Sized,
+    {
+        let container_bits = <T as FixedWidthUnsignedInt>::bits_precision(&modulus.0);
+        let leading_zero_bits = <T as FixedWidthUnsignedInt>::leading_zeros(&modulus.0);
+        if leading_zero_bits >= container_bits {
+            return Err(Error::InvalidModulus);
+        }
+        try_random_mod_masked::<R, T, _, _>(rng, leading_zero_bits, modulus, wrap_value::<T>)
+    }
+}
+
+#[cfg(not(feature = "alloc"))]
+impl<T> crate::traits::modular::TryRandomMod for T
+where
+    T: FixedWidthUnsignedInt + PartialOrd,
+{
+    fn try_random_mod<R>(rng: &mut R, modulus: &Self) -> Result<Self>
+    where
+        R: rand_core::TryCryptoRng + ?Sized,
+    {
+        let container_bits = <T as FixedWidthUnsignedInt>::bits_precision(modulus);
+        let leading_zero_bits = <T as FixedWidthUnsignedInt>::leading_zeros(modulus);
+        if leading_zero_bits >= container_bits {
+            return Err(Error::InvalidModulus);
+        }
+        try_random_mod_masked::<R, T, T, _>(rng, leading_zero_bits, modulus, |x| x)
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct ModMathParams<T, P: Personality = Nct> {
     // Owns the modulus + precomputed Montgomery constants. `Clone` is a
@@ -915,6 +1005,59 @@ mod private_op_tests {
         let r_bad = wrap_value(SmallUCt::from(5u8));
         let result = crate::algorithms::rsa::rsa_private_op_blinded(&r_bad, &c, &d, &e, &n_params);
         assert!(result.is_err());
+    }
+
+    // Verify TryRandomMod on the modmath backend samples uniformly in
+    // [0, modulus). Uses toy_params_wide's 512-bit modulus (`2^511 + 1`)
+    // so the acceptance rate is essentially 50% (top bit set →
+    // random-and-`< modulus` acceptance) and 128-tries doesn't get
+    // exhausted. Verify: N samples all < modulus, sampled values are
+    // not all equal (uniformity smoke test).
+    #[test]
+    fn try_random_mod_modmath_stays_below_modulus() {
+        use crate::traits::modular::TryRandomMod;
+        use rand::rngs::ChaCha8Rng;
+        use rand_core::SeedableRng;
+
+        let n_params = toy_params_wide();
+        let n = *n_params.modulus().as_ref();
+        let mut rng = ChaCha8Rng::from_seed([42; 32]);
+
+        let mut samples = alloc::vec::Vec::with_capacity(16);
+        for _ in 0..16 {
+            let r = ModMathValue::<SmallUCt>::try_random_mod(&mut rng, &n).unwrap();
+            assert!(r < n, "sample must be < modulus");
+            samples.push(r);
+        }
+        // Uniformity smoke test — 16 samples on a ~512-bit range
+        // should be all distinct with overwhelming probability.
+        let first = samples[0];
+        assert!(
+            samples.iter().any(|s| *s != first),
+            "samples are trivially all equal — RNG or sampler broken"
+        );
+    }
+
+    // Regression for the review round on PR #44: prior versions of
+    // this sampler filled the full container width, so for a modulus
+    // significantly narrower than `T`, acceptance rate was ~2⁻ˡᶻ and
+    // the 128-tries cap would blow up. The masked version must
+    // succeed even when the modulus occupies only ~6 bits in a
+    // 512-bit `SmallUCt` — this is `toy_params()` (n = 35).
+    #[test]
+    fn try_random_mod_modmath_succeeds_on_narrow_modulus_wide_carrier() {
+        use crate::traits::modular::TryRandomMod;
+        use rand::rngs::ChaCha8Rng;
+        use rand_core::SeedableRng;
+
+        let n_params = toy_params(); // n = 35, ~6 bits, in 512-bit SmallUCt
+        let n = *n_params.modulus().as_ref();
+        let mut rng = ChaCha8Rng::from_seed([42; 32]);
+
+        for _ in 0..64 {
+            let r = ModMathValue::<SmallUCt>::try_random_mod(&mut rng, &n).unwrap();
+            assert!(r < n);
+        }
     }
 
     #[test]
