@@ -8,11 +8,11 @@
 use alloc::boxed::Box;
 use core::ops::{Shr, ShrAssign};
 
-use const_num_traits::{Ct, Nct, Personality};
-use modmath::{CiosMontMul, CiosMontMulCt, Field as ModmathField, Parity, WideMul};
 use const_num_traits::ops::overflowing::OverflowingAdd;
 use const_num_traits::ops::wrapping::{WrappingAdd, WrappingMul, WrappingSub};
+use const_num_traits::{Ct, HasPersonality, Nct, Personality};
 use const_num_traits::{One, Zero};
+use modmath::{CiosMontMul, CiosMontMulCt, Field as ModmathField, Parity, WideMul};
 use zeroize::Zeroize;
 
 use crate::{
@@ -43,6 +43,7 @@ pub trait ModMathInt:
     + ShrAssign<usize>
     + core::ops::Add<Output = Self>
     + core::ops::Mul<Output = Self>
+    + HasPersonality
 {
 }
 
@@ -64,6 +65,7 @@ impl<T> ModMathInt for T where
         + ShrAssign<usize>
         + core::ops::Add<Output = Self>
         + core::ops::Mul<Output = Self>
+        + HasPersonality
 {
 }
 
@@ -88,6 +90,7 @@ pub trait ModMathIntCt:
     + core::ops::BitAnd<Output = Self>
     + core::ops::Add<Output = Self>
     + core::ops::Mul<Output = Self>
+    + HasPersonality
 {
 }
 
@@ -112,6 +115,7 @@ impl<T> ModMathIntCt for T where
         + core::ops::BitAnd<Output = Self>
         + core::ops::Add<Output = Self>
         + core::ops::Mul<Output = Self>
+        + HasPersonality
 {
 }
 
@@ -275,7 +279,7 @@ pub struct ModMathParams<T, P: Personality = Nct> {
     modulus_odd: Odd<ModMathValue<T>>,
 }
 
-impl<T: ModMathInt> ModMathParams<T, Nct> {
+impl<T: ModMathInt + HasPersonality<P = Nct>> ModMathParams<T, Nct> {
     pub fn new(modulus: T) -> Result<Self> {
         let field = ModmathField::<T, Nct>::new(modulus).ok_or(Error::InvalidModulus)?;
         let modulus_odd = Odd::new(wrap_value(modulus)).ok_or(Error::InvalidModulus)?;
@@ -283,7 +287,7 @@ impl<T: ModMathInt> ModMathParams<T, Nct> {
     }
 }
 
-impl<T: ModMathIntCt> ModMathParams<T, Ct> {
+impl<T: ModMathIntCt + HasPersonality<P = Ct>> ModMathParams<T, Ct> {
     /// Create CT (encrypt) Montgomery parameters for an odd, non-zero
     /// modulus.
     pub fn new(modulus: T) -> Result<Self> {
@@ -306,7 +310,7 @@ pub fn public_key_from_be_bytes<T>(
     exponent: u32,
 ) -> Result<GenericRsaPublicKey<ModMathValue<T>, ModMathParams<T, Nct>>>
 where
-    T: ModMathInt,
+    T: ModMathInt + HasPersonality<P = Nct>,
 {
     let n = wrap_value(<T as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(
         modulus,
@@ -325,7 +329,7 @@ pub fn rsa_public_op<T>(
     input: &[u8],
 ) -> Result<<ModMathValue<T> as UnsignedModularInt>::Bytes>
 where
-    T: ModMathInt,
+    T: ModMathInt + HasPersonality<P = Nct>,
 {
     let input = wrap_value(<T as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(
         input,
@@ -342,7 +346,7 @@ pub fn public_key_ct_from_be_bytes<T>(
     exponent: u32,
 ) -> Result<GenericRsaPublicKey<ModMathValue<T>, ModMathParams<T, Ct>>>
 where
-    T: ModMathIntCt,
+    T: ModMathIntCt + HasPersonality<P = Ct>,
 {
     let n = wrap_value(<T as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(
         modulus,
@@ -359,7 +363,7 @@ pub fn rsa_public_op_ct<T>(
     input: &[u8],
 ) -> Result<<ModMathValue<T> as UnsignedModularInt>::Bytes>
 where
-    T: ModMathIntCt,
+    T: ModMathIntCt + HasPersonality<P = Ct>,
 {
     let input = wrap_value(<T as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(
         input,
@@ -399,7 +403,9 @@ where
 
 impl<T, P: Personality> zeroize::ZeroizeOnDrop for ModMathForm<T, P> where T: Clone + Zeroize {}
 
-impl<T: ModMathInt> IntoMontyForm<ModMathParams<T, Nct>> for ModMathForm<T, Nct> {
+impl<T: ModMathInt + HasPersonality<P = Nct>> IntoMontyForm<ModMathParams<T, Nct>>
+    for ModMathForm<T, Nct>
+{
     fn from_reduced(integer: ModMathValue<T>, params: &ModMathParams<T, Nct>) -> Self {
         let field = params.field();
         let r = field.reduce(unwrap_value_ref(&integer));
@@ -417,7 +423,7 @@ impl<T: ModMathInt> IntoMontyForm<ModMathParams<T, Nct>> for ModMathForm<T, Nct>
     }
 }
 
-impl<T: ModMathInt> ModMathForm<T, Nct> {
+impl<T: ModMathInt + HasPersonality<P = Nct>> ModMathForm<T, Nct> {
     fn pow_loop(&self, exp_raw: T) -> T {
         let field = self.params.field();
         let base = field.residue_from_mont(unwrap_value(&self.integer_mont));
@@ -431,7 +437,7 @@ impl<T: ModMathInt> ModMathForm<T, Nct> {
     }
 }
 
-impl<T: ModMathInt> Pow<ModMathParams<T, Nct>> for ModMathForm<T, Nct> {
+impl<T: ModMathInt + HasPersonality<P = Nct>> Pow<ModMathParams<T, Nct>> for ModMathForm<T, Nct> {
     fn pow(&self, exp: &ModMathValue<T>) -> Self {
         let result_mont = self.pow_loop(unwrap_value(exp));
         Self {
@@ -441,7 +447,9 @@ impl<T: ModMathInt> Pow<ModMathParams<T, Nct>> for ModMathForm<T, Nct> {
     }
 }
 
-impl<T: ModMathInt> PowBoundedExp<ModMathParams<T, Nct>> for ModMathForm<T, Nct> {
+impl<T: ModMathInt + HasPersonality<P = Nct>> PowBoundedExp<ModMathParams<T, Nct>>
+    for ModMathForm<T, Nct>
+{
     fn pow_bounded_exp(&self, exp: &ModMathValue<T>, _exp_bits: u32) -> Self {
         // The LSB-first loop exits naturally when the exponent reaches zero,
         // so the `_exp_bits` hint is unused here.
@@ -457,7 +465,7 @@ impl<T: ModMathInt> PowBoundedExp<ModMathParams<T, Nct>> for ModMathForm<T, Nct>
     }
 }
 
-impl<T: ModMathInt> ModulusParams for ModMathParams<T, Nct> {
+impl<T: ModMathInt + HasPersonality<P = Nct>> ModulusParams for ModMathParams<T, Nct> {
     type Modulus = ModMathValue<T>;
     type MontgomeryForm = ModMathForm<T, Nct>;
 
@@ -470,7 +478,9 @@ impl<T: ModMathInt> ModulusParams for ModMathParams<T, Nct> {
     }
 }
 
-impl<T: ModMathIntCt> IntoMontyForm<ModMathParams<T, Ct>> for ModMathForm<T, Ct> {
+impl<T: ModMathIntCt + HasPersonality<P = Ct>> IntoMontyForm<ModMathParams<T, Ct>>
+    for ModMathForm<T, Ct>
+{
     fn from_reduced(integer: ModMathValue<T>, params: &ModMathParams<T, Ct>) -> Self {
         let field = params.field();
         let r = field.reduce(unwrap_value_ref(&integer));
@@ -487,7 +497,7 @@ impl<T: ModMathIntCt> IntoMontyForm<ModMathParams<T, Ct>> for ModMathForm<T, Ct>
     }
 }
 
-impl<T: ModMathIntCt> ModMathForm<T, Ct> {
+impl<T: ModMathIntCt + HasPersonality<P = Ct>> ModMathForm<T, Ct> {
     fn pow_loop(&self, exp_raw: T) -> T {
         let field = self.params.field();
         let base = field.residue_from_mont(unwrap_value(&self.integer_mont));
@@ -501,7 +511,7 @@ impl<T: ModMathIntCt> ModMathForm<T, Ct> {
     }
 }
 
-impl<T: ModMathIntCt> Pow<ModMathParams<T, Ct>> for ModMathForm<T, Ct> {
+impl<T: ModMathIntCt + HasPersonality<P = Ct>> Pow<ModMathParams<T, Ct>> for ModMathForm<T, Ct> {
     fn pow(&self, exp: &ModMathValue<T>) -> Self {
         let result_mont = self.pow_loop(unwrap_value(exp));
         Self {
@@ -511,7 +521,9 @@ impl<T: ModMathIntCt> Pow<ModMathParams<T, Ct>> for ModMathForm<T, Ct> {
     }
 }
 
-impl<T: ModMathIntCt> PowBoundedExp<ModMathParams<T, Ct>> for ModMathForm<T, Ct> {
+impl<T: ModMathIntCt + HasPersonality<P = Ct>> PowBoundedExp<ModMathParams<T, Ct>>
+    for ModMathForm<T, Ct>
+{
     fn pow_bounded_exp(&self, exp: &ModMathValue<T>, _exp_bits: u32) -> Self {
         let result_mont = self.pow_loop(unwrap_value(exp));
         Self {
@@ -525,7 +537,7 @@ impl<T: ModMathIntCt> PowBoundedExp<ModMathParams<T, Ct>> for ModMathForm<T, Ct>
     }
 }
 
-impl<T: ModMathIntCt> ModulusParams for ModMathParams<T, Ct> {
+impl<T: ModMathIntCt + HasPersonality<P = Ct>> ModulusParams for ModMathParams<T, Ct> {
     type Modulus = ModMathValue<T>;
     type MontgomeryForm = ModMathForm<T, Ct>;
 

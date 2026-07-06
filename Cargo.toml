@@ -24,7 +24,7 @@ rand_core = { version = "0.10", default-features = false }
 signature = { version = "3", default-features = false, features = ["digest", "rand_core"] }
 zeroize = { version = "1.8", default-features = false }
 ctutils = { version = "0.4", default-features = false }
-const-num-traits = { git = "https://github.com/kaidokert/num-traits", tag = "v0.1.0-alpha.0", default-features = false }
+const-num-traits = { version = "0.1.1", default-features = false }
 
 # optional dependencies
 crypto-common = { version = "0.2", optional = true, features = ["getrandom"] }
@@ -104,9 +104,3 @@ opt-level = 2
 
 [profile.bench]
 debug = true
-
-# Experimental: try the in-development versions of the integer/Montgomery stack.
-[patch.crates-io]
-fixed-bigint = { git = "https://github.com/kaidokert/fixed-bigint-rs", tag = "v0.4.0-alpha.1" }
-modmath = { git = "https://github.com/kaidokert/modmath-rs", tag = "v0.4.0-alpha.1" }
-modmath-cios = { git = "https://github.com/kaidokert/modmath-rs", tag = "v0.4.0-alpha.1" }

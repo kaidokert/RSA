@@ -46,8 +46,3 @@ unexpected_cfgs = { level = "warn", check-cfg = [
     'cfg(thumbv7m)',
     'cfg(thumbv7em)',
 ] }
-
-[patch.crates-io]
-fixed-bigint = { git = "https://github.com/kaidokert/fixed-bigint-rs", tag = "v0.4.0-alpha.1" }
-modmath = { git = "https://github.com/kaidokert/modmath-rs", tag = "v0.4.0-alpha.1" }
-modmath-cios = { git = "https://github.com/kaidokert/modmath-rs", tag = "v0.4.0-alpha.1" }

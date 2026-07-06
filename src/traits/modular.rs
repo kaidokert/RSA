@@ -5,6 +5,10 @@ use core::borrow::Borrow;
 
 #[cfg(feature = "alloc")]
 use alloc::boxed::Box;
+use const_num_traits::PrimBits;
+#[cfg(not(feature = "modmath"))]
+use const_num_traits::PrimInt;
+use const_num_traits::{FromBytes as NumFromBytes, ToBytes as NumToBytes, Zero};
 #[cfg(feature = "alloc")]
 use crypto_bigint::{
     modular::{BoxedMontyForm, BoxedMontyParams},
@@ -12,10 +16,6 @@ use crypto_bigint::{
 };
 #[cfg(feature = "alloc")]
 use crypto_bigint::{NonZero as CryptoNonZero, Odd as CryptoOdd};
-use const_num_traits::PrimBits;
-#[cfg(not(feature = "modmath"))]
-use const_num_traits::PrimInt;
-use const_num_traits::{FromBytes as NumFromBytes, ToBytes as NumToBytes, Zero};
 use zeroize::Zeroize;
 
 use crate::errors::{Error, Result};
