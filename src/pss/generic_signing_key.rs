@@ -146,7 +146,7 @@ where
     D: Digest + FixedOutputReset,
     T: UnsignedModularInt + Zeroize,
     T::Bytes: Zeroize,
-    M: ModulusParams<Modulus = T>,
+    M: ModulusParams<Modulus = T> + crate::traits::modular::CtModulusParams,
     M::MontgomeryForm: Pow<M> + PowBoundedExp<M>,
 {
     /// Sign `msg` (hashed internally with `D`) into `sig_storage`, drawing

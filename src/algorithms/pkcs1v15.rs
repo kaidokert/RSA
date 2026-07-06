@@ -216,7 +216,7 @@ pub fn sign_into<'sig, T, M>(
 where
     T: UnsignedModularInt,
     T::Bytes: zeroize::Zeroize,
-    M: ModulusParams<Modulus = T>,
+    M: ModulusParams<Modulus = T> + crate::traits::modular::CtModulusParams,
     M::MontgomeryForm: Pow<M> + PowBoundedExp<M>,
 {
     // `k` = modulus byte length (matches `PublicKeyParts::size()`). Use the

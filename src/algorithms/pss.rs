@@ -234,7 +234,7 @@ pub fn sign_into<'sig, T, M, D>(
 where
     T: UnsignedModularInt,
     T::Bytes: zeroize::Zeroize,
-    M: ModulusParams<Modulus = T>,
+    M: ModulusParams<Modulus = T> + crate::traits::modular::CtModulusParams,
     M::MontgomeryForm: Pow<M> + PowBoundedExp<M>,
     D: Digest + FixedOutputReset,
 {

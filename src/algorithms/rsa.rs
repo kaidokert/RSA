@@ -282,7 +282,7 @@ fn unblind(m: &BoxedUint, unblinder: &BoxedUint, n_params: &BoxedMontyParams) ->
 pub fn rsa_private_op<T, M>(c: &T, d: &T, n_params: &M) -> T
 where
     T: UnsignedModularInt,
-    M: ModulusParams<Modulus = T>,
+    M: ModulusParams<Modulus = T> + crate::traits::modular::CtModulusParams,
     M::MontgomeryForm: Pow<M>,
 {
     pow_mod_params(c, d, n_params)
@@ -305,7 +305,7 @@ where
 pub fn rsa_private_op_and_check<T, M>(c: &T, d: &T, e: &T, n_params: &M) -> Result<T>
 where
     T: UnsignedModularInt,
-    M: ModulusParams<Modulus = T>,
+    M: ModulusParams<Modulus = T> + crate::traits::modular::CtModulusParams,
     M::MontgomeryForm: Pow<M> + PowBoundedExp<M>,
 {
     let m = rsa_private_op(c, d, n_params);
