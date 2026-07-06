@@ -280,6 +280,65 @@ impl<T> crate::traits::keys::RawPrivateKeyConstructible for ModMathValue<T> wher
 #[cfg(not(feature = "alloc"))]
 pub type ModMathValue<T> = T;
 
+// Rejection-sampled `try_random_mod` for the alloc-side newtype
+// `ModMathValue<T>`. Fills `T::Bytes` via `rng.try_fill_bytes`,
+// converts to `T` via `try_from_be_bytes_vartime`, checks
+// `candidate < modulus`, retries. `MAX_TRIES` is 128 — for any RSA
+// modulus with a set top bit, acceptance rate is ≥ 50% and 128 tries
+// gives failure probability well below 2⁻¹²⁷.
+//
+// See the `TryRandomMod` trait doc for the CT-property discussion.
+#[cfg(feature = "alloc")]
+impl<T> crate::traits::modular::TryRandomMod for ModMathValue<T>
+where
+    T: FixedWidthUnsignedInt + PartialOrd,
+{
+    fn try_random_mod<R>(rng: &mut R, modulus: &Self) -> Result<Self>
+    where
+        R: rand_core::TryCryptoRng + ?Sized,
+    {
+        const MAX_TRIES: u32 = 128;
+        for _ in 0..MAX_TRIES {
+            let mut bytes = <T as FixedWidthUnsignedInt>::Bytes::default();
+            rng.try_fill_bytes(bytes.as_mut()).map_err(|_| Error::Rng)?;
+            let candidate =
+                <T as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(bytes.as_ref())?;
+            let candidate = wrap_value(candidate);
+            if candidate < *modulus {
+                return Ok(candidate);
+            }
+        }
+        Err(Error::Internal)
+    }
+}
+
+// Same impl for the no-alloc path where `ModMathValue<T>` is the type
+// alias `= T` — since `T: FixedWidthUnsignedInt`, sampling `T` is the
+// same code shape. Alloc-side newtype uses `wrap_value`; here the
+// value is already `T`.
+#[cfg(not(feature = "alloc"))]
+impl<T> crate::traits::modular::TryRandomMod for T
+where
+    T: FixedWidthUnsignedInt + PartialOrd,
+{
+    fn try_random_mod<R>(rng: &mut R, modulus: &Self) -> Result<Self>
+    where
+        R: rand_core::TryCryptoRng + ?Sized,
+    {
+        const MAX_TRIES: u32 = 128;
+        for _ in 0..MAX_TRIES {
+            let mut bytes = <T as FixedWidthUnsignedInt>::Bytes::default();
+            rng.try_fill_bytes(bytes.as_mut()).map_err(|_| Error::Rng)?;
+            let candidate =
+                <T as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(bytes.as_ref())?;
+            if candidate < *modulus {
+                return Ok(candidate);
+            }
+        }
+        Err(Error::Internal)
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct ModMathParams<T, P: Personality = Nct> {
     // Owns the modulus + precomputed Montgomery constants. `Clone` is a
@@ -915,6 +974,37 @@ mod private_op_tests {
         let r_bad = wrap_value(SmallUCt::from(5u8));
         let result = crate::algorithms::rsa::rsa_private_op_blinded(&r_bad, &c, &d, &e, &n_params);
         assert!(result.is_err());
+    }
+
+    // Verify TryRandomMod on the modmath backend samples uniformly in
+    // [0, modulus). Uses toy_params_wide's 512-bit modulus (`2^511 + 1`)
+    // so the acceptance rate is essentially 50% (top bit set →
+    // random-and-`< modulus` acceptance) and 128-tries doesn't get
+    // exhausted. Verify: N samples all < modulus, sampled values are
+    // not all equal (uniformity smoke test).
+    #[test]
+    fn try_random_mod_modmath_stays_below_modulus() {
+        use crate::traits::modular::TryRandomMod;
+        use rand::rngs::ChaCha8Rng;
+        use rand_core::SeedableRng;
+
+        let n_params = toy_params_wide();
+        let n = *n_params.modulus().as_ref();
+        let mut rng = ChaCha8Rng::from_seed([42; 32]);
+
+        let mut samples = alloc::vec::Vec::with_capacity(16);
+        for _ in 0..16 {
+            let r = ModMathValue::<SmallUCt>::try_random_mod(&mut rng, &n).unwrap();
+            assert!(r < n, "sample must be < modulus");
+            samples.push(r);
+        }
+        // Uniformity smoke test — 16 samples on a ~512-bit range
+        // should be all distinct with overwhelming probability.
+        let first = samples[0];
+        assert!(
+            samples.iter().any(|s| *s != first),
+            "samples are trivially all equal — RNG or sampler broken"
+        );
     }
 
     #[test]
