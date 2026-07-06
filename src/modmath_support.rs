@@ -566,6 +566,41 @@ impl<T: ModMathIntCt + HasPersonality<P = Ct>> PowBoundedExp<ModMathParams<T, Ct
     }
 }
 
+// CT modular inverse for RSA-blinding on the modmath backend. Routes
+// to modmath's `Field<T, Ct>::inv_safegcd_ct` (Bernstein-Yang). Returns
+// `None` when the value shares a factor with `n` (astronomically rare
+// for random `r` against a composite modulus) or when the carrier `T`
+// lacks one bit of headroom over the modulus — see the modmath doc on
+// `inv_safegcd_ct` for the precondition detail. Callers should retry
+// with a fresh random on `None`.
+impl<T> crate::traits::modular::InvertCt<ModMathParams<T, Ct>> for ModMathForm<T, Ct>
+where
+    T: ModMathIntCt
+        + HasPersonality<P = Ct>
+        + modmath_cios::CiosRowOps
+        + core::ops::Shl<usize, Output = T>
+        + core::ops::BitOr<Output = T>,
+    <T as modmath_cios::CiosRowOps>::Word: Copy
+        + subtle::ConditionallySelectable
+        + subtle::ConstantTimeEq
+        + const_num_traits::CtIsZero
+        + const_num_traits::CtParity
+        + const_num_traits::One
+        + const_num_traits::Zero
+        + core::ops::BitAnd<Output = <T as modmath_cios::CiosRowOps>::Word>
+        + core::ops::Shl<usize, Output = <T as modmath_cios::CiosRowOps>::Word>,
+{
+    fn invert_ct(&self) -> Option<Self> {
+        let field = self.params.field();
+        let residue = field.residue_from_mont(unwrap_value(&self.integer_mont));
+        let ct_option = field.inv_safegcd_ct(&residue);
+        Option::from(ct_option).map(|inv_res: modmath::Residue<'_, T, Ct>| Self {
+            integer_mont: wrap_value(*inv_res.mont_value()),
+            params: self.params.clone(),
+        })
+    }
+}
+
 impl<T: ModMathIntCt + HasPersonality<P = Ct>> ModulusParams for ModMathParams<T, Ct> {
     type Modulus = ModMathValue<T>;
     type MontgomeryForm = ModMathForm<T, Ct>;
@@ -828,6 +863,20 @@ mod private_op_tests {
         let recovered =
             crate::algorithms::rsa::rsa_private_op_and_check(&c, &d, &e, &n_params).unwrap();
         assert_eq!(recovered, expected);
+    }
+
+    // Verify the new `InvertCt` primitive on the modmath backend against
+    // a known-answer inverse. n = 35, 3⁻¹ mod 35 = 12 (since 3·12 = 36 ≡ 1).
+    // Exercises the modmath `Field::inv_safegcd_ct` bridge.
+    #[test]
+    fn invert_ct_modmath_known_answer() {
+        use crate::traits::modular::{IntoMontyForm, InvertCt, PowBoundedExp};
+        let n_params = toy_params();
+        let three = wrap_value(SmallUCt::from(3u8));
+        let mont_three = ModMathForm::<SmallUCt, Ct>::from_reduced(three, &n_params);
+        let mont_inv = mont_three.invert_ct().expect("3 is coprime to 35");
+        let recovered = PowBoundedExp::<ModMathParams<SmallUCt, Ct>>::retrieve(&mont_inv);
+        assert_eq!(recovered, wrap_value(SmallUCt::from(12u8)));
     }
 
     #[test]

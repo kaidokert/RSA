@@ -339,6 +339,29 @@ impl Pow<BoxedMontyParams> for BoxedMontyForm {
     }
 }
 
+/// Constant-time multiplicative inverse in Montgomery form.
+///
+/// Returns `Some(self⁻¹ mod n)` when the value is coprime to the
+/// modulus (which for RSA `n = p·q` fails only on the astronomically
+/// unlikely case that the caller's random value happens to share a
+/// factor with `n` — retry-on-`None` is the standard defense).
+/// Bridged to backends whose native return is `subtle::CtOption` via
+/// `.into_option()` — same pattern as `NonZero::new`.
+///
+/// Foundation for the sign-path blinding primitive; consumer lands in
+/// a follow-up PR alongside the RNG-taking `rsa_private_op_blinded`.
+#[allow(dead_code)]
+pub trait InvertCt<M: ModulusParams>: Sized {
+    fn invert_ct(&self) -> Option<Self>;
+}
+
+#[cfg(feature = "alloc")]
+impl InvertCt<BoxedMontyParams> for BoxedMontyForm {
+    fn invert_ct(&self) -> Option<Self> {
+        self.invert().into_option()
+    }
+}
+
 pub trait ModulusParams: Sized {
     type Modulus: UnsignedModularInt;
     type MontgomeryForm: IntoMontyForm<Self> + PowBoundedExp<Self>;
