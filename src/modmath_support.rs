@@ -612,6 +612,15 @@ impl<T: ModMathIntCt + HasPersonality<P = Ct>> crate::traits::modular::MulCt<Mod
     for ModMathForm<T, Ct>
 {
     fn mul_ct(&self, rhs: &Self) -> Self {
+        // Guard: MulCt's precondition is that both operands share the
+        // same modulus. `debug_assert_eq!` would need `T: Debug` for
+        // the failure message; use `debug_assert!` with a fixed
+        // message to avoid widening the trait bound just for a
+        // debug-only check.
+        debug_assert!(
+            self.params.modulus_odd == rhs.params.modulus_odd,
+            "MulCt operands must share the same modulus"
+        );
         let field = self.params.field();
         let lhs_res = field.residue_from_mont(unwrap_value(&self.integer_mont));
         let rhs_res = field.residue_from_mont(unwrap_value(&rhs.integer_mont));
