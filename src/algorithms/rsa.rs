@@ -22,7 +22,7 @@ use crate::traits::keys::{PrivateKeyParts, PublicKeyParts};
 use crate::{
     errors::{Error, Result},
     traits::{
-        modular::{IntoMontyForm, ModulusParams, Pow, PowBoundedExp},
+        modular::{IntoMontyForm, InvertCt, ModulusParams, MulCt, Pow, PowBoundedExp},
         UnsignedModularInt,
     },
 };
@@ -371,12 +371,8 @@ pub fn rsa_private_op_blinded<T, M>(blinding_r: &T, c: &T, d: &T, e: &T, n_param
 where
     T: UnsignedModularInt,
     M: ModulusParams<Modulus = T> + crate::traits::modular::CtModulusParams,
-    M::MontgomeryForm: Pow<M>
-        + PowBoundedExp<M>
-        + crate::traits::modular::InvertCt<M>
-        + crate::traits::modular::MulCt<M>,
+    M::MontgomeryForm: Pow<M> + PowBoundedExp<M> + InvertCt<M> + MulCt<M>,
 {
-    use crate::traits::modular::{InvertCt, MulCt};
     // r → Montgomery form; invert. `invert_ct` returns `None` for
     // both retryable (non-coprime) and deterministic (carrier-tight)
     // cases — caller preflights the deterministic case.
