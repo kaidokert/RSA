@@ -293,8 +293,6 @@ where
 /// Raw RSA must be wrapped in a padding/signature scheme (PKCS#1 v1.5, PSS,
 /// OAEP) to be secure. See the [module-level documentation][crate::hazmat]
 /// for more information.
-// Consumer (the heapless `pkcs1v15` / `pss` sign port) lands in a later PR.
-#[allow(dead_code)]
 #[inline]
 pub fn rsa_private_op_and_check<T, M>(c: &T, d: &T, e: &T, n_params: &M) -> Result<T>
 where
@@ -302,7 +300,7 @@ where
     M: ModulusParams<Modulus = T> + crate::traits::modular::CtModulusParams,
     M::MontgomeryForm: Pow<M> + PowBoundedExp<M>,
 {
-    let m = rsa_private_op(c, d, n_params);
+    let mut m = rsa_private_op(c, d, n_params);
     // `m < n` by construction, so use `from_reduced` to skip the
     // variable-time reduction `from_value` (→ `rem_vartime`) would do on
     // BoxedUint and leak `m` via timing.
@@ -310,6 +308,10 @@ where
     let m_mont = M::MontgomeryForm::from_reduced(m_sized, n_params);
     let check = m_mont.pow_bounded_exp(e, e.bits()).retrieve();
     if *c != check {
+        // `m` is secret material (would-be plaintext or signature).
+        // Wipe before returning `Err` — the failure path indicates a
+        // fault-attack signal and the caller doesn't need `m`.
+        m.zeroize();
         return Err(Error::Internal);
     }
     Ok(m)
