@@ -9,7 +9,7 @@ A microcontroller-friendly fork of the [RustCrypto RSA crate](https://github.com
 
 #### Scope
 
-Focused on shrinking code size and stack usage. The heapless path covers public-key operations — PKCS#1 v1.5 verify, OAEP encrypt, PSS verify — and private-key signing (PKCS#1 v1.5 and PSS, the TLS 1.3 client-certificate algorithms). Signing runs constant-time in the private exponent via the `Ct`-personality modmath backend, with optional per-signature RSA base blinding (`try_sign_with_rng_into`) as defense in depth.
+Focused on shrinking code size and stack usage. The heapless path covers verify (PKCS#1 v1.5, PSS), OAEP encrypt, and sign (PKCS#1 v1.5, PSS) — constant-time in the private exponent, with optional per-signature blinding.
 
 Key generation stays off the heapless path — it needs the heavy `crypto-primes` stack, and embedded keys arrive from a provisioning path (PEM/PKCS#8, HSM, firmware constants) rather than being generated on-device. It is available behind the `keygen` feature (on by default) on the heap-allocating backend. Decryption on the heapless path is out of scope. Full upstream behavior remains available via the `alloc` feature; license, MSRV, and security advisories there follow the upstream crate, preserved verbatim in [`UPSTREAM_README.md`](UPSTREAM_README.md).
 
