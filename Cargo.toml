@@ -111,3 +111,9 @@ opt-level = 2
 
 [profile.bench]
 debug = true
+
+# Temporary — pulling the safegcd carrier-width fix from modmath 0.4.1-alpha.2
+# (`inv_safegcd_ct` no longer needs a headroom bit; single-path blinded sign
+# on `ModMathParams<U2048, Ct>` works). Drop once modmath 0.4.1 is on crates.io.
+[patch.crates-io]
+modmath = { git = "https://github.com/kaidokert/modmath-rs", tag = "v0.4.1-alpha.2" }
