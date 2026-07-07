@@ -283,6 +283,53 @@ where
 
 #[cfg(test)]
 mod tests {
+    // End-to-end KAT for the heapless-shaped `try_sign_with_rng_into`
+    // wrapper on `pss::SigningKey<D>`. Exercises the full stack:
+    // wrapper (which internally samples salt AND blinding `r`) →
+    // `algorithms::pss::sign_with_rng_into` →
+    // `rsa_private_op_and_check_blinded` → `TryRandomMod` →
+    // `rsa_private_op_blinded` (InvertCt/MulCt).
+    #[test]
+    #[cfg(feature = "encoding")]
+    fn signing_key_try_sign_with_rng_into_round_trip() {
+        use super::*;
+        use crate::pss::VerifyingKey;
+        use pkcs1::DecodeRsaPrivateKey;
+        use rand::rngs::ChaCha8Rng;
+        use rand_core::SeedableRng;
+        use sha2::Sha256;
+        use signature::Verifier;
+
+        const PRIV_KEY_PKCS1_PEM: &str =
+            include_str!("../../tests/examples/pkcs1/rsa2048-priv.pem");
+
+        let priv_key = RsaPrivateKey::from_pkcs1_pem(PRIV_KEY_PKCS1_PEM).unwrap();
+        let signing_key = SigningKey::<Sha256>::new(priv_key.clone());
+        let verifying_key = VerifyingKey::<Sha256>::new(priv_key.to_public_key());
+
+        let msg: &[u8] = b"blinded pss sign test message";
+        let mut rng = ChaCha8Rng::from_seed([42; 32]);
+
+        // 2048-bit key → 256-byte signature and EM;
+        // salt_len defaults to `Sha256::output_size()` = 32.
+        let mut em_storage = [0u8; 256];
+        let mut sig_storage = [0u8; 256];
+        let mut salt_storage = [0u8; 32];
+        let sig_slice = signing_key
+            .try_sign_with_rng_into(
+                &mut rng,
+                msg,
+                &mut em_storage,
+                &mut sig_storage,
+                &mut salt_storage,
+            )
+            .unwrap();
+        assert_eq!(sig_slice.len(), 256);
+
+        let sig = Signature::try_from(sig_slice).unwrap();
+        verifying_key.verify(msg, &sig).unwrap();
+    }
+
     #[test]
     #[cfg(all(feature = "hazmat", feature = "serde"))]
     fn test_serde() {

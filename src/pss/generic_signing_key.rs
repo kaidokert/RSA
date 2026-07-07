@@ -9,7 +9,7 @@
 //! side: caller passes `&mut R: TryCryptoRng + ?Sized`.
 
 use crate::{
-    algorithms::pss::sign_into,
+    algorithms::pss::{sign_into, sign_with_rng_into},
     errors::{Error, Result},
     key::GenericRsaPrivateKey,
     traits::{
@@ -141,18 +141,26 @@ where
     }
 }
 
+// RNG-taking sign methods now use base blinding in addition to the
+// salt sampling. Bound expansion (`T: TryRandomMod`,
+// `M::MontgomeryForm: InvertCt<M> + MulCt<M>`) is satisfied by both
+// backends we support.
 impl<D, T, M> GenericSigningKey<D, T, M>
 where
     D: Digest + FixedOutputReset,
-    T: UnsignedModularInt + Zeroize,
+    T: UnsignedModularInt + Zeroize + crate::traits::modular::TryRandomMod,
     T::Bytes: Zeroize,
     M: ModulusParams<Modulus = T> + crate::traits::modular::CtModulusParams,
-    M::MontgomeryForm: Pow<M> + PowBoundedExp<M>,
+    M::MontgomeryForm: Pow<M>
+        + PowBoundedExp<M>
+        + crate::traits::modular::InvertCt<M>
+        + crate::traits::modular::MulCt<M>,
 {
     /// Sign `msg` (hashed internally with `D`) into `sig_storage`, drawing
-    /// the PSS salt from `rng`. Uses `em_storage` and `salt_storage` as
-    /// scratch. All three buffers must be at least the relevant sizes
-    /// (`em_storage`: `em_bits.div_ceil(8)`; `sig_storage`: `n.size()`;
+    /// the PSS salt AND the RSA base-blinding factor from `rng`. Uses
+    /// `em_storage` and `salt_storage` as scratch. All three buffers
+    /// must be at least the relevant sizes (`em_storage`:
+    /// `em_bits.div_ceil(8)`; `sig_storage`: `n.size()`;
     /// `salt_storage`: `self.salt_len()`).
     ///
     /// Mirrors [`crate::traits::RandomizedEncryptor::encrypt_with_rng_into`]:
@@ -176,7 +184,8 @@ where
     }
 
     /// Sign a precomputed `prehash` (`D::output_size()` bytes) into
-    /// `sig_storage`, drawing the PSS salt from `rng`.
+    /// `sig_storage`, drawing the PSS salt AND the RSA base-blinding
+    /// factor from `rng`.
     ///
     /// Returns [`Error::InputNotHashed`] if `prehash.len()` doesn't match
     /// `D::output_size()`. Returns [`Error::OutputBufferTooSmall`] if
@@ -197,7 +206,8 @@ where
             .ok_or(Error::OutputBufferTooSmall)?;
         rng.try_fill_bytes(salt).map_err(|_| Error::Rng)?;
         let mut hash = D::new();
-        sign_into(
+        sign_with_rng_into(
+            rng,
             self.inner.n_params(),
             crate::traits::keys::PrivateKeyParts::d(&self.inner),
             self.inner.e(),
@@ -209,7 +219,20 @@ where
             sig_storage,
         )
     }
+}
 
+// Deterministic (caller-supplied salt, no RNG) variant kept in a
+// separate impl block so it doesn't require the blinding bounds —
+// callers who explicitly want a deterministic sign path (typically
+// tests) don't need the extra trait impls on `T` / `M`.
+impl<D, T, M> GenericSigningKey<D, T, M>
+where
+    D: Digest + FixedOutputReset,
+    T: UnsignedModularInt + Zeroize,
+    T::Bytes: Zeroize,
+    M: ModulusParams<Modulus = T> + crate::traits::modular::CtModulusParams,
+    M::MontgomeryForm: Pow<M> + PowBoundedExp<M>,
+{
     /// Sign with caller-supplied salt — useful for determinism in tests.
     ///
     /// Returns [`Error::InputNotHashed`] if `prehash.len()` doesn't match

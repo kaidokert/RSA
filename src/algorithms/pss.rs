@@ -264,6 +264,69 @@ where
     crate::algorithms::pad::uint_to_zeroizing_be_pad_into(s, k, sig_storage)
 }
 
+/// ⚠️ Raw PSS sign with RNG-driven base-blinding. Same shape and
+/// preconditions as [`sign_into`]; the only difference is that the
+/// private-key operation goes through
+/// [`crate::algorithms::rsa::rsa_private_op_and_check_blinded`],
+/// which hides `EM` (the padded plaintext, secret) from side-channel
+/// analysis on `d`.
+///
+/// PSS's salt sampling stays out-of-scope for this primitive —
+/// callers supply the pre-sampled `salt` bytes as before; the RNG
+/// argument here is used solely for base-blinding. Higher-level
+/// wrappers (`pss::GenericSigningKey::try_sign_with_rng_into`)
+/// coordinate reusing the same RNG for both.
+///
+/// # ☢️️ WARNING: HAZARDOUS API ☢️
+///
+/// Raw RSA. Must be wrapped in a padding/signature scheme. See
+/// [module-level docs][crate::hazmat].
+#[allow(dead_code)]
+#[allow(clippy::too_many_arguments)]
+#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
+pub fn sign_with_rng_into<'sig, R, T, M, D>(
+    rng: &mut R,
+    n_params: &M,
+    d: &T,
+    e: &T,
+    m_hash: &[u8],
+    salt: &[u8],
+    k: usize,
+    hash: &mut D,
+    em_storage: &mut [u8],
+    sig_storage: &'sig mut [u8],
+) -> Result<&'sig [u8]>
+where
+    R: rand_core::TryCryptoRng + ?Sized,
+    T: UnsignedModularInt + crate::traits::modular::TryRandomMod,
+    T::Bytes: zeroize::Zeroize,
+    M: ModulusParams<Modulus = T> + crate::traits::modular::CtModulusParams,
+    M::MontgomeryForm: Pow<M>
+        + PowBoundedExp<M>
+        + crate::traits::modular::InvertCt<M>
+        + crate::traits::modular::MulCt<M>,
+    D: Digest + FixedOutputReset,
+{
+    let key_bits = n_params.modulus().as_ref().bits() as usize;
+    if key_bits < 2 {
+        return Err(Error::InvalidArguments);
+    }
+    if k != key_bits.div_ceil(8) {
+        return Err(Error::InvalidArguments);
+    }
+    if sig_storage.len() < k {
+        return Err(Error::OutputBufferTooSmall);
+    }
+    let em_bits = key_bits - 1;
+    if em_storage.len() < em_bits.div_ceil(8) {
+        return Err(Error::OutputBufferTooSmall);
+    }
+    let em_slice = emsa_pss_encode_into(m_hash, em_bits, salt, hash, em_storage)?;
+    let em = T::try_from_be_bytes_vartime(em_slice)?;
+    let s = crate::algorithms::rsa::rsa_private_op_and_check_blinded(rng, &em, d, e, n_params)?;
+    crate::algorithms::pad::uint_to_zeroizing_be_pad_into(s, k, sig_storage)
+}
+
 fn emsa_pss_verify_pre<'a>(
     m_hash: &[u8],
     em: &'a mut [u8],

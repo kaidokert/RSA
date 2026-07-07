@@ -1624,6 +1624,60 @@ mod private_op_tests {
         emsa_pss_verify(&digest, &mut em_copy, Some(0), &mut verify_hash, KEY_BITS).unwrap();
     }
 
+    // Exact-width blinded sign KAT on the modmath backend. Prior to
+    // modmath 0.4.1-alpha.2 this would deterministically fail with
+    // `Error::Internal` — safegcd's `2·modulus ≤ T::MAX` precondition
+    // was unmet in `U2048` for a 2048-bit modulus, so every `InvertCt`
+    // call returned `None` and the blinding retry loop exhausted. The
+    // alpha's `SignedExt`-based signed intermediates close the
+    // headroom gap without widening the caller's carrier.
+    #[test]
+    fn pss_signing_key_try_sign_prehash_with_rng_into_round_trip_2048_sha1() {
+        use crate::algorithms::pss::emsa_pss_verify;
+        use crate::key::GenericRsaPrivateKey;
+        use crate::pss::GenericSigningKey;
+        use digest::Digest;
+        use rand::rngs::ChaCha8Rng;
+        use rand_core::SeedableRng;
+        use sha1::Sha1;
+
+        type U2048 = FixedUInt<u8, 256, Ct>;
+        const K: usize = 256;
+        const KEY_BITS: usize = 2048;
+
+        let key =
+            crate::modmath_support::public_key_ct_from_be_bytes::<U2048>(&N_2048, 65537).unwrap();
+        let d = wrap_value(
+            <U2048 as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(&D_2048).unwrap(),
+        );
+        let priv_key = GenericRsaPrivateKey::from_public_and_d(key.clone(), d);
+        // Salt length = 0 → deterministic PSS encoding.
+        let signing_key = GenericSigningKey::<Sha1, _, _>::new_with_salt_len(priv_key, 0);
+
+        let msg: &[u8] = b"pss-blinded-roundtrip test message";
+        let digest = Sha1::digest(msg);
+        let mut rng = ChaCha8Rng::from_seed([42; 32]);
+        let mut em_storage = [0u8; K];
+        let mut sig_storage = [0u8; K];
+        let mut salt_storage = [0u8; 0];
+        let sig_slice = signing_key
+            .try_sign_prehash_with_rng_into(
+                &mut rng,
+                &digest,
+                &mut em_storage,
+                &mut sig_storage,
+                &mut salt_storage,
+            )
+            .unwrap();
+        assert_eq!(sig_slice.len(), K);
+
+        let recovered = public_key_op_ct(&key, sig_slice).unwrap();
+        let mut em_copy = [0u8; K];
+        em_copy.copy_from_slice(recovered.as_ref());
+        let mut verify_hash = Sha1::new();
+        emsa_pss_verify(&digest, &mut em_copy, Some(0), &mut verify_hash, KEY_BITS).unwrap();
+    }
+
     #[test]
     fn pss_signing_key_rejects_wrong_prehash_length() {
         use crate::key::GenericRsaPrivateKey;
