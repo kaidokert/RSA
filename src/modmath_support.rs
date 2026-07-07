@@ -1047,11 +1047,14 @@ mod private_op_tests {
         let n = *n_params.modulus().as_ref();
         let mut rng = ChaCha8Rng::from_seed([42; 32]);
 
-        let mut samples = alloc::vec::Vec::with_capacity(16);
-        for _ in 0..16 {
+        // Stack-only sample buffer so this test compiles under
+        // `--no-default-features --features modmath,wip-private-key`
+        // (no `alloc`). Sixteen fixed-size samples.
+        let mut samples = [ModMathValue::<SmallUCt>::from(0u8); 16];
+        for slot in samples.iter_mut() {
             let r = ModMathValue::<SmallUCt>::try_random_mod(&mut rng, &n).unwrap();
             assert!(r < n, "sample must be < modulus");
-            samples.push(r);
+            *slot = r;
         }
         // Uniformity smoke test — 16 samples on a ~512-bit range
         // should be all distinct with overwhelming probability.

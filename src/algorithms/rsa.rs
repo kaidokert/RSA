@@ -435,7 +435,7 @@ where
 /// probability is ~2⁻²⁰⁴⁷ per attempt — 10 retries is astronomical
 /// overkill and hides no timing information. For the deterministic
 /// carrier-tight case, all 10 attempts fail identically; the error
-/// signals the mis-sized carrier.
+/// signals the mismatched carrier.
 ///
 /// # ☢️️ WARNING: HAZARDOUS API ☢️
 ///
