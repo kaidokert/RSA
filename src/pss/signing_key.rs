@@ -300,33 +300,8 @@ mod tests {
         use sha2::Sha256;
         use signature::Verifier;
 
-        const PRIV_KEY_PKCS1_PEM: &str = "-----BEGIN RSA PRIVATE KEY-----
-MIIEowIBAAKCAQEAwQe5brkkpxrwR/5TJ6JXsUyBzYtbEL/w8u8P6NnxQ8sL4KYp
-MzzTB6aq1gq7bieYXChg0PIWeTukGaOzZe96KxhT0GbhhYRlukktM/quRrM7nYdm
-UmXo7+KWU55kfcNOjWKADL/7qmxn6y/+kPmBg83nHdr1Mq6/pNkeHY/1CeGGECl0
-rg7gfEkssHjZw/uKafA271fX9A/q3LcAeWi7iA01PgmP28BrWb7OQoYVY71kFY11
-e919VlMh8oXsIV0nXCkYu9dR8Pzq6U4gFASK32fFkKX/djRMljEgss3kR0SWPH7t
-m5uXX1wRTJ2mRaZh/BmGweIvYCZ5y0+9ESOD1wIDAQABAoIBAAj3NuGxr8YjNi3h
-3jLlE3WkvBKz+lLY13QxLmf+V3pyn+abUSaUGKkuUJkIfpQrOqRtK7IIzIps/r5C
-ID8H1IDT7HCtlqQA9kikxXi4mAeoo4g5lcMWAK/Dsn/Hx5sfyzI99PyininYRyth
-W02YiS96DNYSKXllLHmXrBJrcVI4FqXAz5s7MezU0XYi+jeaVGEP2bd2cHfQJki/
-pLOKBvA5DGT7HbmMV7Z1qg/zcr/4Py+7qAFC5XsbQIILSMTfC45QFgs1lApnUG8H
-uIhf5lgZ8m0ouDBb/e1Q04ANtdLLI6EmrR11PwavUmvPvXuedXkv2OvnuAbiJr6g
-j0I0VaECgYEAyWf2QZrEoZLzVrInZ+VYtov1+jjgFcxW9lHuCJXtTx8hFla13Bmp
-bc8PoxWb+37jPdrOYPW0yv1sk5VeVkxOJbms0Gn8hpyI+0muQZ3jmwlS0A10T6FL
-wWECYvrxO8DCaVCQ4V+egLSDb/GMkRgHJF3Dr7g3ep7krXf2eeWILQUCgYEA9VqJ
-ijMDKw/KX6swyMe3A1nA0MlLBeseXxrwNIJenwRXCzjG3BH6oHW2MGwH0EV7sSoG
-FR6j7LZbp9I9NvRcAYU/s1qiAX3iX3KIsbZYNtEC6tKn/HClaHLZOhyuE8tjshyD
-jhK/0rhw7R5VQ1GfJhmuzvwoMFTA0fqZBQpWZCsCgYBA5WO+3dyv50bLT5pM6uR7
-5Xs7xinGPFJlCh812wFdNj2WEhiFNCuYu1hhhyv8jHUyUBehvGol4iSjJUUBb5La
-qwpZGV2KDlRBDAu/Dt3w7b8mVL9+jQ144QZA2HT0ePbrsk8Mn5/V/tQ/NMjDU8ex
-WxkbvLL7qskqb/YWbvRC9QKBgQDUJYvFpmQ36LhozmIpSZ6yU/oHzfWD0Y/6VhWa
-oZtlTeBhwJ8aDKWz9vQonFCJQns4bgjCXDMLa4aG7p+lk9a2LdwtndF1Dr8dHrCZ
-UPynsUQffTRpb5FmZd/0gnX2gafbixIpV4brkjV6of7BbaL50702Fgw99hqftVp4
-ZD7c7wKBgD7uIs6rgpaJzKbf7ejjZSjfLOgHlJhtH6Nejp8KoJRsEQI1ofWyIn7D
-eMjIuecwLapPwjY2G0/sUW61bqrxgW10wDJHPNllGsZFanzpb7x5o/7eNhzc4qNf
-Rmb665iB5fwpqmbE/hYKIn7asYQE+V0dkgt8M3qvlJJ5JJbCrJx3
------END RSA PRIVATE KEY-----";
+        const PRIV_KEY_PKCS1_PEM: &str =
+            include_str!("../../tests/examples/pkcs1/rsa2048-priv.pem");
 
         let priv_key = RsaPrivateKey::from_pkcs1_pem(PRIV_KEY_PKCS1_PEM).unwrap();
         let signing_key = SigningKey::<Sha256>::new(priv_key.clone());
