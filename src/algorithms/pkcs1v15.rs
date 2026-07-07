@@ -236,6 +236,60 @@ where
     crate::algorithms::pad::uint_to_zeroizing_be_pad_into(s, k, sig_storage)
 }
 
+/// ⚠️ Raw PKCS#1 v1.5 sign with RNG-driven base-blinding. Same shape
+/// and preconditions as [`sign_into`]; the only difference is that
+/// the private-key operation goes through
+/// [`crate::algorithms::rsa::rsa_private_op_and_check_blinded`],
+/// which hides `EM` (the padded plaintext, secret) from side-channel
+/// analysis on `d`.
+///
+/// Callers who need deterministic PKCS#1 v1.5 signatures (rare —
+/// PKCS#1 v1.5 is not a randomized scheme) can keep using
+/// [`sign_into`]; this variant is the blinded default for the sign
+/// wrapper API.
+///
+/// # ☢️️ WARNING: HAZARDOUS API ☢️
+///
+/// Raw RSA. Must be wrapped in a padding/signature scheme. See
+/// [module-level docs][crate::hazmat].
+// Consumer (the heapless `SigningKey<D>` wrapper) lands in the same
+// PR that adds this.
+#[allow(dead_code)]
+#[allow(clippy::too_many_arguments)]
+#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
+pub fn sign_with_rng_into<'sig, R, T, M>(
+    rng: &mut R,
+    n_params: &M,
+    d: &T,
+    e: &T,
+    prefix: &[u8],
+    hashed: &[u8],
+    k: usize,
+    em_storage: &mut [u8],
+    sig_storage: &'sig mut [u8],
+) -> Result<&'sig [u8]>
+where
+    R: rand_core::TryCryptoRng + ?Sized,
+    T: UnsignedModularInt + crate::traits::modular::TryRandomMod,
+    T::Bytes: zeroize::Zeroize,
+    M: ModulusParams<Modulus = T> + crate::traits::modular::CtModulusParams,
+    M::MontgomeryForm: Pow<M>
+        + PowBoundedExp<M>
+        + crate::traits::modular::InvertCt<M>
+        + crate::traits::modular::MulCt<M>,
+{
+    if k != (n_params.modulus().as_ref().bits() as usize).div_ceil(8) {
+        return Err(Error::InvalidArguments);
+    }
+    if sig_storage.len() < k {
+        return Err(Error::OutputBufferTooSmall);
+    }
+    let em_slice = pkcs1v15_sign_pad_into(prefix, hashed, k, em_storage)?;
+    let em = T::try_from_be_bytes_vartime(em_slice)?;
+    let s = crate::algorithms::rsa::rsa_private_op_and_check_blinded(rng, &em, d, e, n_params)?;
+    crate::algorithms::pad::uint_to_zeroizing_be_pad_into(s, k, sig_storage)
+}
+
 #[inline]
 pub(crate) fn pkcs1v15_sign_unpad(prefix: &[u8], hashed: &[u8], em: &[u8], k: usize) -> Result<()> {
     let hash_len = hashed.len();

@@ -11,7 +11,7 @@
 use super::pkcs1v15_generate_prefix;
 #[cfg(not(feature = "alloc"))]
 use super::{pkcs1v15_generate_prefix_helper, Prefix};
-use super::{sign_into, GenericVerifyingKey};
+use super::{sign_into, sign_with_rng_into, GenericVerifyingKey};
 use crate::{
     errors::Result,
     key::GenericRsaPrivateKey,
@@ -205,6 +205,75 @@ where
         }
         let k = self.inner.size();
         sign_into(
+            self.inner.n_params(),
+            crate::traits::keys::PrivateKeyParts::d(&self.inner),
+            self.inner.e(),
+            self.prefix.as_ref(),
+            prehash,
+            k,
+            em_storage,
+            sig_storage,
+        )
+    }
+}
+
+// RNG-taking blinded sign variants — mirror the deterministic pair
+// above but route through the blinded private op
+// (`rsa_private_op_and_check_blinded`), hiding `EM` from timing
+// analysis on `d`. Bounds add
+// `T: TryRandomMod` and `M::MontgomeryForm: InvertCt<M> + MulCt<M>`
+// — satisfied by both alloc (`BoxedUint`/`BoxedMontyParams`) and
+// modmath (`ModMathValue<T>` / `ModMathParams<T, Ct>`) backends.
+impl<D, T, M> GenericSigningKey<D, T, M>
+where
+    D: Digest,
+    T: UnsignedModularInt + Zeroize + crate::traits::modular::TryRandomMod,
+    T::Bytes: Zeroize,
+    M: ModulusParams<Modulus = T> + crate::traits::modular::CtModulusParams,
+    M::MontgomeryForm: Pow<M>
+        + PowBoundedExp<M>
+        + crate::traits::modular::InvertCt<M>
+        + crate::traits::modular::MulCt<M>,
+{
+    /// RNG-driven blinded variant of [`Self::try_sign_into`]. Uses
+    /// `rng` to sample the blinding factor per signature; hides `EM`
+    /// (the padded plaintext) from side-channel analysis on `d`.
+    pub fn try_sign_with_rng_into<'sig, R: rand_core::TryCryptoRng + ?Sized>(
+        &self,
+        rng: &mut R,
+        msg: &[u8],
+        em_storage: &mut [u8],
+        sig_storage: &'sig mut [u8],
+    ) -> Result<&'sig [u8]> {
+        let digest = D::digest(msg);
+        let k = self.inner.size();
+        sign_with_rng_into(
+            rng,
+            self.inner.n_params(),
+            crate::traits::keys::PrivateKeyParts::d(&self.inner),
+            self.inner.e(),
+            self.prefix.as_ref(),
+            digest.as_ref(),
+            k,
+            em_storage,
+            sig_storage,
+        )
+    }
+
+    /// RNG-driven blinded variant of [`Self::try_sign_prehash_into`].
+    pub fn try_sign_prehash_with_rng_into<'sig, R: rand_core::TryCryptoRng + ?Sized>(
+        &self,
+        rng: &mut R,
+        prehash: &[u8],
+        em_storage: &mut [u8],
+        sig_storage: &'sig mut [u8],
+    ) -> Result<&'sig [u8]> {
+        if prehash.len() != <D as Digest>::output_size() {
+            return Err(crate::errors::Error::InputNotHashed);
+        }
+        let k = self.inner.size();
+        sign_with_rng_into(
+            rng,
             self.inner.n_params(),
             crate::traits::keys::PrivateKeyParts::d(&self.inner),
             self.inner.e(),
