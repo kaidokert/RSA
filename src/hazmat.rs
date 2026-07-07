@@ -12,5 +12,5 @@
 //! received extensive peer review by cryptographers.
 
 pub use crate::algorithms::rsa::rsa_encrypt;
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 pub use crate::algorithms::rsa::{rsa_decrypt, rsa_decrypt_and_check};

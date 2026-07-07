@@ -26,19 +26,17 @@
 //!
 //! [RFC8017 § 8.2]: https://datatracker.ietf.org/doc/html/rfc8017#section-8.2
 
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 mod decrypting_key;
 mod encrypting_key;
-#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
 mod generic_signing_key;
 mod signature;
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 mod signing_key;
 mod verifying_key;
 
-#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
 pub use self::generic_signing_key::GenericSigningKey;
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 pub use self::{
     decrypting_key::DecryptingKey,
     encrypting_key::GenericEncryptingKey,
@@ -46,7 +44,7 @@ pub use self::{
     signing_key::SigningKey,
     verifying_key::GenericVerifyingKey,
 };
-#[cfg(not(feature = "private-key"))]
+#[cfg(not(feature = "alloc"))]
 pub use self::{
     encrypting_key::GenericEncryptingKey,
     signature::{GenericSignature, SignatureBytes},
@@ -69,12 +67,12 @@ use crate::algorithms::pad::uint_to_be_pad_into;
 #[cfg(feature = "alloc")]
 use crate::algorithms::pad::uint_to_zeroizing_be_pad;
 use crate::algorithms::pkcs1v15::*;
-#[cfg(not(feature = "private-key"))]
+#[cfg(not(feature = "alloc"))]
 use crate::algorithms::rsa::rsa_encrypt;
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 use crate::algorithms::rsa::{rsa_decrypt_and_check, rsa_encrypt};
 use crate::errors::{Error, Result};
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 use crate::key::{self, RsaPrivateKey};
 use crate::traits::{PaddingScheme, PublicKeyParts, SignatureScheme, UnsignedModularInt};
 
@@ -171,7 +169,7 @@ where
 }
 
 impl PaddingScheme for Pkcs1v15Encrypt {
-    #[cfg(feature = "private-key")]
+    #[cfg(feature = "alloc")]
     fn decrypt<Rng: TryCryptoRng + ?Sized>(
         self,
         rng: Option<&mut Rng>,
@@ -241,7 +239,7 @@ impl Pkcs1v15Sign {
 }
 
 impl SignatureScheme for Pkcs1v15Sign {
-    #[cfg(feature = "private-key")]
+    #[cfg(feature = "alloc")]
     fn sign<Rng: TryCryptoRng + ?Sized>(
         self,
         rng: Option<&mut Rng>,
@@ -312,7 +310,7 @@ where
 /// learn whether each instance returned an error then they can decrypt and
 /// forge signatures as if they had the private key. See
 /// `decrypt_session_key` for a way of solving this problem.
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 #[inline]
 fn decrypt<R: TryCryptoRng + ?Sized>(
     rng: Option<&mut R>,
@@ -341,7 +339,7 @@ fn decrypt<R: TryCryptoRng + ?Sized>(
 /// messages is small, an attacker may be able to build a map from
 /// messages to signatures and identify the signed messages. As ever,
 /// signatures provide authenticity, not confidentiality.
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 #[inline]
 fn sign<R: TryCryptoRng + ?Sized>(
     rng: Option<&mut R>,
@@ -421,7 +419,7 @@ mod oid {
 pub use oid::RsaSignatureAssociatedOid;
 
 #[cfg(test)]
-#[cfg(all(feature = "alloc", feature = "private-key"))]
+#[cfg(feature = "alloc")]
 mod tests {
     use super::*;
     use ::signature::{

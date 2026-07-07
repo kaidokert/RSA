@@ -308,7 +308,7 @@ where
 #[cfg(test)]
 mod tests {
     #[test]
-    #[cfg(all(feature = "hazmat", feature = "serde"))]
+    #[cfg(all(feature = "hazmat", feature = "serde", feature = "keygen"))]
     fn test_serde() {
         use super::*;
         use crate::RsaPrivateKey;

@@ -5,13 +5,13 @@
 [![Cortex-M](https://github.com/kaidokert/RSA/actions/workflows/cortex_m.yml/badge.svg)](https://github.com/kaidokert/RSA/actions/workflows/cortex_m.yml)
 [![RISC-V](https://github.com/kaidokert/RSA/actions/workflows/riscv.yml/badge.svg)](https://github.com/kaidokert/RSA/actions/workflows/riscv.yml)
 
-A microcontroller-friendly fork of the [RustCrypto RSA crate](https://github.com/RustCrypto/RSA). Public-key operations — PKCS#1 v1.5 verify, OAEP encrypt, PSS verify — are generic over the bigint backend, with a no-alloc path through [fixed-bigint](https://crates.io/crates/fixed-bigint) and [modmath](https://crates.io/crates/modmath) tested on 8-bit AVR, Cortex-M and RISC-V.
+A microcontroller-friendly fork of the [RustCrypto RSA crate](https://github.com/RustCrypto/RSA). RSA operations — PKCS#1 v1.5 verify and sign, PSS verify and sign, OAEP encrypt — are generic over the bigint backend, with a no-alloc path through [fixed-bigint](https://crates.io/crates/fixed-bigint) and [modmath](https://crates.io/crates/modmath) tested on 8-bit AVR, Cortex-M and RISC-V.
 
 #### Scope
 
-This is a proof of concept focused on shrinking code size and stack usage. Public-key only — verification and encryption — which covers the common embedded use cases (bootloader signature checks, key wrapping to a server).
+Focused on shrinking code size and stack usage. The heapless path covers public-key operations — PKCS#1 v1.5 verify, OAEP encrypt, PSS verify — and private-key signing (PKCS#1 v1.5 and PSS, the TLS 1.3 client-certificate algorithms). Signing runs constant-time in the private exponent via the `Ct`-personality modmath backend, with optional per-signature RSA base blinding (`try_sign_with_rng_into`) as defense in depth.
 
-Private-key operations (key generation, signing, decryption) are deliberately omitted from the heapless path on safety grounds: doing them correctly requires constant-time primitives, a trustworthy RNG, and secure key storage that the dependency stack doesn't yet provide. The full upstream behavior remains available via the `alloc` and `private-key` feature flags on a heap-allocating backend; license, MSRV, and security advisories there follow the upstream crate, preserved verbatim in [`UPSTREAM_README.md`](UPSTREAM_README.md).
+Key generation stays off the heapless path — it needs the heavy `crypto-primes` stack, and embedded keys arrive from a provisioning path (PEM/PKCS#8, HSM, firmware constants) rather than being generated on-device. It is available behind the `keygen` feature (on by default) on the heap-allocating backend. Decryption on the heapless path is out of scope. Full upstream behavior remains available via the `alloc` feature; license, MSRV, and security advisories there follow the upstream crate, preserved verbatim in [`UPSTREAM_README.md`](UPSTREAM_README.md).
 
 #### Resource usage (as of version 0.10.0-rc.18)
 

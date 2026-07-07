@@ -35,6 +35,7 @@ where
     D: Digest + AssociatedOid,
 {
     /// Generate a new signing key with a prefix for the digest `D`.
+    #[cfg(feature = "keygen")]
     pub fn random<R: CryptoRng + ?Sized>(rng: &mut R, bit_size: usize) -> Result<Self> {
         Ok(Self::new(RsaPrivateKey::new(rng, bit_size)?))
     }
@@ -45,6 +46,7 @@ where
     D: Digest,
 {
     /// Generate a new signing key with an empty prefix.
+    #[cfg(feature = "keygen")]
     pub fn random_unprefixed<R: CryptoRng + ?Sized>(rng: &mut R, bit_size: usize) -> Result<Self> {
         Ok(Self::new_unprefixed(RsaPrivateKey::new(rng, bit_size)?))
     }
@@ -286,7 +288,7 @@ where
 #[cfg(test)]
 mod tests {
     #[test]
-    #[cfg(all(feature = "hazmat", feature = "serde"))]
+    #[cfg(all(feature = "hazmat", feature = "serde", feature = "keygen"))]
     fn test_serde() {
         use super::*;
         use rand::rngs::ChaCha8Rng;

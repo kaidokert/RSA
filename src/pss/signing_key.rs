@@ -39,6 +39,7 @@ use {
 /// [RFC8017 § 8.1]: https://datatracker.ietf.org/doc/html/rfc8017#section-8.1
 pub type SigningKey<D> = GenericSigningKey<D, BoxedUint, BoxedMontyParams>;
 
+#[cfg(feature = "keygen")]
 impl<D> GenericSigningKey<D, BoxedUint, BoxedMontyParams>
 where
     D: Digest,
@@ -284,7 +285,7 @@ where
 #[cfg(test)]
 mod tests {
     #[test]
-    #[cfg(all(feature = "hazmat", feature = "serde"))]
+    #[cfg(all(feature = "hazmat", feature = "serde", feature = "keygen"))]
     fn test_serde() {
         use super::*;
         use rand::rngs::ChaCha8Rng;

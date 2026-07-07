@@ -268,10 +268,7 @@ where
 // construction. The heapless-build blanket on
 // `FixedWidthUnsignedInt + PartialOrd` doesn't reach `ModMathValue<T>`
 // (a newtype, not itself `FixedWidthUnsignedInt`), so impl it here.
-#[cfg(all(
-    feature = "alloc",
-    any(feature = "private-key", feature = "wip-private-key")
-))]
+#[cfg(feature = "alloc")]
 impl<T> crate::traits::keys::RawPrivateKeyConstructible for ModMathValue<T> where
     T: FixedWidthUnsignedInt + PartialOrd
 {
@@ -750,7 +747,7 @@ impl<T: ModMathIntCt + HasPersonality<P = Ct>> crate::traits::modular::CtModulus
 }
 
 #[cfg(test)]
-#[cfg(all(feature = "alloc", feature = "private-key"))]
+#[cfg(feature = "alloc")]
 mod tests {
     use const_num_traits::Ct;
     use fixed_bigint::FixedUInt;
@@ -932,11 +929,9 @@ mod tests {
 }
 
 // Tests for the `rsa_private_op` primitive on the heapless / Ct path.
-// Gated independently of the alloc+private-key block above so the
-// `wip-private-key` feature (which doesn't imply alloc) can compile
-// and run them in no_alloc mode.
+// Gated independently of the alloc block above so they compile and
+// run in no_alloc mode.
 #[cfg(test)]
-#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
 mod private_op_tests {
     use super::*;
     use const_num_traits::Ct;
@@ -1048,8 +1043,8 @@ mod private_op_tests {
         let mut rng = ChaCha8Rng::from_seed([42; 32]);
 
         // Stack-only sample buffer so this test compiles under
-        // `--no-default-features --features modmath,wip-private-key`
-        // (no `alloc`). Sixteen fixed-size samples.
+        // `--no-default-features --features modmath` (no `alloc`).
+        // Sixteen fixed-size samples.
         let mut samples = [ModMathValue::<SmallUCt>::from(0u8); 16];
         for slot in samples.iter_mut() {
             let r = ModMathValue::<SmallUCt>::try_random_mod(&mut rng, &n).unwrap();
@@ -1143,8 +1138,7 @@ mod private_op_tests {
 
     // 2048-bit RSA keypair fixture — same `(n, e=65537, d)` used in
     // `algorithms::rsa::tests::recover_primes_works`. Pulled in here so the
-    // heapless wip-private-key test path can roundtrip-sign without
-    // requiring `alloc`. `e` is rendered as 3-byte BE (`0x010001`) and
+    // heapless test path can roundtrip-sign without requiring `alloc`. `e` is rendered as 3-byte BE (`0x010001`) and
     // resized into `U2048` at test time.
     const N_2048: [u8; 256] = hex_literal::hex!(
         "d397b84d98a4c26138ed1b695a8106ead91d553bf06041b62d3fdc50a041e222

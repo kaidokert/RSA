@@ -23,19 +23,18 @@ use {
     spki::{DecodePublicKey, EncodePublicKey},
 };
 
-#[cfg(feature = "private-key")]
+#[cfg(feature = "keygen")]
 use crate::algorithms::generate::generate_multi_prime_key_with_exp;
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 use crate::algorithms::rsa::{
     compute_modulus, compute_private_exponent_carmicheal, compute_private_exponent_euler_totient,
     recover_primes,
 };
 
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 use crate::dummy_rng::DummyRng;
 use crate::errors::{Error, Result};
 use crate::traits::keys::PublicKeyParts;
-#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
 use crate::traits::keys::{PrivateKeyParts, RawPrivateKeyConstructible};
 use crate::traits::{
     modular::ModulusParams, NonZero, PaddingScheme, SignatureScheme, UnsignedModularInt,
@@ -101,7 +100,6 @@ where
 /// Holds the public components plus the secret exponent `d`. The raw
 /// `(n, e, d)` form: `primes`, `precomputed` CRT values, and keygen are
 /// alloc-gated and absent on the heapless path.
-#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
 pub struct GenericRsaPrivateKey<T, M>
 where
     T: UnsignedModularInt + Zeroize,
@@ -116,15 +114,15 @@ where
     #[cfg(feature = "alloc")]
     pub(crate) primes: alloc::vec::Vec<T>,
     /// Precomputed CRT values, when available; `None` on the raw path.
-    #[cfg(feature = "private-key")]
+    #[cfg(feature = "alloc")]
     pub(crate) precomputed: Option<PrecomputedValues<T, M>>,
 }
 
 // Manual `Clone`: the `M::MontgomeryForm: Clone` bound is only needed
-// when the `precomputed` field exists (private-key on). Keep it off the
-// wip-private-key variant so backends without a `Clone` MontgomeryForm
+// when the `precomputed` field exists (alloc on). Keep it off the
+// no-alloc variant so backends without a `Clone` MontgomeryForm
 // still build.
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 impl<T, M> Clone for GenericRsaPrivateKey<T, M>
 where
     T: UnsignedModularInt + Zeroize + Clone,
@@ -141,7 +139,7 @@ where
     }
 }
 
-#[cfg(all(feature = "wip-private-key", not(feature = "private-key")))]
+#[cfg(not(feature = "alloc"))]
 impl<T, M> Clone for GenericRsaPrivateKey<T, M>
 where
     T: UnsignedModularInt + Zeroize + Clone,
@@ -158,7 +156,6 @@ where
 }
 
 // Manual `Debug` — never print `d`, so `{:?}` can't leak private material.
-#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
 impl<T, M> fmt::Debug for GenericRsaPrivateKey<T, M>
 where
     T: UnsignedModularInt + Zeroize,
@@ -178,7 +175,6 @@ where
 // unreachable on the `RsaPrivateKey` alias. Alloc callers must use the
 // validated `from_components` / `from_p_q` / `from_primes` paths so empty
 // `primes` can't leak into CRT-aware APIs as a `primes[0]` panic.
-#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
 impl<T, M> GenericRsaPrivateKey<T, M>
 where
     T: UnsignedModularInt + Zeroize + RawPrivateKeyConstructible,
@@ -194,13 +190,12 @@ where
             d,
             #[cfg(feature = "alloc")]
             primes: alloc::vec::Vec::new(),
-            #[cfg(feature = "private-key")]
+            #[cfg(feature = "alloc")]
             precomputed: None,
         }
     }
 }
 
-#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
 impl<T, M> GenericRsaPrivateKey<T, M>
 where
     T: UnsignedModularInt + Zeroize,
@@ -212,7 +207,6 @@ where
     }
 }
 
-#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
 impl<T, M> PublicKeyParts<T> for GenericRsaPrivateKey<T, M>
 where
     T: UnsignedModularInt + Zeroize,
@@ -233,7 +227,6 @@ where
     }
 }
 
-#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
 impl<T, M> PrivateKeyParts<T> for GenericRsaPrivateKey<T, M>
 where
     T: UnsignedModularInt + Zeroize,
@@ -244,32 +237,32 @@ where
     }
 
     // Gate matches the `primes` field (`cfg(alloc)`).
-    #[cfg(all(feature = "private-key", feature = "alloc"))]
+    #[cfg(feature = "alloc")]
     fn primes(&self) -> &[T] {
         &self.primes
     }
 
-    #[cfg(feature = "private-key")]
+    #[cfg(feature = "alloc")]
     fn dp(&self) -> Option<&T> {
         self.precomputed.as_ref().map(|p| &p.dp)
     }
 
-    #[cfg(feature = "private-key")]
+    #[cfg(feature = "alloc")]
     fn dq(&self) -> Option<&T> {
         self.precomputed.as_ref().map(|p| &p.dq)
     }
 
-    #[cfg(feature = "private-key")]
+    #[cfg(feature = "alloc")]
     fn qinv(&self) -> Option<&<Self::MontyParams as ModulusParams>::MontgomeryForm> {
         self.precomputed.as_ref().map(|p| &p.qinv)
     }
 
-    #[cfg(feature = "private-key")]
+    #[cfg(feature = "alloc")]
     fn p_params(&self) -> Option<&Self::MontyParams> {
         self.precomputed.as_ref().map(|p| &p.p_params)
     }
 
-    #[cfg(feature = "private-key")]
+    #[cfg(feature = "alloc")]
     fn q_params(&self) -> Option<&Self::MontyParams> {
         self.precomputed.as_ref().map(|p| &p.q_params)
     }
@@ -277,7 +270,6 @@ where
 
 // `Zeroize` on the type; `Drop` delegates so the wipe lives in one place.
 // Only `d` (and CRT precompute) is secret — the pubkey is public.
-#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
 impl<T, M> Zeroize for GenericRsaPrivateKey<T, M>
 where
     T: UnsignedModularInt + Zeroize,
@@ -287,12 +279,11 @@ where
         self.d.zeroize();
         #[cfg(feature = "alloc")]
         self.primes.zeroize();
-        #[cfg(feature = "private-key")]
+        #[cfg(feature = "alloc")]
         self.precomputed.zeroize();
     }
 }
 
-#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
 impl<T, M> Drop for GenericRsaPrivateKey<T, M>
 where
     T: UnsignedModularInt + Zeroize,
@@ -303,7 +294,6 @@ where
     }
 }
 
-#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
 impl<T, M> ZeroizeOnDrop for GenericRsaPrivateKey<T, M>
 where
     T: UnsignedModularInt + Zeroize,
@@ -323,15 +313,15 @@ where
 ///     let _: RsaPrivateKey = RsaPrivateKey::from_public_and_d(pub_key, d);
 /// }
 /// ```
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 pub type RsaPrivateKey = GenericRsaPrivateKey<BoxedUint, BoxedMontyParams>;
 
 // `Debug`, `Drop`, `ZeroizeOnDrop`, `PublicKeyParts` come from the generic
 // impls above via the alias.
 
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 impl Eq for RsaPrivateKey {}
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 impl PartialEq for RsaPrivateKey {
     #[inline]
     fn eq(&self, other: &RsaPrivateKey) -> bool {
@@ -341,14 +331,14 @@ impl PartialEq for RsaPrivateKey {
     }
 }
 
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 impl AsRef<RsaPublicKey> for RsaPrivateKey {
     fn as_ref(&self) -> &RsaPublicKey {
         &self.pubkey_components
     }
 }
 
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 impl Hash for RsaPrivateKey {
     fn hash<H: Hasher>(&self, state: &mut H) {
         // Domain separator for RSA private keys
@@ -357,7 +347,7 @@ impl Hash for RsaPrivateKey {
     }
 }
 
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 pub(crate) struct PrecomputedValues<T, M>
 where
     T: UnsignedModularInt,
@@ -378,7 +368,7 @@ where
 
 // Manual `Clone` — `#[derive]` wouldn't add the `M::MontgomeryForm: Clone`
 // bound, only `T: Clone` / `M: Clone`.
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 impl<T, M> Clone for PrecomputedValues<T, M>
 where
     T: UnsignedModularInt + Clone,
@@ -396,7 +386,7 @@ where
     }
 }
 
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 impl<T, M> ZeroizeOnDrop for PrecomputedValues<T, M>
 where
     T: UnsignedModularInt,
@@ -404,7 +394,7 @@ where
 {
 }
 
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 impl<T, M> Zeroize for PrecomputedValues<T, M>
 where
     T: UnsignedModularInt + Zeroize,
@@ -425,7 +415,7 @@ where
 // Drop-check requires the bounds match the struct exactly. `T:
 // UnsignedModularInt` already implies `Zeroize` (via `FixedWidthUnsignedInt`),
 // so `self.zeroize()` resolves here.
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 impl<T, M> Drop for PrecomputedValues<T, M>
 where
     T: UnsignedModularInt,
@@ -436,14 +426,14 @@ where
     }
 }
 
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 impl From<RsaPrivateKey> for GenericRsaPublicKey<BoxedUint, BoxedMontyParams> {
     fn from(private_key: RsaPrivateKey) -> Self {
         (&private_key).into()
     }
 }
 
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 impl From<&RsaPrivateKey> for GenericRsaPublicKey<BoxedUint, BoxedMontyParams> {
     fn from(private_key: &RsaPrivateKey) -> Self {
         let public_key: &dyn PublicKeyParts<BoxedUint, MontyParams = BoxedMontyParams> =
@@ -583,7 +573,7 @@ impl GenericRsaPublicKey<BoxedUint, BoxedMontyParams> {
     }
 }
 
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
     /// Default exponent for RSA keys.
     const EXP: u64 = 65537;
@@ -595,6 +585,7 @@ impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
     ///
     /// # Errors
     /// - If `bit_size` is lower than the minimum 1024-bits.
+    #[cfg(feature = "keygen")]
     pub fn new<R: CryptoRng + ?Sized>(rng: &mut R, bit_size: usize) -> Result<Self> {
         Self::new_with_exp(rng, bit_size, Self::EXP.into())
     }
@@ -604,7 +595,7 @@ impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
     /// #⚠️Warning: Hazmat!
     /// This version does not apply minimum key size checks, and as such may generate keys
     /// which are insecure!
-    #[cfg(feature = "hazmat")]
+    #[cfg(all(feature = "hazmat", feature = "keygen"))]
     pub fn new_unchecked<R: CryptoRng + ?Sized>(rng: &mut R, bit_size: usize) -> Result<Self> {
         Self::new_with_exp_unchecked(rng, bit_size, Self::EXP.into())
     }
@@ -613,6 +604,7 @@ impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
     /// using the passed in `rng`.
     ///
     /// Unless you have specific needs, you should use [`RsaPrivateKey::new`] instead.
+    #[cfg(feature = "keygen")]
     pub fn new_with_exp<R: CryptoRng + ?Sized>(
         rng: &mut R,
         bit_size: usize,
@@ -639,7 +631,7 @@ impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
     /// #⚠️Warning: Hazmat!
     /// This version does not apply minimum key size checks, and as such may generate keys
     /// which are insecure!
-    #[cfg(feature = "hazmat")]
+    #[cfg(all(feature = "hazmat", feature = "keygen"))]
     pub fn new_with_exp_unchecked<R: CryptoRng + ?Sized>(
         rng: &mut R,
         bit_size: usize,
@@ -746,7 +738,7 @@ impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
     /// This is intended for interoperating with systems that use non-standard exponents
     /// or loading legacy keys. Use [`RsaPrivateKey::from_components`] for standard key
     /// construction.
-    #[cfg(all(feature = "hazmat", feature = "private-key"))]
+    #[cfg(all(feature = "hazmat", feature = "alloc"))]
     pub fn from_components_with_large_exponent(
         n: BoxedUint,
         e: BoxedUint,
@@ -1037,7 +1029,7 @@ fn check_public_skip_exponent_size(n: &BoxedUint, e: &BoxedUint) -> Result<()> {
 ///
 /// This performs the structural and mathematical validation checks that are common to both
 /// `validate()` and `validate_skip_exponent_size()`.
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 fn validate_private_key_parts(key: &RsaPrivateKey) -> Result<()> {
     // Check that Πprimes == n.
     let mut m = BoxedUint::one_with_precision(key.pubkey_components.n.bits_precision());
@@ -1076,7 +1068,7 @@ fn validate_private_key_parts(key: &RsaPrivateKey) -> Result<()> {
 ///
 /// This performs all the same checks as `RsaPrivateKey::validate()` except
 /// it doesn't verify that the exponent is within the standard bounds.
-#[cfg(all(feature = "hazmat", feature = "private-key"))]
+#[cfg(all(feature = "hazmat", feature = "alloc"))]
 fn validate_skip_exponent_size(key: &RsaPrivateKey) -> Result<()> {
     // Check public key properties (without exponent size checks)
     check_public_skip_exponent_size(key.pubkey_components.n.as_ref(), &key.pubkey_components.e)?;
@@ -1132,7 +1124,7 @@ impl<'de> Deserialize<'de> for RsaPrivateKey {
 }
 
 #[cfg(test)]
-#[cfg(all(feature = "alloc", feature = "private-key"))]
+#[cfg(feature = "alloc")]
 mod tests {
     use super::*;
     use crate::algorithms::rsa::{rsa_decrypt_and_check, rsa_encrypt};
@@ -1191,7 +1183,7 @@ mod tests {
 
     macro_rules! key_generation {
         ($name:ident, $multi:expr, $size:expr) => {
-            #[cfg(feature = "private-key")]
+            #[cfg(feature = "keygen")]
             #[test]
             fn $name() {
                 let mut rng = ChaCha8Rng::from_seed([42; 32]);
@@ -1212,11 +1204,6 @@ mod tests {
 
                     test_key_basics(&private_key);
                 }
-            }
-            #[cfg(not(feature = "private-key"))]
-            #[test]
-            fn $name() {
-                todo!("generate_multi_prime_key_with_exp is not implemented yet");
             }
         };
     }
@@ -1264,7 +1251,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(all(feature = "hazmat", feature = "serde"))]
+    #[cfg(all(feature = "hazmat", feature = "serde", feature = "keygen"))]
     fn test_serde() {
         use rand::rngs::ChaCha8Rng;
         use rand_core::SeedableRng;
@@ -1505,7 +1492,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "hazmat")]
+    #[cfg(all(feature = "hazmat", feature = "keygen"))]
     fn test_from_components_with_large_exponent() {
         // Test that from_components_with_large_exponent accepts exponents outside normal bounds
         // while from_components would reject them
@@ -1553,7 +1540,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "hazmat")]
+    #[cfg(all(feature = "hazmat", feature = "keygen"))]
     fn test_from_components_with_small_exponent() {
         // Test that from_components_with_large_exponent accepts exponents below normal minimum
         // (despite the name, it works for any non-standard exponent size)

@@ -13,16 +13,12 @@ use crate::traits::{modular::ModulusParams, NonZero, UnsignedModularInt};
 /// **Not impl'd for [`BoxedUint`]**: alloc callers must use the validated
 /// `RsaPrivateKey::from_components` / `from_p_q` / `from_primes` paths, so
 /// empty `primes` can't leak into CRT-aware APIs as a `primes[0]` panic.
-#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
 pub trait RawPrivateKeyConstructible: UnsignedModularInt {}
 
 // Heapless build: `FixedWidthUnsignedInt + PartialOrd` matches the
 // `UnsignedModularInt` blanket and gets the marker for free. `BoxedUint`
 // isn't `Copy`, so it can't satisfy `FixedWidthUnsignedInt`.
-#[cfg(all(
-    any(feature = "private-key", feature = "wip-private-key"),
-    not(feature = "alloc")
-))]
+#[cfg(not(feature = "alloc"))]
 impl<T> RawPrivateKeyConstructible for T where
     T: crate::traits::modular::FixedWidthUnsignedInt + PartialOrd
 {
@@ -73,7 +69,6 @@ pub trait PublicKeyParts<T: UnsignedModularInt> {
 /// `p_params`/`q_params`) are `private-key`-gated to the alloc path and
 /// default to `None`, so a key without CRT precompute satisfies the trait
 /// with just `d()`.
-#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
 pub trait PrivateKeyParts<T>: PublicKeyParts<T>
 where
     T: UnsignedModularInt,
@@ -83,38 +78,38 @@ where
 
     /// Returns the prime factors of the modulus. Returns `&[]` for keys
     /// that don't store factors (the heapless default).
-    #[cfg(feature = "private-key")]
+    #[cfg(feature = "alloc")]
     fn primes(&self) -> &[T] {
         &[]
     }
 
     /// Returns the precomputed `dp = d mod (p - 1)` value, if available.
     /// `None` for keys that didn't precompute CRT (the heapless default).
-    #[cfg(feature = "private-key")]
+    #[cfg(feature = "alloc")]
     fn dp(&self) -> Option<&T> {
         None
     }
 
     /// Returns the precomputed `dq = d mod (q - 1)` value, if available.
-    #[cfg(feature = "private-key")]
+    #[cfg(feature = "alloc")]
     fn dq(&self) -> Option<&T> {
         None
     }
 
     /// Returns the precomputed `qinv = q^-1 mod p` value, if available.
-    #[cfg(feature = "private-key")]
+    #[cfg(feature = "alloc")]
     fn qinv(&self) -> Option<&<Self::MontyParams as ModulusParams>::MontgomeryForm> {
         None
     }
 
     /// Returns the Montgomery parameters for `p`, if available.
-    #[cfg(feature = "private-key")]
+    #[cfg(feature = "alloc")]
     fn p_params(&self) -> Option<&Self::MontyParams> {
         None
     }
 
     /// Returns the Montgomery parameters for `q`, if available.
-    #[cfg(feature = "private-key")]
+    #[cfg(feature = "alloc")]
     fn q_params(&self) -> Option<&Self::MontyParams> {
         None
     }
