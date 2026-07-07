@@ -26,15 +26,17 @@
 //!
 //! [RFC8017 § 8.2]: https://datatracker.ietf.org/doc/html/rfc8017#section-8.2
 
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 mod decrypting_key;
 mod encrypting_key;
+mod generic_signing_key;
 mod signature;
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 mod signing_key;
 mod verifying_key;
 
-#[cfg(feature = "private-key")]
+pub use self::generic_signing_key::GenericSigningKey;
+#[cfg(feature = "alloc")]
 pub use self::{
     decrypting_key::DecryptingKey,
     encrypting_key::GenericEncryptingKey,
@@ -42,7 +44,7 @@ pub use self::{
     signing_key::SigningKey,
     verifying_key::GenericVerifyingKey,
 };
-#[cfg(not(feature = "private-key"))]
+#[cfg(not(feature = "alloc"))]
 pub use self::{
     encrypting_key::GenericEncryptingKey,
     signature::{GenericSignature, SignatureBytes},
@@ -65,12 +67,12 @@ use crate::algorithms::pad::uint_to_be_pad_into;
 #[cfg(feature = "alloc")]
 use crate::algorithms::pad::uint_to_zeroizing_be_pad;
 use crate::algorithms::pkcs1v15::*;
-#[cfg(not(feature = "private-key"))]
+#[cfg(not(feature = "alloc"))]
 use crate::algorithms::rsa::rsa_encrypt;
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 use crate::algorithms::rsa::{rsa_decrypt_and_check, rsa_encrypt};
 use crate::errors::{Error, Result};
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 use crate::key::{self, RsaPrivateKey};
 use crate::traits::{PaddingScheme, PublicKeyParts, SignatureScheme, UnsignedModularInt};
 
@@ -93,6 +95,7 @@ impl Pkcs1v15Encrypt {
         R: TryCryptoRng + ?Sized,
         T: UnsignedModularInt,
         K: PublicKeyParts<T>,
+        K::MontyParams: crate::traits::modular::CtModulusParams,
     {
         let padded_len = pub_key.size();
         let em = pkcs1v15_encrypt_pad_into(rng, msg, padded_len, storage)?;
@@ -112,6 +115,7 @@ fn encrypt<R: TryCryptoRng + ?Sized, K, T>(rng: &mut R, pub_key: &K, msg: &[u8])
 where
     T: UnsignedModularInt,
     K: PublicKeyParts<T>,
+    K::MontyParams: crate::traits::modular::CtModulusParams,
 {
     let mut storage = vec![0u8; pub_key.size()];
     let ciphertext = Pkcs1v15Encrypt.encrypt_into(rng, pub_key, msg, &mut storage)?;
@@ -165,7 +169,7 @@ where
 }
 
 impl PaddingScheme for Pkcs1v15Encrypt {
-    #[cfg(feature = "private-key")]
+    #[cfg(feature = "alloc")]
     fn decrypt<Rng: TryCryptoRng + ?Sized>(
         self,
         rng: Option<&mut Rng>,
@@ -181,6 +185,7 @@ impl PaddingScheme for Pkcs1v15Encrypt {
         Rng: TryCryptoRng + ?Sized,
         T: UnsignedModularInt,
         K: PublicKeyParts<T>,
+        K::MontyParams: crate::traits::modular::CtModulusParams,
     {
         let mut storage = vec![0u8; pub_key.size()];
         let ciphertext = self.encrypt_into(rng, pub_key, msg, &mut storage)?;
@@ -234,7 +239,7 @@ impl Pkcs1v15Sign {
 }
 
 impl SignatureScheme for Pkcs1v15Sign {
-    #[cfg(feature = "private-key")]
+    #[cfg(feature = "alloc")]
     fn sign<Rng: TryCryptoRng + ?Sized>(
         self,
         rng: Option<&mut Rng>,
@@ -291,6 +296,7 @@ where
     R: TryCryptoRng + ?Sized,
     T: UnsignedModularInt,
     K: PublicKeyParts<T>,
+    K::MontyParams: crate::traits::modular::CtModulusParams,
 {
     Pkcs1v15Encrypt.encrypt_into(rng, pub_key, msg, storage)
 }
@@ -304,7 +310,7 @@ where
 /// learn whether each instance returned an error then they can decrypt and
 /// forge signatures as if they had the private key. See
 /// `decrypt_session_key` for a way of solving this problem.
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 #[inline]
 fn decrypt<R: TryCryptoRng + ?Sized>(
     rng: Option<&mut R>,
@@ -333,7 +339,7 @@ fn decrypt<R: TryCryptoRng + ?Sized>(
 /// messages is small, an attacker may be able to build a map from
 /// messages to signatures and identify the signed messages. As ever,
 /// signatures provide authenticity, not confidentiality.
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 #[inline]
 fn sign<R: TryCryptoRng + ?Sized>(
     rng: Option<&mut R>,
@@ -413,7 +419,7 @@ mod oid {
 pub use oid::RsaSignatureAssociatedOid;
 
 #[cfg(test)]
-#[cfg(all(feature = "alloc", feature = "private-key"))]
+#[cfg(feature = "alloc")]
 mod tests {
     use super::*;
     use ::signature::{

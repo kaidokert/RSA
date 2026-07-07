@@ -5,6 +5,10 @@ use core::borrow::Borrow;
 
 #[cfg(feature = "alloc")]
 use alloc::boxed::Box;
+use const_num_traits::PrimBits;
+#[cfg(not(feature = "modmath"))]
+use const_num_traits::PrimInt;
+use const_num_traits::{FromBytes as NumFromBytes, ToBytes as NumToBytes, Zero};
 #[cfg(feature = "alloc")]
 use crypto_bigint::{
     modular::{BoxedMontyForm, BoxedMontyParams},
@@ -12,11 +16,6 @@ use crypto_bigint::{
 };
 #[cfg(feature = "alloc")]
 use crypto_bigint::{NonZero as CryptoNonZero, Odd as CryptoOdd};
-#[cfg(feature = "modmath")]
-use fixed_bigint::ConstBitPrimInt;
-#[cfg(not(feature = "modmath"))]
-use num_traits::PrimInt;
-use num_traits::{FromBytes as NumFromBytes, ToBytes as NumToBytes, Zero};
 use zeroize::Zeroize;
 
 use crate::errors::{Error, Result};
@@ -52,18 +51,18 @@ pub trait FixedWidthUnsignedInt: Zeroize + Clone + Copy {
 #[cfg(feature = "modmath")]
 impl<T> FixedWidthUnsignedInt for T
 where
-    T: Zeroize + Clone + Copy + ConstBitPrimInt + Zero + NumToBytes + NumFromBytes,
+    T: Zeroize + Clone + Copy + PrimBits + Zero + NumToBytes + NumFromBytes,
     T: NumToBytes<Bytes = <T as NumFromBytes>::Bytes>,
     <T as NumToBytes>::Bytes: NumBytes + Default + AsMut<[u8]>,
 {
     type Bytes = <T as NumToBytes>::Bytes;
 
     fn leading_zeros(&self) -> u32 {
-        ConstBitPrimInt::leading_zeros(*self)
+        PrimBits::leading_zeros(*self)
     }
 
     fn to_be_bytes(&self) -> Self::Bytes {
-        NumToBytes::to_be_bytes(self)
+        NumToBytes::to_be_bytes(*self)
     }
 
     fn try_from_be_bytes_vartime(bytes: &[u8]) -> Result<Self> {
@@ -78,7 +77,7 @@ where
     }
 
     fn bits_precision(&self) -> u32 {
-        ConstBitPrimInt::count_zeros(<T as Zero>::zero())
+        PrimBits::count_zeros(<T as Zero>::zero())
     }
 }
 
@@ -92,11 +91,11 @@ where
     type Bytes = <T as NumToBytes>::Bytes;
 
     fn leading_zeros(&self) -> u32 {
-        PrimInt::leading_zeros(*self)
+        PrimBits::leading_zeros(*self)
     }
 
     fn to_be_bytes(&self) -> Self::Bytes {
-        NumToBytes::to_be_bytes(self)
+        NumToBytes::to_be_bytes(*self)
     }
 
     fn try_from_be_bytes_vartime(bytes: &[u8]) -> Result<Self> {
@@ -340,12 +339,128 @@ impl Pow<BoxedMontyParams> for BoxedMontyForm {
     }
 }
 
+/// Constant-time multiplicative inverse in Montgomery form.
+///
+/// Returns `Some(self⁻¹ mod n)` when the value is coprime to the
+/// modulus; `None` means no inverse exists (`gcd(self, n) != 1`).
+/// Non-coprimality is astronomically rare when `self` came from a
+/// fresh random against RSA `n = p·q`, but real — retry with a fresh
+/// random a small constant number of times.
+///
+/// Used by the sign-path blinding
+/// (`crate::algorithms::rsa::rsa_private_op_blinded` — plain code
+/// span because the target is feature-gated and an intra-doc link
+/// would break `cargo doc --no-default-features`).
+pub trait InvertCt<M: ModulusParams>: Sized {
+    fn invert_ct(&self) -> Option<Self>;
+}
+
+#[cfg(feature = "alloc")]
+impl InvertCt<BoxedMontyParams> for BoxedMontyForm {
+    fn invert_ct(&self) -> Option<Self> {
+        self.invert().into_option()
+    }
+}
+
+/// Constant-time multiplication in Montgomery form.
+///
+/// The Montgomery form's native multiplication — CT on both supported
+/// backends (`BoxedMontyForm`'s `Mul` via crypto-bigint,
+/// `ModMathForm<T, Ct>`'s `Field::mul` via modmath's CIOS-Ct).
+///
+/// Both operands must share the same `ModulusParams` instance
+/// (invariant: same modulus / same Montgomery R). Not type-checked;
+/// impls may `debug_assert` it.
+pub trait MulCt<M: ModulusParams>: Sized {
+    fn mul_ct(&self, rhs: &Self) -> Self;
+}
+
+#[cfg(feature = "alloc")]
+impl MulCt<BoxedMontyParams> for BoxedMontyForm {
+    fn mul_ct(&self, rhs: &Self) -> Self {
+        self * rhs
+    }
+}
+
+/// Sample a uniform random value in `[0, modulus)` from a CSPRNG.
+///
+/// Rejection-sampled, so vartime — but only in the retry count, which
+/// depends on the modulus, not on the returned value (rejected
+/// candidates are discarded and never reach the caller). An n-bit
+/// modulus has its top bit set by definition, so acceptance is ≥ 50%.
+///
+/// Used to sample the blinding factor `r` in
+/// `crate::algorithms::rsa::rsa_private_op_and_check_blinded`.
+pub trait TryRandomMod: Sized {
+    fn try_random_mod<R>(rng: &mut R, modulus: &Self) -> Result<Self>
+    where
+        R: rand_core::TryCryptoRng + ?Sized;
+}
+
+#[cfg(feature = "alloc")]
+impl TryRandomMod for BoxedUint {
+    fn try_random_mod<R>(rng: &mut R, modulus: &Self) -> Result<Self>
+    where
+        R: rand_core::TryCryptoRng + ?Sized,
+    {
+        let nz = CryptoNonZero::new(modulus.clone())
+            .into_option()
+            .ok_or(Error::InvalidModulus)?;
+        <Self as crypto_bigint::RandomMod>::try_random_mod_vartime(rng, &nz).map_err(|_| Error::Rng)
+    }
+}
+
 pub trait ModulusParams: Sized {
     type Modulus: UnsignedModularInt;
     type MontgomeryForm: IntoMontyForm<Self> + PowBoundedExp<Self>;
     fn modulus(&self) -> &Odd<Self::Modulus>;
     fn bits_precision(&self) -> u32;
 }
+
+pub(crate) mod sealed {
+    /// Prevents external crates from implementing
+    /// [`super::CtModulusParams`] on backends we haven't audited —
+    /// see the security note on that trait.
+    pub trait CtModulusParamsSealed {}
+}
+
+/// Marker trait for [`ModulusParams`] backends whose Montgomery
+/// exponentiation itself is constant-time in the base value.
+///
+/// Bound the public-key encryption path on this so plaintext (which
+/// **is** secret) can't be routed through a vartime `pow_bounded_exp`.
+/// Signature verification stays unbounded — the "base" there is the
+/// public signature, so vartime is fine.
+///
+/// The trait is sealed — only backends impl'd by this crate can opt
+/// in. Downstream crates cannot claim the guarantee for their own
+/// backends without inviting the exact side-channel this bound is
+/// meant to keep out.
+///
+/// # Backends
+///
+/// - Under `feature = "alloc"`, `crypto_bigint::modular::BoxedMontyParams`
+///   opts in. Its `BoxedMontyForm::pow_bounded_exp` is CT in the
+///   base. **Caveat:** the pre-exponentiation conversion (see
+///   `IntoMontyForm::from_value` for `BoxedMontyForm`) still uses a
+///   vartime reduction (`BoxedUint::rem_vartime`) inherited from
+///   upstream `RustCrypto/RSA`. Callers requiring rigorous CT
+///   guarantees over the whole encrypt chain should use the no-alloc
+///   modmath backend at the `Ct` personality (below). The alloc
+///   impl is included primarily for API-surface compatibility with
+///   upstream and to keep the default alloc encrypt path functional.
+/// - Under `feature = "modmath"`, `ModMathParams<T, Ct>` opts in —
+///   the no-alloc CT-personality substitution, honestly CT top to
+///   bottom.
+/// - `ModMathParams<T, Nct>` **deliberately does not** opt in;
+///   `NctPublicKey`-derived encrypting keys fail the encrypt trait
+///   bound at compile time.
+pub trait CtModulusParams: ModulusParams + sealed::CtModulusParamsSealed {}
+
+#[cfg(feature = "alloc")]
+impl sealed::CtModulusParamsSealed for BoxedMontyParams {}
+#[cfg(feature = "alloc")]
+impl CtModulusParams for BoxedMontyParams {}
 
 #[cfg(feature = "alloc")]
 impl ModulusParams for BoxedMontyParams {

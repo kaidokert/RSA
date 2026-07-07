@@ -1,6 +1,6 @@
 [package]
 name = "rsa_heapless"
-version = "0.2.1"
+version = "0.3.0"
 authors = ["RustCrypto Developers", "dignifiedquire <dignifiedquire@gmail.com>", "kaidokert@gmail.com"]
 edition = "2021"
 description = "Pure Rust RSA implementation - heapless fork"
@@ -11,7 +11,7 @@ keywords = ["rsa", "encryption", "security", "crypto", "no_std"]
 categories = ["cryptography", "no-std", "no-std::no-alloc"]
 readme = "README.md"
 rust-version = "1.87"
-exclude = ["marvin_toolkit/", "thirdparty/"]
+exclude = ["marvin-toolkit/", "thirdparty/"]
 
 [lib]
 name = "rsa"
@@ -24,7 +24,7 @@ rand_core = { version = "0.10", default-features = false }
 signature = { version = "3", default-features = false, features = ["digest", "rand_core"] }
 zeroize = { version = "1.8", default-features = false }
 ctutils = { version = "0.4", default-features = false }
-num-traits = { version = "0.2", default-features = false }
+const-num-traits = { version = "0.1.2", default-features = false }
 
 # optional dependencies
 crypto-common = { version = "0.2", optional = true, features = ["getrandom"] }
@@ -38,8 +38,8 @@ serde = { version = "1.0.184", optional = true, default-features = false, featur
 
 # Big integer backend
 crypto-bigint = { version = "0.7.1", optional = true, default-features = false, features = ["zeroize","rand_core"] }
-modmath = { version = "0.3.0", optional = true, default-features = false, features = ["wide-mul", "zeroize"] }
-fixed-bigint = { version = "0.3.0", optional = true, default-features = false, features = ["zeroize", "use-unsafe"] }
+modmath = { version = "0.4.1", optional = true, default-features = false, features = ["zeroize"] }
+modmath-cios = { version = "0.1.0", optional = true, default-features = false }
 subtle = { version = "2.6", default-features = false }
 heapless = "0.9"
 
@@ -58,7 +58,7 @@ serde_json = "1.0.138"
 serde = { version = "1.0.184", features = ["derive"] }
 rstest = "0.26.1"
 crypto-bigint = { version = "0.7", default-features = false, features = ["zeroize", "alloc"] }
-fixed-bigint = { version = "0.3.0", default-features = false, features = ["zeroize", "use-unsafe"] }
+fixed-bigint = { version = "0.4.1", default-features = false, features = ["zeroize", "use-unsafe", "cios"] }
 
 [[bench]]
 name = "key"
@@ -83,8 +83,8 @@ name = "rsa_decrypt"
 required-features = ["modmath", "alloc"]
 
 [features]
-default = ["std", "encoding", "modmath"]
-encoding = ["alloc", "private-key", "dep:pkcs1", "dep:pkcs8", "dep:spki"]
+default = ["std", "encoding", "modmath", "keygen"]
+encoding = ["alloc", "dep:pkcs1", "dep:pkcs8", "dep:spki"]
 hazmat = []
 getrandom = ["dep:crypto-bigint", "crypto-bigint/getrandom", "crypto-common"]
 serde = ["encoding", "dep:serde", "dep:serdect", "dep:crypto-bigint", "crypto-bigint/serde"]
@@ -92,9 +92,12 @@ pkcs5 = ["pkcs8/encryption"]
 std = ["alloc", "pkcs1?/std", "pkcs8?/std"]
 alloc = ["dep:crypto-bigint", "crypto-bigint/alloc", "pkcs8/alloc", "spki/alloc", "digest/alloc", "signature/alloc", "zeroize/alloc"]
 
-# Enable private key support, doesn't work with no-alloc
-private-key = ["alloc", "dep:crypto-primes"]
-modmath = ["dep:modmath", "dep:fixed-bigint"]
+# On-device key generation (`RsaPrivateKey::new` and friends). Pulls the
+# heavy `crypto-primes` stack; never available on the no-alloc path —
+# heapless targets get keys from a provisioning path (PEM/HSM/firmware
+# constants), not generated on-device.
+keygen = ["alloc", "dep:crypto-primes"]
+modmath = ["dep:modmath", "dep:modmath-cios"]
 
 [package.metadata.docs.rs]
 features = ["std", "serde", "hazmat", "sha2"]

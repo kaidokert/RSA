@@ -2,14 +2,27 @@
 
 #[cfg(feature = "alloc")]
 use alloc::boxed::Box;
-#[cfg(feature = "private-key")]
-use crypto_bigint::{
-    modular::{BoxedMontyForm, BoxedMontyParams},
-    BoxedUint,
-};
-use zeroize::Zeroize;
 
 use crate::traits::{modular::ModulusParams, NonZero, UnsignedModularInt};
+
+/// Marker trait gating the raw `(public_key, d)` constructor
+/// [`crate::key::GenericRsaPrivateKey::from_public_and_d`]. Backends opt
+/// in to building private keys without `primes` or CRT precompute — the
+/// heapless path, where the caller already holds validated `(n, e, d)`.
+///
+/// **Not impl'd for [`BoxedUint`]**: alloc callers must use the validated
+/// `RsaPrivateKey::from_components` / `from_p_q` / `from_primes` paths, so
+/// empty `primes` can't leak into CRT-aware APIs as a `primes[0]` panic.
+pub trait RawPrivateKeyConstructible: UnsignedModularInt {}
+
+// Heapless build: `FixedWidthUnsignedInt + PartialOrd` matches the
+// `UnsignedModularInt` blanket and gets the marker for free. `BoxedUint`
+// isn't `Copy`, so it can't satisfy `FixedWidthUnsignedInt`.
+#[cfg(not(feature = "alloc"))]
+impl<T> RawPrivateKeyConstructible for T where
+    T: crate::traits::modular::FixedWidthUnsignedInt + PartialOrd
+{
+}
 
 /// Components of an RSA public key.
 pub trait PublicKeyParts<T: UnsignedModularInt> {
@@ -49,58 +62,54 @@ pub trait PublicKeyParts<T: UnsignedModularInt> {
     }
 }
 
-/// Components of an RSA private key.
-#[cfg(feature = "private-key")]
-pub trait PrivateKeyParts: PublicKeyParts<BoxedUint> {
+/// Components of an RSA private key — generic over the integer /
+/// Montgomery-parameter backend.
+///
+/// The base surface is `d()`; the CRT accessors (`dp`/`dq`/`qinv`/
+/// `p_params`/`q_params`) are `alloc`-gated and default to `None`, so a
+/// key without CRT precompute satisfies the trait with just `d()`.
+pub trait PrivateKeyParts<T>: PublicKeyParts<T>
+where
+    T: UnsignedModularInt,
+{
     /// Returns the private exponent of the key.
-    fn d(&self) -> &BoxedUint;
+    fn d(&self) -> &T;
 
-    /// Returns the prime factors.
-    fn primes(&self) -> &[BoxedUint];
-
-    /// Returns the precomputed dp value, D mod (P-1)
-    fn dp(&self) -> Option<&BoxedUint>;
-
-    /// Returns the precomputed dq value, D mod (Q-1)
-    fn dq(&self) -> Option<&BoxedUint>;
-
-    /// Returns the precomputed qinv value, Q^-1 mod P
-    fn qinv(&self) -> Option<&BoxedMontyForm>;
-
-    /// Returns an iterator over the CRT Values
-    fn crt_values(&self) -> Option<&[CrtValue]>;
-
-    /// Returns the params for `p` if precomputed.
-    fn p_params(&self) -> Option<&BoxedMontyParams>;
-
-    /// Returns the params for `q` if precomputed.
-    fn q_params(&self) -> Option<&BoxedMontyParams>;
-}
-
-/// Contains the precomputed Chinese remainder theorem values.
-#[cfg(feature = "private-key")]
-#[derive(Debug, Clone)]
-pub struct CrtValue {
-    /// D mod (prime - 1)
-    pub(crate) exp: BoxedUint,
-    /// R·Coeff ≡ 1 mod Prime.
-    pub(crate) coeff: BoxedUint,
-    /// product of primes prior to this (inc p and q)
-    pub(crate) r: BoxedUint,
-}
-
-#[cfg(feature = "private-key")]
-impl Zeroize for CrtValue {
-    fn zeroize(&mut self) {
-        self.exp.zeroize();
-        self.coeff.zeroize();
-        self.r.zeroize();
+    /// Returns the prime factors of the modulus. Returns `&[]` for keys
+    /// that don't store factors.
+    #[cfg(feature = "alloc")]
+    fn primes(&self) -> &[T] {
+        &[]
     }
-}
 
-#[cfg(feature = "private-key")]
-impl Drop for CrtValue {
-    fn drop(&mut self) {
-        self.zeroize();
+    /// Returns the precomputed `dp = d mod (p - 1)` value, if available.
+    /// `None` for keys that didn't precompute CRT.
+    #[cfg(feature = "alloc")]
+    fn dp(&self) -> Option<&T> {
+        None
+    }
+
+    /// Returns the precomputed `dq = d mod (q - 1)` value, if available.
+    #[cfg(feature = "alloc")]
+    fn dq(&self) -> Option<&T> {
+        None
+    }
+
+    /// Returns the precomputed `qinv = q^-1 mod p` value, if available.
+    #[cfg(feature = "alloc")]
+    fn qinv(&self) -> Option<&<Self::MontyParams as ModulusParams>::MontgomeryForm> {
+        None
+    }
+
+    /// Returns the Montgomery parameters for `p`, if available.
+    #[cfg(feature = "alloc")]
+    fn p_params(&self) -> Option<&Self::MontyParams> {
+        None
+    }
+
+    /// Returns the Montgomery parameters for `q`, if available.
+    #[cfg(feature = "alloc")]
+    fn q_params(&self) -> Option<&Self::MontyParams> {
+        None
     }
 }

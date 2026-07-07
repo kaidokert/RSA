@@ -4,13 +4,13 @@
 //!
 //! See [code example in the toplevel rustdoc](../index.html#oaep-encryption).
 
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 mod decrypting_key;
 mod encrypting_key;
 #[cfg(not(feature = "alloc"))]
 mod label;
 
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 pub use self::decrypting_key::DecryptingKey;
 #[cfg(feature = "alloc")]
 pub use self::encrypting_key::EncryptingKey;
@@ -32,12 +32,12 @@ use rand_core::TryCryptoRng;
 use crate::algorithms::oaep::*;
 #[cfg(feature = "alloc")]
 use crate::algorithms::pad::{uint_to_be_pad, uint_to_be_pad_into, uint_to_zeroizing_be_pad};
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 use crate::algorithms::rsa::rsa_decrypt_and_check;
 #[cfg(feature = "alloc")]
 use crate::algorithms::rsa::rsa_encrypt;
 use crate::errors::{Error, Result};
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 use crate::key::RsaPrivateKey;
 #[cfg(feature = "alloc")]
 use crate::key::{self, RsaPublicKey};
@@ -170,7 +170,7 @@ where
     D: Digest + FixedOutputReset,
     MGD: Digest + FixedOutputReset,
 {
-    #[cfg(feature = "private-key")]
+    #[cfg(feature = "alloc")]
     fn decrypt<Rng: TryCryptoRng + ?Sized>(
         mut self,
         rng: Option<&mut Rng>,
@@ -192,6 +192,7 @@ where
         Rng: TryCryptoRng + ?Sized,
         T: UnsignedModularInt,
         K: PublicKeyParts<T>,
+        K::MontyParams: crate::traits::modular::CtModulusParams,
     {
         let em = oaep_encrypt(
             rng,
@@ -292,6 +293,7 @@ where
     D: digest::Digest,
     MGD: digest::Digest + digest::FixedOutputReset,
     K: crate::traits::PublicKeyParts<T>,
+    K::MontyParams: crate::traits::modular::CtModulusParams,
     T: crate::traits::UnsignedModularInt,
 {
     let padded_len = pub_key.size();
@@ -318,7 +320,7 @@ where
 /// See `decrypt_session_key` for a way of solving this problem.
 ///
 /// [PKCS#1 OAEP]: https://datatracker.ietf.org/doc/html/rfc8017#section-7.1
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 #[inline]
 fn decrypt<R, D, MGD>(
     rng: Option<&mut R>,
@@ -357,7 +359,7 @@ where
 /// See `decrypt_session_key` for a way of solving this problem.
 ///
 /// [PKCS#1 OAEP]: https://datatracker.ietf.org/doc/html/rfc8017#section-7.1
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 #[inline]
 fn decrypt_digest<R, D, MGD>(
     rng: Option<&mut R>,
@@ -384,7 +386,7 @@ where
 }
 
 #[cfg(test)]
-#[cfg(all(feature = "alloc", feature = "private-key"))]
+#[cfg(feature = "alloc")]
 mod tests {
     use crate::key::{RsaPrivateKey, RsaPublicKey};
     use crate::oaep::{DecryptingKey, EncryptingKey, Oaep};

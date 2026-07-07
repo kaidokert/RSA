@@ -1,28 +1,30 @@
 //! Generic RSA implementation
 
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 use core::cmp::Ordering;
 
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 use crypto_bigint::Resize as _;
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 use crypto_bigint::{
     modular::{BoxedMontyForm, BoxedMontyParams},
     BoxedUint, ConcatenatingMul, ConcatenatingSquare, Gcd, RandomMod,
 };
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 use crypto_bigint::{NonZero as CryptoNonZero, Odd as CryptoOdd};
 use rand_core::TryCryptoRng;
 use zeroize::Zeroize;
 
-#[cfg(not(feature = "private-key"))]
+#[cfg(not(feature = "alloc"))]
 use crate::traits::keys::PublicKeyParts;
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 use crate::traits::keys::{PrivateKeyParts, PublicKeyParts};
 use crate::{
     errors::{Error, Result},
     traits::{
-        modular::{IntoMontyForm, ModulusParams, Pow, PowBoundedExp},
+        modular::{
+            IntoMontyForm, InvertCt, ModulusParams, MulCt, Pow, PowBoundedExp, TryRandomMod,
+        },
         UnsignedModularInt,
     },
 };
@@ -52,11 +54,11 @@ where
 ///
 /// Use this function with great care! Raw RSA should never be used without an appropriate padding
 /// or signature scheme. See the [module-level documentation][crate::hazmat] for more information.
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 #[inline]
 pub fn rsa_decrypt<R: TryCryptoRng + ?Sized>(
     rng: Option<&mut R>,
-    priv_key: &impl PrivateKeyParts<MontyParams = BoxedMontyParams>,
+    priv_key: &impl PrivateKeyParts<BoxedUint, MontyParams = BoxedMontyParams>,
     c: &BoxedUint,
 ) -> Result<BoxedUint> {
     let n = priv_key.n();
@@ -83,7 +85,11 @@ pub fn rsa_decrypt<R: TryCryptoRng + ?Sized>(
         c.try_resize(bits).ok_or(Error::Internal)?
     };
 
-    let is_multiprime = priv_key.primes().len() > 2;
+    // `primes()` defaults to `&[]`; the `primes.len() >= 2` guard below
+    // keeps a key with CRT accessors but no primes off the `[0]`/`[1]`
+    // panic path.
+    let primes = priv_key.primes();
+    let is_multiprime = primes.len() > 2;
 
     let m = match (
         priv_key.dp(),
@@ -92,11 +98,13 @@ pub fn rsa_decrypt<R: TryCryptoRng + ?Sized>(
         priv_key.p_params(),
         priv_key.q_params(),
     ) {
-        (Some(dp), Some(dq), Some(qinv), Some(p_params), Some(q_params)) if !is_multiprime => {
+        (Some(dp), Some(dq), Some(qinv), Some(p_params), Some(q_params))
+            if !is_multiprime && primes.len() >= 2 =>
+        {
             // We have the precalculated values needed for the CRT.
 
-            let p = &priv_key.primes()[0];
-            let q = &priv_key.primes()[1];
+            let p = &primes[0];
+            let q = &primes[1];
 
             // precomputed: dP = (1/e) mod (p-1) = d mod (p-1)
             // precomputed: dQ = (1/e) mod (q-1) = d mod (q-1)
@@ -172,10 +180,10 @@ pub fn rsa_decrypt<R: TryCryptoRng + ?Sized>(
 ///
 /// Use this function with great care! Raw RSA should never be used without an appropriate padding
 /// or signature scheme. See the [module-level documentation][crate::hazmat] for more information.
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 #[inline]
 pub fn rsa_decrypt_and_check<R: TryCryptoRng + ?Sized>(
-    priv_key: &impl PrivateKeyParts<MontyParams = BoxedMontyParams>,
+    priv_key: &impl PrivateKeyParts<BoxedUint, MontyParams = BoxedMontyParams>,
     rng: Option<&mut R>,
     c: &BoxedUint,
 ) -> Result<BoxedUint> {
@@ -193,7 +201,7 @@ pub fn rsa_decrypt_and_check<R: TryCryptoRng + ?Sized>(
 }
 
 /// Returns the blinded c, along with the unblinding factor.
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 fn blind<R: TryCryptoRng + ?Sized, K: PublicKeyParts<BoxedUint, MontyParams = BoxedMontyParams>>(
     rng: &mut R,
     key: &K,
@@ -236,7 +244,7 @@ fn blind<R: TryCryptoRng + ?Sized, K: PublicKeyParts<BoxedUint, MontyParams = Bo
 }
 
 /// Given an m and unblinding factor, unblind the m.
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 fn unblind(m: &BoxedUint, unblinder: &BoxedUint, n_params: &BoxedMontyParams) -> BoxedUint {
     // m * r^-1 (mod n)
     debug_assert_eq!(
@@ -254,6 +262,61 @@ fn unblind(m: &BoxedUint, unblinder: &BoxedUint, n_params: &BoxedMontyParams) ->
     m.mul_mod(unblinder, n_params.modulus().as_nz_ref())
 }
 
+/// ⚠️ Performs the raw RSA private-key operation `c^d mod n`.
+///
+/// The bare primitive both signing and unblinded decryption reduce to.
+/// Constant-time in base and exponent when `M::MontgomeryForm: Pow<M>`
+/// resolves to a Ct-personality impl.
+///
+/// # ☢️️ WARNING: HAZARDOUS API ☢️
+///
+/// Raw RSA must be wrapped in a padding/signature scheme (PKCS#1 v1.5, PSS,
+/// OAEP) to be secure. See the [module-level documentation][crate::hazmat]
+/// for more information.
+#[inline]
+pub fn rsa_private_op<T, M>(c: &T, d: &T, n_params: &M) -> T
+where
+    T: UnsignedModularInt,
+    M: ModulusParams<Modulus = T> + crate::traits::modular::CtModulusParams,
+    M::MontgomeryForm: Pow<M>,
+{
+    pow_mod_params(c, d, n_params)
+}
+
+/// ⚠️ Performs `rsa_private_op`, then verifies by re-encrypting: returns
+/// `m = c^d mod n` only if `m^e mod n == c`, else [`Error::Internal`]. The
+/// signing-side analogue of `rsa_decrypt_and_check`; guards against
+/// transient compute/fault errors emitting a malformed signature.
+///
+/// # ☢️️ WARNING: HAZARDOUS API ☢️
+///
+/// Raw RSA must be wrapped in a padding/signature scheme (PKCS#1 v1.5, PSS,
+/// OAEP) to be secure. See the [module-level documentation][crate::hazmat]
+/// for more information.
+#[inline]
+pub fn rsa_private_op_and_check<T, M>(c: &T, d: &T, e: &T, n_params: &M) -> Result<T>
+where
+    T: UnsignedModularInt,
+    M: ModulusParams<Modulus = T> + crate::traits::modular::CtModulusParams,
+    M::MontgomeryForm: Pow<M> + PowBoundedExp<M>,
+{
+    let mut m = rsa_private_op(c, d, n_params);
+    // `m < n` by construction, so use `from_reduced` to skip the
+    // variable-time reduction `from_value` (→ `rem_vartime`) would do on
+    // BoxedUint and leak `m` via timing.
+    let m_sized = m.clone().resize_unchecked(n_params.bits_precision());
+    let m_mont = M::MontgomeryForm::from_reduced(m_sized, n_params);
+    let check = m_mont.pow_bounded_exp(e, e.bits()).retrieve();
+    if *c != check {
+        // `m` is secret material (would-be plaintext or signature).
+        // Wipe before returning `Err` — the failure path indicates a
+        // fault-attack signal and the caller doesn't need `m`.
+        m.zeroize();
+        return Err(Error::Internal);
+    }
+    Ok(m)
+}
+
 /// Computes `base.pow_mod(exp, n)` with precomputed `n_params`.
 fn pow_mod_params<T, M>(base: &T, exp: &T, n_params: &M) -> T
 where
@@ -263,6 +326,138 @@ where
 {
     let base = reduce_vartime(base, n_params);
     base.pow(exp).retrieve()
+}
+
+/// ⚠️ Raw RSA private op with base-blinding: `m = ((c · r^e)^d · r⁻¹) mod n`.
+///
+/// Mathematically equivalent to [`rsa_private_op`] but multiplies `c`
+/// by a caller-supplied blinding factor `r` before exponentiating,
+/// then unblinds by `r⁻¹`. Blinding hides `c` from side-channel
+/// analysis on the private-key operation.
+///
+/// # Preconditions
+///
+/// - **`blinding_r < n`** — the blinding factor must already be
+///   reduced modulo `n`. The primitive uses `from_reduced` to convert
+///   to Montgomery form and would leak `r`'s value on the
+///   `BoxedMontyForm` backend via `rem_vartime` if we accepted
+///   unreduced input. Callers should sample `r` from `[1, n)` via
+///   `crate::traits::modular::TryRandomMod` — see
+///   [`rsa_private_op_and_check_blinded`].
+/// - **`c < n`** — same reason applied to the (secret) message. The
+///   sign path's padded EM always satisfies this (leading 0x00 byte
+///   → `EM < 2^{8(k-1)} < n`).
+/// - `gcd(blinding_r, n) = 1` — required for `r⁻¹ mod n` to exist.
+///   For random `r` against RSA `n = p·q`, non-coprime is
+///   astronomically rare. Retry-on-`Err` at the caller side is the
+///   standard defense.
+/// - `blinding_r` is the caller-owned blinding factor. This primitive
+///   does not sample or validate its randomness — see
+///   [`rsa_private_op_and_check_blinded`] for the RNG-taking wrapper.
+///
+/// # Returns
+///
+/// The unblinded plaintext `m = c^d mod n`, or `Error::Internal` if
+/// the inverse could not be computed.
+///
+/// # ☢️️ WARNING: HAZARDOUS API ☢️
+///
+/// Raw RSA. Must be wrapped in a padding scheme. See
+/// [module-level docs][crate::hazmat].
+pub fn rsa_private_op_blinded<T, M>(blinding_r: &T, c: &T, d: &T, e: &T, n_params: &M) -> Result<T>
+where
+    T: UnsignedModularInt,
+    M: ModulusParams<Modulus = T> + crate::traits::modular::CtModulusParams,
+    M::MontgomeryForm: Pow<M> + PowBoundedExp<M> + InvertCt<M> + MulCt<M>,
+{
+    // `blinding_r < n` and `c < n` are caller preconditions — use
+    // `from_reduced` on both to skip the variable-time `rem_vartime`
+    // that `from_value` (via `reduce_vartime`) would do on the
+    // `BoxedMontyForm` backend. Vartime on `r` in particular would
+    // leak the very value that's meant to *defend* against timing
+    // analysis of `c` and `d`.
+    let r_sized = blinding_r
+        .clone()
+        .resize_unchecked(n_params.bits_precision());
+    let r_mont = M::MontgomeryForm::from_reduced(r_sized, n_params);
+    // `invert_ct` returns `None` iff `gcd(r, n) != 1` — caller
+    // retries with a fresh `r`.
+    let r_inv_mont = r_mont.invert_ct().ok_or(Error::Internal)?;
+    // r^e (in Montgomery form). Public exponent `e`, so
+    // `pow_bounded_exp` (variable-time-in-exponent semantics) is fine.
+    let r_e_mont = r_mont.pow_bounded_exp(e, e.bits());
+    // c → Montgomery form via `from_reduced` (same reason as `r`).
+    let c_sized = c.clone().resize_unchecked(n_params.bits_precision());
+    let c_mont = M::MontgomeryForm::from_reduced(c_sized, n_params);
+    let blinded_mont = c_mont.mul_ct(&r_e_mont);
+    // Private op on the blinded value — CT ladder in `d`.
+    let s_prime_mont = blinded_mont.pow(d);
+    let s_mont = s_prime_mont.mul_ct(&r_inv_mont);
+    Ok(<M::MontgomeryForm as PowBoundedExp<M>>::retrieve(&s_mont))
+}
+
+/// ⚠️ Raw RSA private op with RNG-driven base-blinding + fault-attack
+/// integrity check: samples a fresh `r` per call from `rng`, delegates
+/// to [`rsa_private_op_blinded`], then verifies `m^e ≡ c (mod n)` on
+/// the recovered `m` before returning.
+///
+/// This is the RNG-taking companion to [`rsa_private_op_and_check`] —
+/// same shape (returns `m = c^d mod n` or `Error::Internal`), same
+/// integrity check, but with blinding to hide `c` from side-channel
+/// analysis on the private-key operation.
+///
+/// # Retry policy
+///
+/// The blinded delegate returns `Err` when `r` is not coprime to `n`
+/// — astronomically rare on real RSA moduli. This wrapper retries up
+/// to `BLINDING_RETRIES = 10` times with a fresh `r` before returning
+/// `Error::Internal`. For a real 2048-bit RSA modulus, non-coprime
+/// probability is ~2⁻²⁰⁴⁷ per attempt — 10 retries is astronomical
+/// overkill and hides no timing information.
+///
+/// # ☢️️ WARNING: HAZARDOUS API ☢️
+///
+/// Raw RSA. Must be wrapped in a padding scheme. See
+/// [module-level docs][crate::hazmat].
+pub fn rsa_private_op_and_check_blinded<R, T, M>(
+    rng: &mut R,
+    c: &T,
+    d: &T,
+    e: &T,
+    n_params: &M,
+) -> Result<T>
+where
+    R: rand_core::TryCryptoRng + ?Sized,
+    T: UnsignedModularInt + TryRandomMod,
+    M: ModulusParams<Modulus = T> + crate::traits::modular::CtModulusParams,
+    M::MontgomeryForm: Pow<M> + PowBoundedExp<M> + InvertCt<M> + MulCt<M>,
+{
+    const BLINDING_RETRIES: u32 = 10;
+    let n = n_params.modulus().as_ref();
+    for _ in 0..BLINDING_RETRIES {
+        // `r` is secret — wrap in `Zeroizing` so it's wiped when we
+        // drop out of scope on `continue`, verify-fail, or success.
+        let r = zeroize::Zeroizing::new(T::try_random_mod(rng, n)?);
+        let mut m = match rsa_private_op_blinded(&*r, c, d, e, n_params) {
+            Ok(m) => m,
+            Err(_) => continue,
+        };
+        // Verify-back integrity check — same shape as
+        // `rsa_private_op_and_check`. `m < n` by construction, so
+        // `from_reduced` is safe (skips vartime rem).
+        let m_sized = m.clone().resize_unchecked(n_params.bits_precision());
+        let m_mont = M::MontgomeryForm::from_reduced(m_sized, n_params);
+        let check = m_mont.pow_bounded_exp(e, e.bits()).retrieve();
+        if *c != check {
+            // `m` is secret material (would-be plaintext or signature).
+            // Wipe before returning `Err` — the failure path indicates a
+            // fault-attack signal and the caller doesn't need `m`.
+            m.zeroize();
+            return Err(Error::Internal);
+        }
+        return Ok(m);
+    }
+    Err(Error::Internal)
 }
 
 /// Computes `base.pow_mod(exp, n)` with a bounded exponent and precomputed `n_params`.
@@ -289,7 +484,7 @@ where
 /// The following (deterministic) algorithm also recovers the prime factors `p` and `q` of a modulus `n`, given the
 /// public exponent `e` and private exponent `d` using the method described in
 /// [NIST 800-56B Appendix C.2](https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-56Br2.pdf).
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 pub fn recover_primes(
     n: &CryptoNonZero<BoxedUint>,
     e: &BoxedUint,
@@ -358,7 +553,7 @@ pub fn recover_primes(
 }
 
 /// Compute the modulus of a key from its primes.
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 pub(crate) fn compute_modulus(primes: &[BoxedUint]) -> CryptoOdd<BoxedUint> {
     let mut primes = primes.iter();
     let mut out = primes.next().expect("must at least be one prime").clone();
@@ -370,7 +565,7 @@ pub(crate) fn compute_modulus(primes: &[BoxedUint]) -> CryptoOdd<BoxedUint> {
 
 /// Compute the private exponent from its primes (p and q) and public exponent
 /// This uses Euler's totient function
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 #[inline]
 pub(crate) fn compute_private_exponent_euler_totient(
     primes: &[BoxedUint],
@@ -404,7 +599,7 @@ pub(crate) fn compute_private_exponent_euler_totient(
 ///
 /// FIPS 186-4 **requires** the private exponent to be less than λ(n), which would
 /// make Euler's totiem unreliable.
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 #[inline]
 pub(crate) fn compute_private_exponent_carmicheal(
     p: &BoxedUint,
@@ -431,7 +626,7 @@ pub(crate) fn compute_private_exponent_carmicheal(
 }
 
 #[cfg(test)]
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 mod tests {
     use super::*;
 

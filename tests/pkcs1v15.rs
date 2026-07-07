@@ -78,3 +78,39 @@ Rmb665iB5fwpqmbE/hYKIn7asYQE+V0dkgt8M3qvlJJ5JJbCrJx3
         .verify(msg, &sig_via_new)
         .is_ok());
 }
+
+// End-to-end round-trip test for the heapless-shaped `try_sign_with_rng_into`
+// wrapper on `pkcs1v15::SigningKey<D>`. Exercises the full stack:
+// wrapper → `algorithms::pkcs1v15::sign_with_rng_into` →
+// `rsa_private_op_and_check_blinded` → `TryRandomMod` (r sampling) →
+// `rsa_private_op_blinded` (InvertCt/MulCt).
+#[cfg(feature = "encoding")]
+#[test]
+fn signing_key_try_sign_with_rng_into_round_trip() {
+    use pkcs1::DecodeRsaPrivateKey;
+    use rand::rngs::ChaCha8Rng;
+    use rand_core::SeedableRng;
+    use rsa::pkcs1v15::{Signature, SigningKey};
+    use rsa::RsaPrivateKey;
+    use signature::{Keypair, Verifier};
+
+    const PRIV_KEY_PKCS1_PEM: &str = include_str!("examples/pkcs1/rsa2048-priv.pem");
+
+    let priv_key = RsaPrivateKey::from_pkcs1_pem(PRIV_KEY_PKCS1_PEM).unwrap();
+    let signing_key = SigningKey::<sha2::Sha256>::new(priv_key);
+    let verifying_key = signing_key.verifying_key();
+
+    let msg: &[u8] = b"blinded sign test message";
+    let mut rng = ChaCha8Rng::from_seed([42; 32]);
+
+    // 2048-bit key → 256-byte signature and EM.
+    let mut em_storage = [0u8; 256];
+    let mut sig_storage = [0u8; 256];
+    let sig_slice = signing_key
+        .try_sign_with_rng_into(&mut rng, msg, &mut em_storage, &mut sig_storage)
+        .unwrap();
+    assert_eq!(sig_slice.len(), 256);
+
+    let sig = Signature::try_from(sig_slice).unwrap();
+    verifying_key.verify(msg, &sig).unwrap();
+}

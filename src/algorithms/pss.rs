@@ -16,6 +16,10 @@ use digest::{Digest, FixedOutputReset};
 
 use super::mgf::{mgf1_xor, mgf1_xor_digest};
 use crate::errors::{Error, Result};
+use crate::traits::{
+    modular::{ModulusParams, Pow, PowBoundedExp},
+    UnsignedModularInt,
+};
 
 #[cfg(feature = "alloc")]
 pub(crate) fn emsa_pss_encode<D>(
@@ -24,6 +28,28 @@ pub(crate) fn emsa_pss_encode<D>(
     salt: &[u8],
     hash: &mut D,
 ) -> Result<Vec<u8>>
+where
+    D: Digest + FixedOutputReset,
+{
+    let em_len = em_bits.div_ceil(8);
+    let mut em = vec![0; em_len];
+    emsa_pss_encode_into(m_hash, em_bits, salt, hash, &mut em)?;
+    Ok(em)
+}
+
+/// EMSA-PSS encode, RFC 8017 § 9.1.1 — slice-output variant.
+///
+/// Writes exactly `em_len = em_bits.div_ceil(8)` bytes into the head of
+/// `storage`. `storage.len()` must be at least `em_len`; on success, the
+/// returned slice is `&storage[..em_len]`.
+#[inline]
+pub fn emsa_pss_encode_into<'a, D>(
+    m_hash: &[u8],
+    em_bits: usize,
+    salt: &[u8],
+    hash: &mut D,
+    storage: &'a mut [u8],
+) -> Result<&'a [u8]>
 where
     D: Digest + FixedOutputReset,
 {
@@ -47,7 +73,10 @@ where
         return Err(Error::Internal);
     }
 
-    let mut em = vec![0; em_len];
+    let em = storage
+        .get_mut(..em_len)
+        .ok_or(Error::OutputBufferTooSmall)?;
+    em.fill(0);
 
     let (db, h) = em.split_at_mut(em_len - h_len - 1);
     let h = &mut h[..(em_len - 1) - db.len()];
@@ -170,6 +199,126 @@ where
     em[em_len - 1] = 0xBC;
 
     Ok(em)
+}
+
+/// ⚠️ RSASSA-PSS sign — heapless-compatible, generic over the integer backend.
+///
+/// EMSA-PSS-encodes `(m_hash, salt)` (`em_bits = key_bits - 1`, RFC 8017
+/// § 8.1.1), computes `s = EM^d mod n` via
+/// [`rsa_private_op_and_check`](crate::algorithms::rsa::rsa_private_op_and_check)
+/// (verify-after-sign on every backend), and writes `s` left-padded to `k`
+/// bytes. `k` is the modulus byte length; `sig_storage`/`em_storage` are
+/// length-checked up front.
+///
+/// # ☢️️ WARNING: HAZARDOUS API ☢️
+///
+/// The raw PSS sign primitive — the caller hashes the message and generates
+/// the random `salt`.
+///
+#[allow(clippy::too_many_arguments)] // Composing four byte/integer steps; splitting helps nothing.
+pub fn sign_into<'sig, T, M, D>(
+    n_params: &M,
+    d: &T,
+    e: &T,
+    m_hash: &[u8],
+    salt: &[u8],
+    k: usize,
+    hash: &mut D,
+    em_storage: &mut [u8],
+    sig_storage: &'sig mut [u8],
+) -> Result<&'sig [u8]>
+where
+    T: UnsignedModularInt,
+    T::Bytes: zeroize::Zeroize,
+    M: ModulusParams<Modulus = T> + crate::traits::modular::CtModulusParams,
+    M::MontgomeryForm: Pow<M> + PowBoundedExp<M>,
+    D: Digest + FixedOutputReset,
+{
+    // `k` = modulus byte length (matches `PublicKeyParts::size()`). Use the
+    // actual bit-length, not the container width, and `div_ceil` so a
+    // non-multiple-of-8 modulus still round-trips; `em_bits` needs it too.
+    let key_bits = n_params.modulus().as_ref().bits() as usize;
+    // Guard against degenerate moduli — `em_bits = key_bits - 1` would
+    // otherwise underflow and surface as `OutputBufferTooSmall`.
+    if key_bits < 2 {
+        return Err(Error::InvalidArguments);
+    }
+    if k != key_bits.div_ceil(8) {
+        return Err(Error::InvalidArguments);
+    }
+    if sig_storage.len() < k {
+        return Err(Error::OutputBufferTooSmall);
+    }
+    // RFC 8017 § 8.1.1: em_bits ≡ modulus_bits − 1.
+    let em_bits = key_bits - 1;
+    if em_storage.len() < em_bits.div_ceil(8) {
+        return Err(Error::OutputBufferTooSmall);
+    }
+    let em_slice = emsa_pss_encode_into(m_hash, em_bits, salt, hash, em_storage)?;
+    let em = T::try_from_be_bytes_vartime(em_slice)?;
+    let s = crate::algorithms::rsa::rsa_private_op_and_check(&em, d, e, n_params)?;
+    crate::algorithms::pad::uint_to_zeroizing_be_pad_into(s, k, sig_storage)
+}
+
+/// ⚠️ Raw PSS sign with RNG-driven base-blinding. Same shape and
+/// preconditions as [`sign_into`]; the only difference is that the
+/// private-key operation goes through
+/// [`crate::algorithms::rsa::rsa_private_op_and_check_blinded`],
+/// so the exponentiation with `d` never operates on the
+/// attacker-known `EM` directly.
+///
+/// PSS's salt sampling stays out-of-scope for this primitive —
+/// callers supply the pre-sampled `salt` bytes; the RNG argument here
+/// is used solely for base-blinding. Higher-level wrappers
+/// (`pss::GenericSigningKey::try_sign_with_rng_into`) coordinate
+/// reusing the same RNG for both.
+///
+/// # ☢️️ WARNING: HAZARDOUS API ☢️
+///
+/// The raw PSS sign primitive — the caller hashes the message and
+/// generates the random `salt`.
+#[allow(clippy::too_many_arguments)]
+pub fn sign_with_rng_into<'sig, R, T, M, D>(
+    rng: &mut R,
+    n_params: &M,
+    d: &T,
+    e: &T,
+    m_hash: &[u8],
+    salt: &[u8],
+    k: usize,
+    hash: &mut D,
+    em_storage: &mut [u8],
+    sig_storage: &'sig mut [u8],
+) -> Result<&'sig [u8]>
+where
+    R: rand_core::TryCryptoRng + ?Sized,
+    T: UnsignedModularInt + crate::traits::modular::TryRandomMod,
+    T::Bytes: zeroize::Zeroize,
+    M: ModulusParams<Modulus = T> + crate::traits::modular::CtModulusParams,
+    M::MontgomeryForm: Pow<M>
+        + PowBoundedExp<M>
+        + crate::traits::modular::InvertCt<M>
+        + crate::traits::modular::MulCt<M>,
+    D: Digest + FixedOutputReset,
+{
+    let key_bits = n_params.modulus().as_ref().bits() as usize;
+    if key_bits < 2 {
+        return Err(Error::InvalidArguments);
+    }
+    if k != key_bits.div_ceil(8) {
+        return Err(Error::InvalidArguments);
+    }
+    if sig_storage.len() < k {
+        return Err(Error::OutputBufferTooSmall);
+    }
+    let em_bits = key_bits - 1;
+    if em_storage.len() < em_bits.div_ceil(8) {
+        return Err(Error::OutputBufferTooSmall);
+    }
+    let em_slice = emsa_pss_encode_into(m_hash, em_bits, salt, hash, em_storage)?;
+    let em = T::try_from_be_bytes_vartime(em_slice)?;
+    let s = crate::algorithms::rsa::rsa_private_op_and_check_blinded(rng, &em, d, e, n_params)?;
+    crate::algorithms::pad::uint_to_zeroizing_be_pad_into(s, k, sig_storage)
 }
 
 fn emsa_pss_verify_pre<'a>(

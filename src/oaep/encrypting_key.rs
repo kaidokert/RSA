@@ -1,7 +1,10 @@
 use super::encrypt_digest_into;
 #[cfg(not(feature = "alloc"))]
 use super::Label;
-use crate::traits::{modular::ModulusParams, PublicKeyParts, UnsignedModularInt};
+use crate::traits::{
+    modular::{CtModulusParams, ModulusParams},
+    PublicKeyParts, UnsignedModularInt,
+};
 use crate::{traits::RandomizedEncryptor, GenericRsaPublicKey, Result};
 #[cfg(feature = "alloc")]
 use alloc::{boxed::Box, vec::Vec};
@@ -86,7 +89,7 @@ where
     D: Digest,
     MGD: Digest + FixedOutputReset,
     T: UnsignedModularInt,
-    M: ModulusParams<Modulus = T>,
+    M: CtModulusParams<Modulus = T>,
 {
     fn encrypt_with_rng_into<'a, R: TryCryptoRng + ?Sized>(
         &self,
@@ -122,7 +125,7 @@ where
 mod tests {
 
     #[test]
-    #[cfg(all(feature = "hazmat", feature = "serde", feature = "private-key"))]
+    #[cfg(all(feature = "hazmat", feature = "serde", feature = "keygen"))]
     fn test_serde() {
         use super::*;
         use rand::rngs::ChaCha8Rng;
