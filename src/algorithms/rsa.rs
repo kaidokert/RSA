@@ -22,7 +22,9 @@ use crate::traits::keys::{PrivateKeyParts, PublicKeyParts};
 use crate::{
     errors::{Error, Result},
     traits::{
-        modular::{IntoMontyForm, InvertCt, ModulusParams, MulCt, Pow, PowBoundedExp},
+        modular::{
+            IntoMontyForm, InvertCt, ModulusParams, MulCt, Pow, PowBoundedExp, TryRandomMod,
+        },
         UnsignedModularInt,
     },
 };
@@ -410,6 +412,78 @@ where
     // Unblind: multiply by `r⁻¹` in Montgomery form, retrieve.
     let s_mont = s_prime_mont.mul_ct(&r_inv_mont);
     Ok(<M::MontgomeryForm as PowBoundedExp<M>>::retrieve(&s_mont))
+}
+
+/// ⚠️ Raw RSA private op with RNG-driven base-blinding + fault-attack
+/// integrity check: samples a fresh `r` per call from `rng`, delegates
+/// to [`rsa_private_op_blinded`], then verifies `m^e ≡ c (mod n)` on
+/// the recovered `m` before returning.
+///
+/// This is the RNG-taking companion to [`rsa_private_op_and_check`] —
+/// same shape (returns `m = c^d mod n` or `Error::Internal`), same
+/// integrity check, but with blinding to hide `c` from side-channel
+/// analysis on the private-key operation.
+///
+/// # Retry policy
+///
+/// The blinded delegate returns `Err` for both retryable (non-coprime
+/// `r` — astronomically rare on real RSA moduli) and deterministic
+/// (carrier-tight on the modmath backend — `T` fills the modulus's
+/// full width) cases. This wrapper retries up to
+/// `BLINDING_RETRIES = 10` times with a fresh `r` before returning
+/// `Error::Internal`. For a real 2048-bit RSA modulus, non-coprime
+/// probability is ~2⁻²⁰⁴⁷ per attempt — 10 retries is astronomical
+/// overkill and hides no timing information. For the deterministic
+/// carrier-tight case, all 10 attempts fail identically; the error
+/// signals the mismatched carrier.
+///
+/// # ☢️️ WARNING: HAZARDOUS API ☢️
+///
+/// Raw RSA. Must be wrapped in a padding scheme. See
+/// [module-level docs][crate::hazmat].
+// Consumer (the heapless `pkcs1v15` / `pss` sign-with-rng port) lands
+// in a later PR.
+#[allow(dead_code)]
+#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
+pub fn rsa_private_op_and_check_blinded<R, T, M>(
+    rng: &mut R,
+    c: &T,
+    d: &T,
+    e: &T,
+    n_params: &M,
+) -> Result<T>
+where
+    R: rand_core::TryCryptoRng + ?Sized,
+    T: UnsignedModularInt + TryRandomMod,
+    M: ModulusParams<Modulus = T> + crate::traits::modular::CtModulusParams,
+    M::MontgomeryForm: Pow<M> + PowBoundedExp<M> + InvertCt<M> + MulCt<M>,
+{
+    const BLINDING_RETRIES: u32 = 10;
+    let n = n_params.modulus().as_ref();
+    for _ in 0..BLINDING_RETRIES {
+        // `r` is secret — wrap in `Zeroizing` so it's wiped when we
+        // drop out of scope on `continue`, verify-fail, or success.
+        let r = zeroize::Zeroizing::new(T::try_random_mod(rng, n)?);
+        let mut m = match rsa_private_op_blinded(&*r, c, d, e, n_params) {
+            Ok(m) => m,
+            Err(_) => continue,
+        };
+        // Verify-back integrity check — same shape as
+        // `rsa_private_op_and_check`. `m < n` by construction, so
+        // `from_reduced` is safe (skips vartime rem).
+        let m_sized = m.clone().resize_unchecked(n_params.bits_precision());
+        let m_mont = M::MontgomeryForm::from_reduced(m_sized, n_params);
+        let check = m_mont.pow_bounded_exp(e, e.bits()).retrieve();
+        if *c != check {
+            // `m` is secret material (would-be plaintext or signature).
+            // Wipe before returning `Err` — the failure path indicates a
+            // fault-attack signal and the caller doesn't need `m`.
+            m.zeroize();
+            return Err(Error::Internal);
+        }
+        return Ok(m);
+    }
+    Err(Error::Internal)
 }
 
 /// Computes `base.pow_mod(exp, n)` with a bounded exponent and precomputed `n_params`.

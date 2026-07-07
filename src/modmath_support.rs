@@ -1007,6 +1007,30 @@ mod private_op_tests {
         assert!(result.is_err());
     }
 
+    // Full-stack blinded op with RNG-driven `r` sampling. Same toy
+    // setup as the unblinded round-trip; the wrapper samples r via
+    // TryRandomMod, retries on non-coprime, then verifies m^e ≡ c
+    // before returning. For toy n=35, non-coprime probability per
+    // draw is ~31% — the 10-retry cap gives failure prob ~8e-6, so
+    // the test is reliable.
+    #[test]
+    fn rsa_private_op_and_check_blinded_round_trip_heapless_ct() {
+        use rand::rngs::ChaCha8Rng;
+        use rand_core::SeedableRng;
+
+        let n_params = toy_params();
+        let c = wrap_value(SmallUCt::from(32u8));
+        let d = wrap_value(SmallUCt::from(29u8));
+        let e = wrap_value(SmallUCt::from(5u8));
+        let expected = wrap_value(SmallUCt::from(2u8));
+        let mut rng = ChaCha8Rng::from_seed([42; 32]);
+        let recovered = crate::algorithms::rsa::rsa_private_op_and_check_blinded(
+            &mut rng, &c, &d, &e, &n_params,
+        )
+        .unwrap();
+        assert_eq!(recovered, expected);
+    }
+
     // Verify TryRandomMod on the modmath backend samples uniformly in
     // [0, modulus). Uses toy_params_wide's 512-bit modulus (`2^511 + 1`)
     // so the acceptance rate is essentially 50% (top bit set →
@@ -1023,11 +1047,14 @@ mod private_op_tests {
         let n = *n_params.modulus().as_ref();
         let mut rng = ChaCha8Rng::from_seed([42; 32]);
 
-        let mut samples = alloc::vec::Vec::with_capacity(16);
-        for _ in 0..16 {
+        // Stack-only sample buffer so this test compiles under
+        // `--no-default-features --features modmath,wip-private-key`
+        // (no `alloc`). Sixteen fixed-size samples.
+        let mut samples = [ModMathValue::<SmallUCt>::from(0u8); 16];
+        for slot in samples.iter_mut() {
             let r = ModMathValue::<SmallUCt>::try_random_mod(&mut rng, &n).unwrap();
             assert!(r < n, "sample must be < modulus");
-            samples.push(r);
+            *slot = r;
         }
         // Uniformity smoke test — 16 samples on a ~512-bit range
         // should be all distinct with overwhelming probability.
