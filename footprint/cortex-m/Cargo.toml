@@ -29,7 +29,7 @@ cortex-m-rt = "0.7"
 cortex-m-semihosting = "0.5"
 panic-semihosting = { version = "0.6", features = ["exit"] }
 
-fixed-bigint = { version = "0.4.0", default-features = false, features = ["zeroize", "use-unsafe", "cios"] }
+fixed-bigint = { version = "0.4.1", default-features = false, features = ["zeroize", "use-unsafe", "cios"] }
 rsa = { path = "../..", package = "rsa_heapless", default-features = false, features = ["modmath"] }
 sha1 = { version = "0.11.0-rc.5", default-features = false, features = ["oid"] }
 sha2 = { version = "0.11.0-rc.5", default-features = false, features = ["oid"] }

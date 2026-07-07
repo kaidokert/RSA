@@ -1,9 +1,11 @@
 # Skip the footprint sub-crates (they're separate Cargo manifests
 # with their own formatting needs — fixtures contain hand-curated
-# large constant arrays that cargo-fmt would mangle) and the
-# bundled third-party material that Cargo's `exclude` already keeps
-# out of published builds.
-exclude: '^(footprint/|marvin-toolkit/|thirdparty/)'
+# large constant arrays that cargo-fmt would mangle), the bundled
+# third-party material that Cargo's `exclude` already keeps out of
+# published builds, and upstream-tracked files that must stay
+# byte-identical to RustCrypto/RSA master (diff-minimization policy —
+# the whitespace fixers would silently mutate them).
+exclude: '^(footprint/|marvin-toolkit/|thirdparty/|LICENSE-|release\.toml$|\.github/)'
 
 repos:
 -   repo: https://github.com/pre-commit/pre-commit-hooks

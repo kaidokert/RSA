@@ -330,11 +330,11 @@ pub type RsaPrivateKey = GenericRsaPrivateKey<BoxedUint, BoxedMontyParams>;
 // impls above via the alias.
 
 #[cfg(feature = "private-key")]
-impl Eq for GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {}
+impl Eq for RsaPrivateKey {}
 #[cfg(feature = "private-key")]
-impl PartialEq for GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
+impl PartialEq for RsaPrivateKey {
     #[inline]
-    fn eq(&self, other: &Self) -> bool {
+    fn eq(&self, other: &RsaPrivateKey) -> bool {
         self.pubkey_components == other.pubkey_components
             && self.d == other.d
             && self.primes == other.primes
@@ -342,16 +342,14 @@ impl PartialEq for GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
 }
 
 #[cfg(feature = "private-key")]
-impl AsRef<GenericRsaPublicKey<BoxedUint, BoxedMontyParams>>
-    for GenericRsaPrivateKey<BoxedUint, BoxedMontyParams>
-{
-    fn as_ref(&self) -> &GenericRsaPublicKey<BoxedUint, BoxedMontyParams> {
+impl AsRef<RsaPublicKey> for RsaPrivateKey {
+    fn as_ref(&self) -> &RsaPublicKey {
         &self.pubkey_components
     }
 }
 
 #[cfg(feature = "private-key")]
-impl Hash for GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
+impl Hash for RsaPrivateKey {
     fn hash<H: Hasher>(&self, state: &mut H) {
         // Domain separator for RSA private keys
         state.write(b"RsaPrivateKey");
@@ -1182,7 +1180,7 @@ mod tests {
         let m = BoxedUint::from(42u64);
         let c = rsa_encrypt(&pub_key, &m).expect("encryption successful");
 
-        let m2 = rsa_decrypt_and_check::<ChaCha8Rng, _>(private_key, None, &c)
+        let m2 = rsa_decrypt_and_check::<ChaCha8Rng>(private_key, None, &c)
             .expect("unable to decrypt without blinding");
         assert_eq!(m, m2);
         let mut rng = ChaCha8Rng::from_seed([42; 32]);
