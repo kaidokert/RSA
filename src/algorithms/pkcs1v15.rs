@@ -198,8 +198,6 @@ pub fn pkcs1v15_sign_pad_into<'a>(
 /// The raw PKCS#1 v1.5 sign primitive — the caller hashes the message and
 /// prepends the DigestInfo prefix.
 ///
-// Consumer (the heapless `SigningKey<D>` wrapper) lands in a later PR.
-#[allow(dead_code)]
 #[allow(clippy::too_many_arguments)] // Composing four byte/integer steps; splitting helps nothing.
 pub fn sign_into<'sig, T, M>(
     n_params: &M,
@@ -238,18 +236,17 @@ where
 /// and preconditions as [`sign_into`]; the only difference is that
 /// the private-key operation goes through
 /// [`crate::algorithms::rsa::rsa_private_op_and_check_blinded`],
-/// which hides `EM` (the padded plaintext, secret) from side-channel
-/// analysis on `d`.
+/// so the exponentiation with `d` never operates on the
+/// attacker-known `EM` directly.
 ///
-/// Callers who need deterministic PKCS#1 v1.5 signatures (rare —
-/// PKCS#1 v1.5 is not a randomized scheme) can keep using
+/// Callers who need RNG-free PKCS#1 v1.5 signing can use
 /// [`sign_into`]; this variant is the blinded default for the sign
 /// wrapper API.
 ///
 /// # ☢️️ WARNING: HAZARDOUS API ☢️
 ///
-/// Raw RSA. Must be wrapped in a padding/signature scheme. See
-/// [module-level docs][crate::hazmat].
+/// The raw PKCS#1 v1.5 sign primitive — the caller hashes the message
+/// and prepends the DigestInfo prefix.
 #[allow(clippy::too_many_arguments)]
 pub fn sign_with_rng_into<'sig, R, T, M>(
     rng: &mut R,

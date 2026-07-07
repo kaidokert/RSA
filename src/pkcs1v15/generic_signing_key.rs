@@ -62,10 +62,10 @@ where
     }
 }
 
-// Manual Clone impls — split by `private-key` cfg to avoid imposing
+// Manual Clone impls — split by `alloc` cfg to avoid imposing
 // the `M::MontgomeryForm: Clone` bound on heapless backends where it
 // isn't needed (only `GenericRsaPrivateKey`'s `precomputed` field
-// requires it, and that field is `cfg(private-key)`).
+// requires it, and that field is `cfg(alloc)`).
 #[cfg(feature = "alloc")]
 impl<D, T, M> Clone for GenericSigningKey<D, T, M>
 where
@@ -139,7 +139,7 @@ where
 }
 
 // Borrow the inner private-key components — `AsRef` impl mirrors
-// the verifier's `AsRef<GenericRsaPublicKey<T, M>>` (`verifying_key.rs:172`).
+// the verifier's `AsRef<GenericRsaPublicKey<T, M>>`.
 impl<D, T, M> AsRef<GenericRsaPrivateKey<T, M>> for GenericSigningKey<D, T, M>
 where
     D: Digest,
@@ -219,11 +219,10 @@ where
 
 // RNG-taking blinded sign variants — mirror the deterministic pair
 // above but route through the blinded private op
-// (`rsa_private_op_and_check_blinded`), hiding `EM` from timing
-// analysis on `d`. Bounds add
-// `T: TryRandomMod` and `M::MontgomeryForm: InvertCt<M> + MulCt<M>`
-// — satisfied by both alloc (`BoxedUint`/`BoxedMontyParams`) and
-// modmath (`ModMathValue<T>` / `ModMathParams<T, Ct>`) backends.
+// (`rsa_private_op_and_check_blinded`), so the exponentiation with
+// `d` never operates on the attacker-known `EM` directly. The extra
+// bounds are satisfied by both alloc (`BoxedUint`/`BoxedMontyParams`)
+// and modmath (`ModMathValue<T>` / `ModMathParams<T, Ct>`) backends.
 impl<D, T, M> GenericSigningKey<D, T, M>
 where
     D: Digest,
@@ -236,8 +235,7 @@ where
         + crate::traits::modular::MulCt<M>,
 {
     /// RNG-driven blinded variant of [`Self::try_sign_into`]. Uses
-    /// `rng` to sample the blinding factor per signature; hides `EM`
-    /// (the padded plaintext) from side-channel analysis on `d`.
+    /// `rng` to sample a fresh blinding factor per signature.
     pub fn try_sign_with_rng_into<'sig, R: rand_core::TryCryptoRng + ?Sized>(
         &self,
         rng: &mut R,
@@ -289,8 +287,6 @@ where
 // Allow callers to wrap a `GenericSigningKey` in `zeroize::Zeroizing<_>`
 // or invoke `.zeroize()` directly. The prefix is public DigestInfo
 // material; only the inner `GenericRsaPrivateKey` carries secret bytes.
-// Same pattern as the canonical Zeroize impls on `GenericRsaPrivateKey`
-// (PR #24) and `ModMathForm` (PR #17).
 impl<D, T, M> Zeroize for GenericSigningKey<D, T, M>
 where
     D: Digest,

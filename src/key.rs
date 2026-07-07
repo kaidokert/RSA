@@ -97,9 +97,9 @@ where
 
 /// Generic RSA private key — heapless-compatible value type.
 ///
-/// Holds the public components plus the secret exponent `d`. The raw
-/// `(n, e, d)` form: `primes`, `precomputed` CRT values, and keygen are
-/// alloc-gated and absent on the heapless path.
+/// Holds the public components plus the secret exponent `d` — the raw
+/// `(n, e, d)` form. `primes` and the `precomputed` CRT values are
+/// alloc-gated; key generation is behind the `keygen` feature.
 pub struct GenericRsaPrivateKey<T, M>
 where
     T: UnsignedModularInt + Zeroize,
@@ -110,7 +110,7 @@ where
     /// Private exponent.
     d: T,
     /// Prime factors of N (≥ 2 elements when populated), empty when
-    /// constructed without primes. Alloc-gated (`Vec` needs alloc).
+    /// constructed without primes.
     #[cfg(feature = "alloc")]
     pub(crate) primes: alloc::vec::Vec<T>,
     /// Precomputed CRT values, when available; `None` on the raw path.
@@ -149,8 +149,6 @@ where
         Self {
             pubkey_components: self.pubkey_components.clone(),
             d: self.d.clone(),
-            #[cfg(feature = "alloc")]
-            primes: self.primes.clone(),
         }
     }
 }
@@ -236,7 +234,6 @@ where
         &self.d
     }
 
-    // Gate matches the `primes` field (`cfg(alloc)`).
     #[cfg(feature = "alloc")]
     fn primes(&self) -> &[T] {
         &self.primes
@@ -269,7 +266,7 @@ where
 }
 
 // `Zeroize` on the type; `Drop` delegates so the wipe lives in one place.
-// Only `d` (and CRT precompute) is secret — the pubkey is public.
+// Everything except the pubkey components is secret.
 impl<T, M> Zeroize for GenericRsaPrivateKey<T, M>
 where
     T: UnsignedModularInt + Zeroize,
@@ -301,8 +298,7 @@ where
 {
 }
 
-/// Boxed RSA private key alias used by the `alloc` code path. Equivalent
-/// to `GenericRsaPrivateKey<BoxedUint, BoxedMontyParams>`.
+/// Boxed RSA private key alias used by the `alloc` code path.
 ///
 /// `from_public_and_d` is unreachable through this alias — `BoxedUint`
 /// doesn't impl [`RawPrivateKeyConstructible`]:
@@ -315,9 +311,6 @@ where
 /// ```
 #[cfg(feature = "alloc")]
 pub type RsaPrivateKey = GenericRsaPrivateKey<BoxedUint, BoxedMontyParams>;
-
-// `Debug`, `Drop`, `ZeroizeOnDrop`, `PublicKeyParts` come from the generic
-// impls above via the alias.
 
 #[cfg(feature = "alloc")]
 impl Eq for RsaPrivateKey {}
@@ -405,16 +398,16 @@ where
         self.dq.zeroize();
         // KNOWN GAP: `qinv`/`p_params`/`q_params` aren't wiped — the trait
         // doesn't require `Zeroize` and upstream `BoxedMontyForm` /
-        // `BoxedMontyParams` don't impl it yet. Re-enable when they do:
+        // `BoxedMontyParams` don't impl it yet. Enable when they do:
         // self.qinv.zeroize();
         // self.p_params.zeroize();
         // self.q_params.zeroize();
     }
 }
 
-// Drop-check requires the bounds match the struct exactly. `T:
-// UnsignedModularInt` already implies `Zeroize` (via `FixedWidthUnsignedInt`),
-// so `self.zeroize()` resolves here.
+// Drop-check requires the bounds match the struct exactly. `Zeroize`
+// is a supertrait of `UnsignedModularInt`, so `self.zeroize()`
+// resolves here without an explicit bound.
 #[cfg(feature = "alloc")]
 impl<T, M> Drop for PrecomputedValues<T, M>
 where

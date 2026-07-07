@@ -215,8 +215,6 @@ where
 /// The raw PSS sign primitive — the caller hashes the message and generates
 /// the random `salt`.
 ///
-// Consumer (the heapless `pss::SigningKey<D>` wrapper) lands in a later PR.
-#[allow(dead_code)]
 #[allow(clippy::too_many_arguments)] // Composing four byte/integer steps; splitting helps nothing.
 pub fn sign_into<'sig, T, M, D>(
     n_params: &M,
@@ -266,19 +264,19 @@ where
 /// preconditions as [`sign_into`]; the only difference is that the
 /// private-key operation goes through
 /// [`crate::algorithms::rsa::rsa_private_op_and_check_blinded`],
-/// which hides `EM` (the padded plaintext, secret) from side-channel
-/// analysis on `d`.
+/// so the exponentiation with `d` never operates on the
+/// attacker-known `EM` directly.
 ///
 /// PSS's salt sampling stays out-of-scope for this primitive —
-/// callers supply the pre-sampled `salt` bytes as before; the RNG
-/// argument here is used solely for base-blinding. Higher-level
-/// wrappers (`pss::GenericSigningKey::try_sign_with_rng_into`)
-/// coordinate reusing the same RNG for both.
+/// callers supply the pre-sampled `salt` bytes; the RNG argument here
+/// is used solely for base-blinding. Higher-level wrappers
+/// (`pss::GenericSigningKey::try_sign_with_rng_into`) coordinate
+/// reusing the same RNG for both.
 ///
 /// # ☢️️ WARNING: HAZARDOUS API ☢️
 ///
-/// Raw RSA. Must be wrapped in a padding/signature scheme. See
-/// [module-level docs][crate::hazmat].
+/// The raw PSS sign primitive — the caller hashes the message and
+/// generates the random `salt`.
 #[allow(clippy::too_many_arguments)]
 pub fn sign_with_rng_into<'sig, R, T, M, D>(
     rng: &mut R,

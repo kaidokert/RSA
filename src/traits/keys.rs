@@ -66,9 +66,8 @@ pub trait PublicKeyParts<T: UnsignedModularInt> {
 /// Montgomery-parameter backend.
 ///
 /// The base surface is `d()`; the CRT accessors (`dp`/`dq`/`qinv`/
-/// `p_params`/`q_params`) are `private-key`-gated to the alloc path and
-/// default to `None`, so a key without CRT precompute satisfies the trait
-/// with just `d()`.
+/// `p_params`/`q_params`) are `alloc`-gated and default to `None`, so a
+/// key without CRT precompute satisfies the trait with just `d()`.
 pub trait PrivateKeyParts<T>: PublicKeyParts<T>
 where
     T: UnsignedModularInt,
@@ -77,14 +76,14 @@ where
     fn d(&self) -> &T;
 
     /// Returns the prime factors of the modulus. Returns `&[]` for keys
-    /// that don't store factors (the heapless default).
+    /// that don't store factors.
     #[cfg(feature = "alloc")]
     fn primes(&self) -> &[T] {
         &[]
     }
 
     /// Returns the precomputed `dp = d mod (p - 1)` value, if available.
-    /// `None` for keys that didn't precompute CRT (the heapless default).
+    /// `None` for keys that didn't precompute CRT.
     #[cfg(feature = "alloc")]
     fn dp(&self) -> Option<&T> {
         None

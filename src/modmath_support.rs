@@ -284,14 +284,11 @@ pub type ModMathValue<T> = T;
 // check.
 //
 // **Critical: mask the sampled candidate down to `modulus.bits()`
-// bits before checking.** For the intended use case (blinding on
-// modmath), `T` is wider than the modulus by design (the safegcd
-// headroom precondition — e.g. 2048-bit RSA modulus in a 2080-bit
-// `T`). Without masking, the acceptance rate against a 2048-bit
-// modulus in `U2080` is ~2⁻³², and `MAX_TRIES = 128` would exhaust
-// almost every time. After masking to `modulus.bits()` bits, we
-// sample from `[0, 2^k)` where the modulus's top bit is set, so
-// acceptance is ≥ 50%.
+// bits before checking.** When the modulus is `lz` bits narrower
+// than `T`'s container width, an unmasked sampler's acceptance rate
+// is ~2⁻ˡᶻ and `MAX_TRIES = 128` would exhaust almost every time.
+// After masking to `modulus.bits()` bits, we sample from `[0, 2^k)`
+// where the modulus's top bit is set, so acceptance is ≥ 50%.
 //
 // See the `TryRandomMod` trait doc for the CT-property discussion.
 #[cfg(feature = "modmath")]
@@ -654,15 +651,9 @@ impl<T: ModMathIntCt + HasPersonality<P = Ct>> PowBoundedExp<ModMathParams<T, Ct
 }
 
 // CT modular inverse for RSA-blinding on the modmath backend. Routes
-// to modmath's `Field<T, Ct>::inv_safegcd_ct` (Bernstein-Yang).
-//
-// See the `InvertCt` trait doc for the two `None` cases — retryable
-// (value not coprime with `n`, astronomically rare) vs deterministic
-// (carrier `T` lacks the safegcd headroom bit over the modulus).
-// **These are not interchangeable**: for a 2048-bit modulus in
-// exactly `U2048`, every call returns `None` and no amount of
-// retrying helps — pick a wider carrier (e.g. `U2080` at 32-bit
-// limbs). A blinding loop must preflight this.
+// to modmath's `Field<T, Ct>::inv_safegcd_ct` (Bernstein-Yang). The
+// modulus may fill the carrier's full width; `None` means the value
+// is not coprime with `n` (astronomically rare, retryable).
 impl<T> crate::traits::modular::InvertCt<ModMathParams<T, Ct>> for ModMathForm<T, Ct>
 where
     T: ModMathIntCt
@@ -946,8 +937,8 @@ mod private_op_tests {
     }
 
     // A 512-bit odd modulus used by the `sign_into` defensive-error
-    // tests below — they need the actual modulus bit-length (checked
-    // by `sign_into` since the codex-P2 fix) to match `SMALL_K * 8`
+    // tests below — they need the actual modulus bit-length (which
+    // `sign_into` checks) to match `SMALL_K * 8`
     // so `k` passes the up-front width check and the specific error
     // path (small buffer, wrong hash length, etc.) is what fires.
     // Value is `2^511 + 1`: MSB set, LSB=1 (odd).
@@ -1026,12 +1017,9 @@ mod private_op_tests {
         assert_eq!(recovered, expected);
     }
 
-    // Verify TryRandomMod on the modmath backend samples uniformly in
-    // [0, modulus). Uses toy_params_wide's 512-bit modulus (`2^511 + 1`)
-    // so the acceptance rate is essentially 50% (top bit set →
-    // random-and-`< modulus` acceptance) and 128-tries doesn't get
-    // exhausted. Verify: N samples all < modulus, sampled values are
-    // not all equal (uniformity smoke test).
+    // Uses toy_params_wide's 512-bit modulus (`2^511 + 1`) so the
+    // acceptance rate is essentially 50% (top bit set) and 128-tries
+    // doesn't get exhausted.
     #[test]
     fn try_random_mod_modmath_stays_below_modulus() {
         use crate::traits::modular::TryRandomMod;
@@ -1044,7 +1032,6 @@ mod private_op_tests {
 
         // Stack-only sample buffer so this test compiles under
         // `--no-default-features --features modmath` (no `alloc`).
-        // Sixteen fixed-size samples.
         let mut samples = [ModMathValue::<SmallUCt>::from(0u8); 16];
         for slot in samples.iter_mut() {
             let r = ModMathValue::<SmallUCt>::try_random_mod(&mut rng, &n).unwrap();
@@ -1060,12 +1047,11 @@ mod private_op_tests {
         );
     }
 
-    // Regression for the review round on PR #44: prior versions of
-    // this sampler filled the full container width, so for a modulus
-    // significantly narrower than `T`, acceptance rate was ~2⁻ˡᶻ and
-    // the 128-tries cap would blow up. The masked version must
-    // succeed even when the modulus occupies only ~6 bits in a
-    // 512-bit `SmallUCt` — this is `toy_params()` (n = 35).
+    // An unmasked sampler's acceptance rate against a modulus `lz`
+    // bits narrower than `T` is ~2⁻ˡᶻ, blowing the 128-tries cap.
+    // Masking must let sampling succeed even when the modulus
+    // occupies only ~6 bits of a 512-bit `SmallUCt` — this is
+    // `toy_params()` (n = 35).
     #[test]
     fn try_random_mod_modmath_succeeds_on_narrow_modulus_wide_carrier() {
         use crate::traits::modular::TryRandomMod;
@@ -1094,7 +1080,7 @@ mod private_op_tests {
         assert_eq!(recovered, expected);
     }
 
-    // Verify the new `InvertCt` primitive on the modmath backend against
+    // Verify the `InvertCt` primitive on the modmath backend against
     // a known-answer inverse. n = 35, 3⁻¹ mod 35 = 12 (since 3·12 = 36 ≡ 1).
     // Exercises the modmath `Field::inv_safegcd_ct` bridge.
     #[test]
@@ -1108,7 +1094,7 @@ mod private_op_tests {
         assert_eq!(recovered, wrap_value(SmallUCt::from(12u8)));
     }
 
-    // Verify the new `MulCt` primitive on the modmath backend against a
+    // Verify the `MulCt` primitive on the modmath backend against a
     // known-answer product. n = 35, 3·12 = 36 ≡ 1 (mod 35). Exercises
     // the modmath `Field::mul` bridge; also completes the round-trip
     // with `InvertCt` — inverting 3 and multiplying back gives 1.
@@ -1137,9 +1123,9 @@ mod private_op_tests {
     }
 
     // 2048-bit RSA keypair fixture — same `(n, e=65537, d)` used in
-    // `algorithms::rsa::tests::recover_primes_works`. Pulled in here so the
-    // heapless test path can roundtrip-sign without requiring `alloc`. `e` is rendered as 3-byte BE (`0x010001`) and
-    // resized into `U2048` at test time.
+    // `algorithms::rsa::tests::recover_primes_works`, duplicated here
+    // so the no-alloc test path can roundtrip-sign. `e` is rendered as
+    // 3-byte BE (`0x010001`) and resized into `U2048` at test time.
     const N_2048: [u8; 256] = hex_literal::hex!(
         "d397b84d98a4c26138ed1b695a8106ead91d553bf06041b62d3fdc50a041e222
          b8f4529689c1b82c5e71554f5dd69fa2f4b6158cf0dbeb57811a0fc327e1f28e
@@ -1278,8 +1264,8 @@ mod private_op_tests {
 
     // ─── defensive-error tests for `sign_into` upfront checks ───────────
     //
-    // These tests trip the fast-fail guards added on PR #21 / #22 review.
-    // None reach the RSA exponentiation, so `d`/`e` can be dummy values
+    // These tests trip `sign_into`'s fast-fail guards. None reach the
+    // RSA exponentiation, so `d`/`e` can be dummy values
     // and the toy `SmallUCt` (512-bit) `n_params` is sufficient.
 
     fn dummy_de() -> (ModMathValue<SmallUCt>, ModMathValue<SmallUCt>) {
@@ -1454,10 +1440,10 @@ mod private_op_tests {
         assert!(matches!(result, Err(Error::InputNotHashed)));
     }
 
-    // Regression for the codex-P2 fix — `sign_into`'s `k` check must
-    // use the actual modulus bit-length, not the container's
-    // `bits_precision()`, otherwise a shorter modulus stored in a
-    // wider container spuriously rejects the only valid `k`.
+    // `sign_into`'s `k` check must use the actual modulus bit-length,
+    // not the container's `bits_precision()`, otherwise a shorter
+    // modulus stored in a wider container spuriously rejects the only
+    // valid `k`.
     #[test]
     fn pkcs1v15_sign_into_k_uses_modulus_bits_not_container() {
         use crate::algorithms::pkcs1v15::sign_into;
@@ -1474,9 +1460,9 @@ mod private_op_tests {
         const CORRECT_K: usize = 64; // 512 modulus bits div_ceil 8
         const CONTAINER_K: usize = 128; // what `bits_precision()` would say
 
-        // Old buggy behavior: k=64 would return InvalidArguments because
-        // it didn't match container width. Post-fix: k=64 passes the
-        // width check (and only afterwards fails on the toy (d, e)).
+        // k = modulus_bits.div_ceil(8) must pass the width check even
+        // though the container is wider (it then fails later on the
+        // toy (d, e) — that's expected and asserted below).
         let mut em = [0u8; CORRECT_K];
         let mut sig = [0u8; CORRECT_K];
         let result = sign_into(
@@ -1511,7 +1497,7 @@ mod private_op_tests {
         assert!(matches!(result, Err(Error::InvalidArguments)));
     }
 
-    // ─── Phase 1 trait surgery: PrivateKeyParts smoke tests ──────
+    // ─── PrivateKeyParts smoke tests ─────────────────────────────
 
     #[test]
     fn pkcs1v15_signing_key_round_trip_2048_sha1() {
@@ -1618,13 +1604,10 @@ mod private_op_tests {
         emsa_pss_verify(&digest, &mut em_copy, Some(0), &mut verify_hash, KEY_BITS).unwrap();
     }
 
-    // Exact-width blinded sign KAT on the modmath backend. Prior to
-    // modmath 0.4.1-alpha.2 this would deterministically fail with
-    // `Error::Internal` — safegcd's `2·modulus ≤ T::MAX` precondition
-    // was unmet in `U2048` for a 2048-bit modulus, so every `InvertCt`
-    // call returned `None` and the blinding retry loop exhausted. The
-    // alpha's `SignedExt`-based signed intermediates close the
-    // headroom gap without widening the caller's carrier.
+    // Exact-width blinded sign round trip on the modmath backend:
+    // a 2048-bit modulus in exactly `U2048` must blind, invert, and
+    // sign successfully — no carrier headroom over the modulus is
+    // required.
     #[test]
     fn pss_signing_key_try_sign_prehash_with_rng_into_round_trip_2048_sha1() {
         use crate::algorithms::pss::emsa_pss_verify;

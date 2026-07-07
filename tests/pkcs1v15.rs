@@ -79,7 +79,7 @@ Rmb665iB5fwpqmbE/hYKIn7asYQE+V0dkgt8M3qvlJJ5JJbCrJx3
         .is_ok());
 }
 
-// End-to-end KAT for the heapless-shaped `try_sign_with_rng_into`
+// End-to-end round-trip test for the heapless-shaped `try_sign_with_rng_into`
 // wrapper on `pkcs1v15::SigningKey<D>`. Exercises the full stack:
 // wrapper → `algorithms::pkcs1v15::sign_with_rng_into` →
 // `rsa_private_op_and_check_blinded` → `TryRandomMod` (r sampling) →

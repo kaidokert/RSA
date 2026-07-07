@@ -341,23 +341,19 @@ where
 ///   reduced modulo `n`. The primitive uses `from_reduced` to convert
 ///   to Montgomery form and would leak `r`'s value on the
 ///   `BoxedMontyForm` backend via `rem_vartime` if we accepted
-///   unreduced input. Callers should sample `r` from `[1, n)`
-///   directly (via the random-mod primitive landing in the follow-up
-///   PR).
+///   unreduced input. Callers should sample `r` from `[1, n)` via
+///   `crate::traits::modular::TryRandomMod` — see
+///   [`rsa_private_op_and_check_blinded`].
 /// - **`c < n`** — same reason applied to the (secret) message. The
 ///   sign path's padded EM always satisfies this (leading 0x00 byte
 ///   → `EM < 2^{8(k-1)} < n`).
 /// - `gcd(blinding_r, n) = 1` — required for `r⁻¹ mod n` to exist.
 ///   For random `r` against RSA `n = p·q`, non-coprime is
 ///   astronomically rare. Retry-on-`Err` at the caller side is the
-///   standard defense. See the doc on `crate::traits::modular::InvertCt`
-///   for the two `None` failure modes (retryable vs deterministic) —
-///   this primitive returns `Error::Internal` for both without
-///   distinguishing; the caller is responsible for the preflight
-///   (carrier-headroom check on modmath) and retry policy.
+///   standard defense.
 /// - `blinding_r` is the caller-owned blinding factor. This primitive
-///   does not sample or validate its randomness. Follow-up PR wraps
-///   this with an RNG-taking entry point.
+///   does not sample or validate its randomness — see
+///   [`rsa_private_op_and_check_blinded`] for the RNG-taking wrapper.
 ///
 /// # Returns
 ///
@@ -368,9 +364,6 @@ where
 ///
 /// Raw RSA. Must be wrapped in a padding scheme. See
 /// [module-level docs][crate::hazmat].
-// Consumer (the RNG-taking `rsa_private_op_and_check(rng, ...)` extension
-// + heapless sign wrappers) lands in a later PR.
-#[allow(dead_code)]
 pub fn rsa_private_op_blinded<T, M>(blinding_r: &T, c: &T, d: &T, e: &T, n_params: &M) -> Result<T>
 where
     T: UnsignedModularInt,
@@ -387,9 +380,8 @@ where
         .clone()
         .resize_unchecked(n_params.bits_precision());
     let r_mont = M::MontgomeryForm::from_reduced(r_sized, n_params);
-    // `invert_ct` returns `None` for both retryable (non-coprime) and
-    // deterministic (carrier-tight) cases — caller preflights the
-    // deterministic case.
+    // `invert_ct` returns `None` iff `gcd(r, n) != 1` — caller
+    // retries with a fresh `r`.
     let r_inv_mont = r_mont.invert_ct().ok_or(Error::Internal)?;
     // r^e (in Montgomery form). Public exponent `e`, so
     // `pow_bounded_exp` (variable-time-in-exponent semantics) is fine.
@@ -397,12 +389,9 @@ where
     // c → Montgomery form via `from_reduced` (same reason as `r`).
     let c_sized = c.clone().resize_unchecked(n_params.bits_precision());
     let c_mont = M::MontgomeryForm::from_reduced(c_sized, n_params);
-    // c · r^e (Montgomery mul). Blinded ciphertext masks `c` from
-    // subsequent timing analysis on the private op.
     let blinded_mont = c_mont.mul_ct(&r_e_mont);
     // Private op on the blinded value — CT ladder in `d`.
     let s_prime_mont = blinded_mont.pow(d);
-    // Unblind: multiply by `r⁻¹` in Montgomery form, retrieve.
     let s_mont = s_prime_mont.mul_ct(&r_inv_mont);
     Ok(<M::MontgomeryForm as PowBoundedExp<M>>::retrieve(&s_mont))
 }
@@ -419,24 +408,17 @@ where
 ///
 /// # Retry policy
 ///
-/// The blinded delegate returns `Err` for both retryable (non-coprime
-/// `r` — astronomically rare on real RSA moduli) and deterministic
-/// (carrier-tight on the modmath backend — `T` fills the modulus's
-/// full width) cases. This wrapper retries up to
-/// `BLINDING_RETRIES = 10` times with a fresh `r` before returning
+/// The blinded delegate returns `Err` when `r` is not coprime to `n`
+/// — astronomically rare on real RSA moduli. This wrapper retries up
+/// to `BLINDING_RETRIES = 10` times with a fresh `r` before returning
 /// `Error::Internal`. For a real 2048-bit RSA modulus, non-coprime
 /// probability is ~2⁻²⁰⁴⁷ per attempt — 10 retries is astronomical
-/// overkill and hides no timing information. For the deterministic
-/// carrier-tight case, all 10 attempts fail identically; the error
-/// signals the mismatched carrier.
+/// overkill and hides no timing information.
 ///
 /// # ☢️️ WARNING: HAZARDOUS API ☢️
 ///
 /// Raw RSA. Must be wrapped in a padding scheme. See
 /// [module-level docs][crate::hazmat].
-// Consumer (the heapless `pkcs1v15` / `pss` sign-with-rng port) lands
-// in a later PR.
-#[allow(dead_code)]
 pub fn rsa_private_op_and_check_blinded<R, T, M>(
     rng: &mut R,
     c: &T,

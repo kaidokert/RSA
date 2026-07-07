@@ -60,10 +60,10 @@ where
     }
 }
 
-// Manual Clone impls — split by `private-key` cfg to avoid imposing
+// Manual Clone impls — split by `alloc` cfg to avoid imposing
 // the `M::MontgomeryForm: Clone` bound on heapless backends where it
 // isn't needed (only `GenericRsaPrivateKey`'s `precomputed` field
-// requires it, and that field is `cfg(private-key)`).
+// requires it, and that field is `cfg(alloc)`).
 #[cfg(feature = "alloc")]
 impl<D, T, M> Clone for GenericSigningKey<D, T, M>
 where
@@ -141,10 +141,9 @@ where
     }
 }
 
-// RNG-taking sign methods now use base blinding in addition to the
-// salt sampling. Bound expansion (`T: TryRandomMod`,
-// `M::MontgomeryForm: InvertCt<M> + MulCt<M>`) is satisfied by both
-// backends we support.
+// RNG-taking sign methods use base blinding in addition to the salt
+// sampling. The extra bounds are satisfied by both backends we
+// support.
 impl<D, T, M> GenericSigningKey<D, T, M>
 where
     D: Digest + FixedOutputReset,
@@ -284,7 +283,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    // End-to-end KAT for `try_sign_with_rng_into` on the boxed alias
+    // End-to-end round-trip test for `try_sign_with_rng_into` on the boxed alias
     // (`pss::SigningKey<D>`). Exercises the full stack: wrapper (which
     // internally samples salt AND blinding `r`) →
     // `algorithms::pss::sign_with_rng_into` →
