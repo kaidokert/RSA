@@ -56,16 +56,13 @@ where
 /// or signature scheme. See the [module-level documentation][crate::hazmat] for more information.
 #[cfg(feature = "private-key")]
 #[inline]
-pub fn rsa_decrypt<R: TryCryptoRng + ?Sized, K>(
+pub fn rsa_decrypt<R: TryCryptoRng + ?Sized>(
     rng: Option<&mut R>,
-    priv_key: &K,
+    priv_key: &impl PrivateKeyParts<BoxedUint, MontyParams = BoxedMontyParams>,
     c: &BoxedUint,
-) -> Result<BoxedUint>
-where
-    K: PrivateKeyParts<BoxedUint, MontyParams = BoxedMontyParams>,
-{
+) -> Result<BoxedUint> {
     let n = priv_key.n();
-    let d = PrivateKeyParts::d(priv_key);
+    let d = priv_key.d();
 
     if c.bits_precision() != n.as_ref().bits_precision() {
         return Err(Error::Decryption);
@@ -91,15 +88,15 @@ where
     // `primes()` defaults to `&[]`; the `primes.len() >= 2` guard below
     // keeps a key with CRT accessors but no primes off the `[0]`/`[1]`
     // panic path.
-    let primes = PrivateKeyParts::primes(priv_key);
+    let primes = priv_key.primes();
     let is_multiprime = primes.len() > 2;
 
     let m = match (
-        PrivateKeyParts::dp(priv_key),
-        PrivateKeyParts::dq(priv_key),
-        PrivateKeyParts::qinv(priv_key),
-        PrivateKeyParts::p_params(priv_key),
-        PrivateKeyParts::q_params(priv_key),
+        priv_key.dp(),
+        priv_key.dq(),
+        priv_key.qinv(),
+        priv_key.p_params(),
+        priv_key.q_params(),
     ) {
         (Some(dp), Some(dq), Some(qinv), Some(p_params), Some(q_params))
             if !is_multiprime && primes.len() >= 2 =>
@@ -158,7 +155,7 @@ where
         }
         _ => {
             // c^d (mod n)
-            rsa_private_op(&c, d, n_params)
+            pow_mod_params(&c, d, n_params)
         }
     };
 
@@ -185,14 +182,11 @@ where
 /// or signature scheme. See the [module-level documentation][crate::hazmat] for more information.
 #[cfg(feature = "private-key")]
 #[inline]
-pub fn rsa_decrypt_and_check<R: TryCryptoRng + ?Sized, K>(
-    priv_key: &K,
+pub fn rsa_decrypt_and_check<R: TryCryptoRng + ?Sized>(
+    priv_key: &impl PrivateKeyParts<BoxedUint, MontyParams = BoxedMontyParams>,
     rng: Option<&mut R>,
     c: &BoxedUint,
-) -> Result<BoxedUint>
-where
-    K: PrivateKeyParts<BoxedUint, MontyParams = BoxedMontyParams>,
-{
+) -> Result<BoxedUint> {
     let m = rsa_decrypt(rng, priv_key, c)?;
 
     // In order to defend against errors in the CRT computation, m^e is

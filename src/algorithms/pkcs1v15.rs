@@ -356,7 +356,7 @@ where
 }
 
 #[cfg(test)]
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 mod tests {
     use super::*;
     use rand::rngs::ChaCha8Rng;
