@@ -464,7 +464,7 @@ where
         // `r` is secret — wrap in `Zeroizing` so it's wiped when we
         // drop out of scope on `continue`, verify-fail, or success.
         let r = zeroize::Zeroizing::new(T::try_random_mod(rng, n)?);
-        let m = match rsa_private_op_blinded(&*r, c, d, e, n_params) {
+        let mut m = match rsa_private_op_blinded(&*r, c, d, e, n_params) {
             Ok(m) => m,
             Err(_) => continue,
         };
@@ -475,6 +475,10 @@ where
         let m_mont = M::MontgomeryForm::from_reduced(m_sized, n_params);
         let check = m_mont.pow_bounded_exp(e, e.bits()).retrieve();
         if *c != check {
+            // `m` is secret material (would-be plaintext or signature).
+            // Wipe before returning `Err` — the failure path indicates a
+            // fault-attack signal and the caller doesn't need `m`.
+            m.zeroize();
             return Err(Error::Internal);
         }
         return Ok(m);
