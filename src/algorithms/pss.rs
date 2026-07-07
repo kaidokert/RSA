@@ -16,7 +16,6 @@ use digest::{Digest, FixedOutputReset};
 
 use super::mgf::{mgf1_xor, mgf1_xor_digest};
 use crate::errors::{Error, Result};
-#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
 use crate::traits::{
     modular::{ModulusParams, Pow, PowBoundedExp},
     UnsignedModularInt,
@@ -219,7 +218,6 @@ where
 // Consumer (the heapless `pss::SigningKey<D>` wrapper) lands in a later PR.
 #[allow(dead_code)]
 #[allow(clippy::too_many_arguments)] // Composing four byte/integer steps; splitting helps nothing.
-#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
 pub fn sign_into<'sig, T, M, D>(
     n_params: &M,
     d: &T,
@@ -281,9 +279,7 @@ where
 ///
 /// Raw RSA. Must be wrapped in a padding/signature scheme. See
 /// [module-level docs][crate::hazmat].
-#[allow(dead_code)]
 #[allow(clippy::too_many_arguments)]
-#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
 pub fn sign_with_rng_into<'sig, R, T, M, D>(
     rng: &mut R,
     n_params: &M,

@@ -9,18 +9,16 @@
 //! [Probabilistic Signature Scheme]: https://en.wikipedia.org/wiki/Probabilistic_signature_scheme
 //! [RFC8017 § 8.1]: https://datatracker.ietf.org/doc/html/rfc8017#section-8.1
 
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 mod blinded_signing_key;
-#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
 mod generic_signing_key;
 mod signature;
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 mod signing_key;
 mod verifying_key;
 
-#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
 pub use self::generic_signing_key::GenericSigningKey;
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 pub use self::{blinded_signing_key::BlindedSigningKey, signing_key::SigningKey};
 
 #[cfg(feature = "alloc")]
@@ -42,13 +40,13 @@ use rand_core::TryCryptoRng;
 #[cfg(feature = "alloc")]
 use crate::algorithms::pad::{uint_to_be_pad, uint_to_be_pad_into, uint_to_zeroizing_be_pad};
 use crate::algorithms::pss::*;
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 use crate::algorithms::rsa::rsa_decrypt_and_check;
 #[cfg(feature = "alloc")]
 use crate::algorithms::rsa::rsa_encrypt;
 use crate::errors::{Error, Result};
 use crate::traits::{PublicKeyParts, SignatureScheme, UnsignedModularInt};
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 use crate::RsaPrivateKey;
 #[cfg(feature = "alloc")]
 use crate::RsaPublicKey;
@@ -124,7 +122,7 @@ impl<D> SignatureScheme for Pss<D>
 where
     D: Digest + FixedOutputReset,
 {
-    #[cfg(feature = "private-key")]
+    #[cfg(feature = "alloc")]
     fn sign<Rng: TryCryptoRng + ?Sized>(
         mut self,
         rng: Option<&mut Rng>,
@@ -253,7 +251,7 @@ where
 /// Note that hashed must be the result of hashing the input message using the
 /// given hash function. The opts argument may be nil, in which case sensible
 /// defaults are used.
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 pub(crate) fn sign<T, D>(
     rng: &mut T,
     blind: bool,
@@ -272,7 +270,7 @@ where
     sign_pss_with_salt(blind.then_some(rng), priv_key, hashed, &salt, digest)
 }
 
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 pub(crate) fn sign_digest<T, D>(
     rng: &mut T,
     blind: bool,
@@ -295,7 +293,7 @@ where
 /// Note that hashed must be the result of hashing the input message using the
 /// given hash function. salt is a random sequence of bytes whose length will be
 /// later used to verify the signature.
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 fn sign_pss_with_salt<T, D>(
     blind_rng: Option<&mut T>,
     priv_key: &RsaPrivateKey,
@@ -316,7 +314,7 @@ where
     uint_to_zeroizing_be_pad(raw, priv_key.size())
 }
 
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 fn sign_pss_with_salt_digest<T, D>(
     blind_rng: Option<&mut T>,
     priv_key: &RsaPrivateKey,
@@ -691,6 +689,7 @@ tAboUGBxTDq3ZroNism3DaMIbKPyYrAqhKov1h5V
     }
 
     #[test]
+    #[cfg(feature = "keygen")]
     // Tests the corner case where the key is multiple of 8 + 1 bits long
     fn test_sign_and_verify_2049bit_key() {
         let plaintext = "Hello\n";

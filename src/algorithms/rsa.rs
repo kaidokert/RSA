@@ -1,23 +1,23 @@
 //! Generic RSA implementation
 
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 use core::cmp::Ordering;
 
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 use crypto_bigint::Resize as _;
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 use crypto_bigint::{
     modular::{BoxedMontyForm, BoxedMontyParams},
     BoxedUint, ConcatenatingMul, ConcatenatingSquare, Gcd, RandomMod,
 };
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 use crypto_bigint::{NonZero as CryptoNonZero, Odd as CryptoOdd};
 use rand_core::TryCryptoRng;
 use zeroize::Zeroize;
 
-#[cfg(not(feature = "private-key"))]
+#[cfg(not(feature = "alloc"))]
 use crate::traits::keys::PublicKeyParts;
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 use crate::traits::keys::{PrivateKeyParts, PublicKeyParts};
 use crate::{
     errors::{Error, Result},
@@ -54,7 +54,7 @@ where
 ///
 /// Use this function with great care! Raw RSA should never be used without an appropriate padding
 /// or signature scheme. See the [module-level documentation][crate::hazmat] for more information.
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 #[inline]
 pub fn rsa_decrypt<R: TryCryptoRng + ?Sized>(
     rng: Option<&mut R>,
@@ -180,7 +180,7 @@ pub fn rsa_decrypt<R: TryCryptoRng + ?Sized>(
 ///
 /// Use this function with great care! Raw RSA should never be used without an appropriate padding
 /// or signature scheme. See the [module-level documentation][crate::hazmat] for more information.
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 #[inline]
 pub fn rsa_decrypt_and_check<R: TryCryptoRng + ?Sized>(
     priv_key: &impl PrivateKeyParts<BoxedUint, MontyParams = BoxedMontyParams>,
@@ -201,7 +201,7 @@ pub fn rsa_decrypt_and_check<R: TryCryptoRng + ?Sized>(
 }
 
 /// Returns the blinded c, along with the unblinding factor.
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 fn blind<R: TryCryptoRng + ?Sized, K: PublicKeyParts<BoxedUint, MontyParams = BoxedMontyParams>>(
     rng: &mut R,
     key: &K,
@@ -244,7 +244,7 @@ fn blind<R: TryCryptoRng + ?Sized, K: PublicKeyParts<BoxedUint, MontyParams = Bo
 }
 
 /// Given an m and unblinding factor, unblind the m.
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 fn unblind(m: &BoxedUint, unblinder: &BoxedUint, n_params: &BoxedMontyParams) -> BoxedUint {
     // m * r^-1 (mod n)
     debug_assert_eq!(
@@ -273,7 +273,6 @@ fn unblind(m: &BoxedUint, unblinder: &BoxedUint, n_params: &BoxedMontyParams) ->
 /// Raw RSA must be wrapped in a padding/signature scheme (PKCS#1 v1.5, PSS,
 /// OAEP) to be secure. See the [module-level documentation][crate::hazmat]
 /// for more information.
-#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
 #[inline]
 pub fn rsa_private_op<T, M>(c: &T, d: &T, n_params: &M) -> T
 where
@@ -296,7 +295,6 @@ where
 /// for more information.
 // Consumer (the heapless `pkcs1v15` / `pss` sign port) lands in a later PR.
 #[allow(dead_code)]
-#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
 #[inline]
 pub fn rsa_private_op_and_check<T, M>(c: &T, d: &T, e: &T, n_params: &M) -> Result<T>
 where
@@ -371,7 +369,6 @@ where
 // Consumer (the RNG-taking `rsa_private_op_and_check(rng, ...)` extension
 // + heapless sign wrappers) lands in a later PR.
 #[allow(dead_code)]
-#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
 pub fn rsa_private_op_blinded<T, M>(blinding_r: &T, c: &T, d: &T, e: &T, n_params: &M) -> Result<T>
 where
     T: UnsignedModularInt,
@@ -438,7 +435,6 @@ where
 // Consumer (the heapless `pkcs1v15` / `pss` sign-with-rng port) lands
 // in a later PR.
 #[allow(dead_code)]
-#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
 pub fn rsa_private_op_and_check_blinded<R, T, M>(
     rng: &mut R,
     c: &T,
@@ -504,7 +500,7 @@ where
 /// The following (deterministic) algorithm also recovers the prime factors `p` and `q` of a modulus `n`, given the
 /// public exponent `e` and private exponent `d` using the method described in
 /// [NIST 800-56B Appendix C.2](https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-56Br2.pdf).
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 pub fn recover_primes(
     n: &CryptoNonZero<BoxedUint>,
     e: &BoxedUint,
@@ -573,7 +569,7 @@ pub fn recover_primes(
 }
 
 /// Compute the modulus of a key from its primes.
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 pub(crate) fn compute_modulus(primes: &[BoxedUint]) -> CryptoOdd<BoxedUint> {
     let mut primes = primes.iter();
     let mut out = primes.next().expect("must at least be one prime").clone();
@@ -585,7 +581,7 @@ pub(crate) fn compute_modulus(primes: &[BoxedUint]) -> CryptoOdd<BoxedUint> {
 
 /// Compute the private exponent from its primes (p and q) and public exponent
 /// This uses Euler's totient function
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 #[inline]
 pub(crate) fn compute_private_exponent_euler_totient(
     primes: &[BoxedUint],
@@ -619,7 +615,7 @@ pub(crate) fn compute_private_exponent_euler_totient(
 ///
 /// FIPS 186-4 **requires** the private exponent to be less than λ(n), which would
 /// make Euler's totiem unreliable.
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 #[inline]
 pub(crate) fn compute_private_exponent_carmicheal(
     p: &BoxedUint,
@@ -646,7 +642,7 @@ pub(crate) fn compute_private_exponent_carmicheal(
 }
 
 #[cfg(test)]
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 mod tests {
     use super::*;
 

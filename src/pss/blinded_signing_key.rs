@@ -51,12 +51,14 @@ where
     /// Create a new random RSASSA-PSS signing key which produces "blinded"
     /// signatures.
     /// Digest output size is used as a salt length.
+    #[cfg(feature = "keygen")]
     pub fn random<R: CryptoRng + ?Sized>(rng: &mut R, bit_size: usize) -> Result<Self> {
         SigningKey::random(rng, bit_size).map(Self)
     }
 
     /// Create a new random RSASSA-PSS signing key which produces "blinded"
     /// signatures with a salt of the given length.
+    #[cfg(feature = "keygen")]
     pub fn random_with_salt_len<R: CryptoRng + ?Sized>(
         rng: &mut R,
         bit_size: usize,
@@ -279,7 +281,7 @@ where
 #[cfg(test)]
 mod tests {
     #[test]
-    #[cfg(all(feature = "hazmat", feature = "serde"))]
+    #[cfg(all(feature = "hazmat", feature = "serde", feature = "keygen"))]
     fn test_serde() {
         use super::*;
         use rand::rngs::ChaCha8Rng;

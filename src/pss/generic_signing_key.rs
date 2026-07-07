@@ -64,7 +64,7 @@ where
 // the `M::MontgomeryForm: Clone` bound on heapless backends where it
 // isn't needed (only `GenericRsaPrivateKey`'s `precomputed` field
 // requires it, and that field is `cfg(private-key)`).
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 impl<D, T, M> Clone for GenericSigningKey<D, T, M>
 where
     D: Digest,
@@ -81,7 +81,7 @@ where
     }
 }
 
-#[cfg(not(feature = "private-key"))]
+#[cfg(not(feature = "alloc"))]
 impl<D, T, M> Clone for GenericSigningKey<D, T, M>
 where
     D: Digest,

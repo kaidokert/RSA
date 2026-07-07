@@ -125,7 +125,7 @@ where
 mod tests {
 
     #[test]
-    #[cfg(all(feature = "hazmat", feature = "serde", feature = "private-key"))]
+    #[cfg(all(feature = "hazmat", feature = "serde", feature = "keygen"))]
     fn test_serde() {
         use super::*;
         use rand::rngs::ChaCha8Rng;

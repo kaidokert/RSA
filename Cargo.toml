@@ -84,8 +84,8 @@ name = "rsa_decrypt"
 required-features = ["modmath", "alloc"]
 
 [features]
-default = ["std", "encoding", "modmath"]
-encoding = ["alloc", "private-key", "dep:pkcs1", "dep:pkcs8", "dep:spki"]
+default = ["std", "encoding", "modmath", "keygen"]
+encoding = ["alloc", "dep:pkcs1", "dep:pkcs8", "dep:spki"]
 hazmat = []
 getrandom = ["dep:crypto-bigint", "crypto-bigint/getrandom", "crypto-common"]
 serde = ["encoding", "dep:serde", "dep:serdect", "dep:crypto-bigint", "crypto-bigint/serde"]
@@ -93,15 +93,12 @@ pkcs5 = ["pkcs8/encryption"]
 std = ["alloc", "pkcs1?/std", "pkcs8?/std"]
 alloc = ["dep:crypto-bigint", "crypto-bigint/alloc", "pkcs8/alloc", "spki/alloc", "digest/alloc", "signature/alloc", "zeroize/alloc"]
 
-# Enable private key support, doesn't work with no-alloc
-private-key = ["alloc", "dep:crypto-primes"]
+# On-device key generation (`RsaPrivateKey::new` and friends). Pulls the
+# heavy `crypto-primes` stack; never available on the no-alloc path —
+# heapless targets get keys from a provisioning path (PEM/HSM/firmware
+# constants), not generated on-device.
+keygen = ["alloc", "dep:crypto-primes"]
 modmath = ["dep:modmath", "dep:modmath-cios", "dep:fixed-bigint"]
-
-# In-progress: gate for individual private-key functions that have been
-# generalized to work on the no_alloc / modmath path. Enabling this alone
-# (without `private-key`) compiles and tests the ported subset; enabling
-# both gives you the full alloc-bound surface plus any newly ported items.
-wip-private-key = []
 
 [package.metadata.docs.rs]
 features = ["std", "serde", "hazmat", "sha2"]

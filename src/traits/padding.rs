@@ -6,7 +6,7 @@ use alloc::vec::Vec;
 use rand_core::TryCryptoRng;
 
 use crate::errors::Result;
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 use crate::key::RsaPrivateKey;
 use crate::traits::modular::CtModulusParams;
 use crate::traits::{PublicKeyParts, UnsignedModularInt};
@@ -17,7 +17,7 @@ pub trait PaddingScheme {
     ///
     /// If an `rng` is passed, it uses RSA blinding to help mitigate timing
     /// side-channel attacks.
-    #[cfg(feature = "private-key")]
+    #[cfg(feature = "alloc")]
     fn decrypt<Rng: TryCryptoRng + ?Sized>(
         self,
         rng: Option<&mut Rng>,
@@ -38,7 +38,7 @@ pub trait PaddingScheme {
 /// Digital signature scheme.
 pub trait SignatureScheme {
     /// Sign the given digest.
-    #[cfg(feature = "private-key")]
+    #[cfg(feature = "alloc")]
     fn sign<Rng: TryCryptoRng + ?Sized>(
         self,
         rng: Option<&mut Rng>,

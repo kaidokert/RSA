@@ -15,7 +15,6 @@ use rand_core::TryCryptoRng;
 use zeroize::Zeroizing;
 
 use crate::errors::{Error, Result};
-#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
 use crate::traits::{
     modular::{ModulusParams, Pow, PowBoundedExp},
     UnsignedModularInt,
@@ -202,7 +201,6 @@ pub fn pkcs1v15_sign_pad_into<'a>(
 // Consumer (the heapless `SigningKey<D>` wrapper) lands in a later PR.
 #[allow(dead_code)]
 #[allow(clippy::too_many_arguments)] // Composing four byte/integer steps; splitting helps nothing.
-#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
 pub fn sign_into<'sig, T, M>(
     n_params: &M,
     d: &T,
@@ -252,11 +250,7 @@ where
 ///
 /// Raw RSA. Must be wrapped in a padding/signature scheme. See
 /// [module-level docs][crate::hazmat].
-// Consumer (the heapless `SigningKey<D>` wrapper) lands in the same
-// PR that adds this.
-#[allow(dead_code)]
 #[allow(clippy::too_many_arguments)]
-#[cfg(any(feature = "private-key", feature = "wip-private-key"))]
 pub fn sign_with_rng_into<'sig, R, T, M>(
     rng: &mut R,
     n_params: &M,

@@ -2,7 +2,7 @@
 //! `T` (integer), and `M` (Montgomery parameters), mirrors the shape of
 //! [`super::GenericVerifyingKey`] on the verify side.
 //!
-//! Compatible with the no_alloc / `wip-private-key` build path —
+//! Compatible with the no_alloc build path —
 //! [`GenericRsaPrivateKey<T, M>`] storage, fixed-size [`Prefix`] for
 //! the DigestInfo prefix, caller-supplied scratch buffers for the EM
 //! and signature output.
@@ -66,7 +66,7 @@ where
 // the `M::MontgomeryForm: Clone` bound on heapless backends where it
 // isn't needed (only `GenericRsaPrivateKey`'s `precomputed` field
 // requires it, and that field is `cfg(private-key)`).
-#[cfg(feature = "private-key")]
+#[cfg(feature = "alloc")]
 impl<D, T, M> Clone for GenericSigningKey<D, T, M>
 where
     D: Digest,
@@ -83,7 +83,7 @@ where
     }
 }
 
-#[cfg(not(feature = "private-key"))]
+#[cfg(not(feature = "alloc"))]
 impl<D, T, M> Clone for GenericSigningKey<D, T, M>
 where
     D: Digest,

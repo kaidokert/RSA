@@ -2,7 +2,7 @@
 
 mod mgf;
 
-#[cfg(feature = "private-key")]
+#[cfg(feature = "keygen")]
 pub(crate) mod generate;
 pub(crate) mod oaep;
 pub(crate) mod pad;
