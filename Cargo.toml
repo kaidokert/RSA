@@ -116,5 +116,5 @@ debug = true
 [patch.crates-io]
 const-num-traits = { git = "https://github.com/kaidokert/num-traits.git", tag = "v0.2.0-alpha.1" }
 fixed-bigint = { git = "https://github.com/kaidokert/fixed-bigint-rs", tag = "v0.5.0-alpha.3" }
-modmath = { git = "https://github.com/kaidokert/modmath-rs", tag = "v0.5.0-alpha.2" }
-modmath-cios = { git = "https://github.com/kaidokert/modmath-rs", tag = "v0.5.0-alpha.2" }
+modmath = { git = "https://github.com/kaidokert/modmath-rs", tag = "v0.5.0-alpha.3" }
+modmath-cios = { git = "https://github.com/kaidokert/modmath-rs", tag = "v0.5.0-alpha.3" }
