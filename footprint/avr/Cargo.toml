@@ -22,10 +22,7 @@ hash_sha256 = []
 
 [dependencies]
 avr-device = { version = "0.7", features = ["atmega2560", "rt"] }
-# Temporary git pin — must match the fixed-bigint tag rsa_heapless's alpha
-# line uses, or FixedUInt won't satisfy the const-num-traits 0.2 bounds.
-# Back to a crates.io version when the stable 0.5 line ships.
-fixed-bigint = { git = "https://github.com/kaidokert/fixed-bigint-rs", tag = "v0.5.0-alpha.4", default-features = false, features = ["zeroize", "use-unsafe", "cios"] }
+fixed-bigint = { version = "0.5.0", default-features = false, features = ["zeroize", "use-unsafe", "cios"] }
 rsa = { path = "../..", package = "rsa_heapless", default-features = false, features = ["modmath"] }
 sha1 = { version = "0.11.0-rc.5", default-features = false, features = ["oid"] }
 sha2 = { version = "0.11.0-rc.5", default-features = false, features = ["oid"] }
