@@ -42,7 +42,7 @@ serde = { version = "1.0.184", optional = true, default-features = false, featur
 
 # Big integer backend
 crypto-bigint = { version = "0.7.1", optional = true, default-features = false, features = ["zeroize","rand_core"] }
-modmath = { git = "https://github.com/kaidokert/modmath-rs", tag = "v0.5.0-alpha.3", optional = true, default-features = false, features = ["zeroize"] }
+modmath = { git = "https://github.com/kaidokert/modmath-rs", tag = "v0.5.0-alpha.4", optional = true, default-features = false, features = ["zeroize"] }
 # Registry-only on purpose (matches modmath's own dep) — a git copy would
 # give `CiosRowOps` a second identity and split the trait universe.
 modmath-cios = { version = "0.1", optional = true, default-features = false }
@@ -64,7 +64,7 @@ serde_json = "1.0.138"
 serde = { version = "1.0.184", features = ["derive"] }
 rstest = "0.26.1"
 crypto-bigint = { version = "0.7", default-features = false, features = ["zeroize", "alloc"] }
-fixed-bigint = { git = "https://github.com/kaidokert/fixed-bigint-rs", tag = "v0.5.0-alpha.3", default-features = false, features = ["zeroize", "use-unsafe", "cios"] }
+fixed-bigint = { git = "https://github.com/kaidokert/fixed-bigint-rs", tag = "v0.5.0-alpha.4", default-features = false, features = ["zeroize", "use-unsafe", "cios"] }
 
 [[bench]]
 name = "key"
