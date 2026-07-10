@@ -221,9 +221,10 @@ def main():
     print("Approx time is measured by the demo harness timer and should be treated as a rough runtime proxy, not a precise benchmark.")
 
     if failures:
-        print(f"\nFailures (non-fatal — shown as `-` in table): {len(failures)}", file=sys.stderr)
+        print(f"\nFailures (shown as `-` in table): {len(failures)}", file=sys.stderr)
         for failure in failures:
             print(f"  {failure}", file=sys.stderr)
+        return 1
     return 0
 
 
