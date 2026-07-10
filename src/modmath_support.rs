@@ -651,17 +651,8 @@ where
     T: ModMathIntCt
         + HasPersonality<P = Ct>
         + modmath_cios::CiosRowOps
-        + core::ops::Shl<usize, Output = T>
         + core::ops::BitOr<Output = T>,
-    <T as modmath_cios::CiosRowOps>::Word: Copy
-        + subtle::ConditionallySelectable
-        + subtle::ConstantTimeEq
-        + const_num_traits::CtIsZero
-        + const_num_traits::CtParity
-        + const_num_traits::One
-        + const_num_traits::Zero
-        + core::ops::BitAnd<Output = <T as modmath_cios::CiosRowOps>::Word>
-        + core::ops::Shl<usize, Output = <T as modmath_cios::CiosRowOps>::Word>,
+    <T as modmath_cios::CiosRowOps>::Word: const_num_traits::CtParity,
 {
     fn invert_ct(&self) -> Option<Self> {
         let field = self.params.field();
