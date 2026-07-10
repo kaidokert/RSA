@@ -215,9 +215,10 @@ def main():
     print("Approx cycles are derived from the demo harness counters and should be treated as a rough instruction-cost proxy, not a precise benchmark.")
 
     if failures:
-        print(f"\nFailures (non-fatal — shown as `-` in table): {len(failures)}", file=sys.stderr)
+        print(f"\nFailures (shown as `-` in table): {len(failures)}", file=sys.stderr)
         for f in failures:
             print(f"  {f}", file=sys.stderr)
+        return 1
     return 0
 
 
