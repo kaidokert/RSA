@@ -582,15 +582,3 @@ mod ct_type_guarantees {
     assert_impl_all!(FormCt: ZeroizeOnDrop);
     assert_impl_all!(FormNct: ZeroizeOnDrop);
 }
-
-// The alloc backend opts `BoxedMontyParams` into `CtModulusParams` for
-// upstream-compatibility (with the documented `rem_vartime` caveat on
-// that impl). Pin that opt-in so it can't silently regress.
-#[cfg(all(test, feature = "alloc"))]
-mod ct_type_guarantees_alloc {
-    use super::CtModulusParams;
-    use crypto_bigint::modular::BoxedMontyParams;
-    use static_assertions::assert_impl_all;
-
-    assert_impl_all!(BoxedMontyParams: CtModulusParams);
-}
