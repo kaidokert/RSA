@@ -1,6 +1,8 @@
 [build]
 target = "avr-none"
-rustflags = ["-C", "target-cpu=atmega2560"]
+# sha2 0.11 selects its soft backend via rustc cfg, not a cargo feature;
+# compact keeps the size-measurement harness honest.
+rustflags = ["-C", "target-cpu=atmega2560", "--cfg", 'sha2_backend_soft="compact"']
 
 [unstable]
 build-std = ["core"]

@@ -1,5 +1,9 @@
 [build]
 target = "riscv32imac-unknown-none-elf"
+# sha2 0.11 selects its soft backend via rustc cfg, not a cargo feature.
+# Without this the default (speed-oriented) backend costs ~6.5 KB more
+# .text — the wrong tradeoff for a size-measurement harness.
+rustflags = ['--cfg', 'sha2_backend_soft="compact"']
 
 [target.riscv32imac-unknown-none-elf]
 runner = "python3 qemu_wrapper.py"
