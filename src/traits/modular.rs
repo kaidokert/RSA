@@ -554,31 +554,35 @@ mod ct_type_guarantees {
     use static_assertions::{assert_impl_all, assert_not_impl_any};
     use zeroize::ZeroizeOnDrop;
 
-    // 64-byte carriers at each personality — the same shapes the
-    // modmath-backend tests use.
-    type CarrierCt = FixedUInt<u8, 64, Ct>;
-    type CarrierNct = FixedUInt<u8, 64, Nct>;
-    type ParamsCt = ModMathParams<CarrierCt, Ct>;
-    type ParamsNct = ModMathParams<CarrierNct, Nct>;
-    type FormCt = ModMathForm<CarrierCt, Ct>;
-    type FormNct = ModMathForm<CarrierNct, Nct>;
+    // Types are spelled inline rather than through aliases: older
+    // rustc's dead_code lint (e.g. 1.87, the MSRV CI row) doesn't see
+    // uses inside static_assertions' macro-expanded `const _` items,
+    // so aliases trip -Dwarnings there.
 
     // The sealed encrypt/sign gate: only the Ct params opt in. An `Nct`
     // params type reaching a `CtModulusParams`-bounded entry point is a
     // compile error at the call site; this pins the marker itself.
-    assert_impl_all!(ParamsCt: CtModulusParams);
-    assert_not_impl_any!(ParamsNct: CtModulusParams);
+    assert_impl_all!(ModMathParams<FixedUInt<u8, 64, Ct>, Ct>: CtModulusParams);
+    assert_not_impl_any!(ModMathParams<FixedUInt<u8, 64, Nct>, Nct>: CtModulusParams);
 
     // The blinding primitives (`rsa_private_op_blinded` and its check
     // wrapper) bound the Montgomery form on `InvertCt` + `MulCt`; both
     // exist only on the Ct form.
-    assert_impl_all!(FormCt: InvertCt<ParamsCt>, MulCt<ParamsCt>);
-    assert_not_impl_any!(FormNct: InvertCt<ParamsNct>, MulCt<ParamsNct>);
+    assert_impl_all!(
+        ModMathForm<FixedUInt<u8, 64, Ct>, Ct>:
+        InvertCt<ModMathParams<FixedUInt<u8, 64, Ct>, Ct>>,
+        MulCt<ModMathParams<FixedUInt<u8, 64, Ct>, Ct>>
+    );
+    assert_not_impl_any!(
+        ModMathForm<FixedUInt<u8, 64, Nct>, Nct>:
+        InvertCt<ModMathParams<FixedUInt<u8, 64, Nct>, Nct>>,
+        MulCt<ModMathParams<FixedUInt<u8, 64, Nct>, Nct>>
+    );
 
     // Secret-bearing Montgomery values wipe on drop regardless of
     // personality (the public value in an Nct form is not secret, but
     // the type is the same shape and the guarantee is cheap to keep
     // symmetric).
-    assert_impl_all!(FormCt: ZeroizeOnDrop);
-    assert_impl_all!(FormNct: ZeroizeOnDrop);
+    assert_impl_all!(ModMathForm<FixedUInt<u8, 64, Ct>, Ct>: ZeroizeOnDrop);
+    assert_impl_all!(ModMathForm<FixedUInt<u8, 64, Nct>, Nct>: ZeroizeOnDrop);
 }
