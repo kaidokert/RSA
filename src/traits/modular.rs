@@ -533,3 +533,64 @@ impl TryFromBeBytes for BoxedUint {
         Ok(BoxedUint::from_be_slice_vartime(bytes))
     }
 }
+
+// ─── Layer 0 CT type-surface guarantees ─────────────────────────────
+//
+// Compile-time assertions that the constant-time markers stay attached
+// to exactly the Ct personality and no other. A regression that leaks
+// `CtModulusParams` / `InvertCt` / `MulCt` onto an `Nct` carrier — or
+// drops them from a `Ct` one — fails the build here rather than
+// silently routing secret material through a variable-time path.
+//
+// Lives in this fork-only trait module (the file that defines the
+// markers) so the sealed / `pub(crate)` traits are nameable without
+// widening their visibility or touching any upstream-shared file.
+#[cfg(all(test, feature = "modmath"))]
+mod ct_type_guarantees {
+    use super::{CtModulusParams, InvertCt, MulCt};
+    use crate::modmath_support::{ModMathForm, ModMathParams};
+    use const_num_traits::{Ct, Nct};
+    use fixed_bigint::FixedUInt;
+    use static_assertions::{assert_impl_all, assert_not_impl_any};
+    use zeroize::ZeroizeOnDrop;
+
+    // 64-byte carriers at each personality — the same shapes the
+    // modmath-backend tests use.
+    type CarrierCt = FixedUInt<u8, 64, Ct>;
+    type CarrierNct = FixedUInt<u8, 64, Nct>;
+    type ParamsCt = ModMathParams<CarrierCt, Ct>;
+    type ParamsNct = ModMathParams<CarrierNct, Nct>;
+    type FormCt = ModMathForm<CarrierCt, Ct>;
+    type FormNct = ModMathForm<CarrierNct, Nct>;
+
+    // The sealed encrypt/sign gate: only the Ct params opt in. An `Nct`
+    // params type reaching a `CtModulusParams`-bounded entry point is a
+    // compile error at the call site; this pins the marker itself.
+    assert_impl_all!(ParamsCt: CtModulusParams);
+    assert_not_impl_any!(ParamsNct: CtModulusParams);
+
+    // The blinding primitives (`rsa_private_op_blinded` and its check
+    // wrapper) bound the Montgomery form on `InvertCt` + `MulCt`; both
+    // exist only on the Ct form.
+    assert_impl_all!(FormCt: InvertCt<ParamsCt>, MulCt<ParamsCt>);
+    assert_not_impl_any!(FormNct: InvertCt<ParamsNct>, MulCt<ParamsNct>);
+
+    // Secret-bearing Montgomery values wipe on drop regardless of
+    // personality (the public value in an Nct form is not secret, but
+    // the type is the same shape and the guarantee is cheap to keep
+    // symmetric).
+    assert_impl_all!(FormCt: ZeroizeOnDrop);
+    assert_impl_all!(FormNct: ZeroizeOnDrop);
+}
+
+// The alloc backend opts `BoxedMontyParams` into `CtModulusParams` for
+// upstream-compatibility (with the documented `rem_vartime` caveat on
+// that impl). Pin that opt-in so it can't silently regress.
+#[cfg(all(test, feature = "alloc"))]
+mod ct_type_guarantees_alloc {
+    use super::CtModulusParams;
+    use crypto_bigint::modular::BoxedMontyParams;
+    use static_assertions::assert_impl_all;
+
+    assert_impl_all!(BoxedMontyParams: CtModulusParams);
+}
