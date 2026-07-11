@@ -534,7 +534,7 @@ impl TryFromBeBytes for BoxedUint {
     }
 }
 
-// ─── Layer 0 CT type-surface guarantees ─────────────────────────────
+// ─── CT type-surface guarantees ─────────────────────────────────────
 //
 // Compile-time assertions that the constant-time markers stay attached
 // to exactly the Ct personality and no other. A regression that leaks
