@@ -1,0 +1,59 @@
+name: CT ctgrind
+
+on:
+  pull_request:
+    paths:
+      - "ct-verify/**"
+      - "src/**"
+      - "Cargo.toml"
+      - ".github/workflows/ct-ctgrind.yml"
+  push:
+    branches:
+      - heapless
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  # Taint gate: run the whole-operation sign fixture under Valgrind
+  # memcheck with the secret exponent `d` marked undefined. Any
+  # secret-dependent branch or memory access anywhere in the reachable
+  # crypto path — including inlined modmath / fixed-bigint primitives —
+  # trips; the many legitimate branches on public data pass by
+  # construction. This is the primary whole-operation CT gate.
+  #
+  # Both x86_64 and aarch64 from day one: Valgrind supports only these
+  # two Linux archs, and an aarch64 false-pass has bitten this ecosystem
+  # before. The x86_64 row pins +lzcnt,+bmi1 so baseline `leading_zeros`
+  # doesn't lower to a data-dependent branch inside a core intrinsic.
+  ctgrind:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            arch: x86_64
+            rustflags: "-C target-feature=+lzcnt,+bmi1"
+          - runner: ubuntu-24.04-arm
+            arch: aarch64
+            rustflags: ""
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.87.0
+      - name: Install Valgrind
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq valgrind
+      - name: Build ct-ctgrind
+        working-directory: ct-verify
+        env:
+          RUSTFLAGS: ${{ matrix.rustflags }}
+        run: cargo build --release -p ct-ctgrind
+      - name: Taint gate (memcheck)
+        working-directory: ct-verify
+        run: |
+          valgrind --tool=memcheck --error-limit=no --error-exitcode=0 \
+            --suppressions=ct-ctgrind/ct-ctgrind.supp -q \
+            target/release/ct-ctgrind

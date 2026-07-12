@@ -18,7 +18,7 @@
 //! - `nct_fix__neg__<op>` — a negative control; it MUST trip each gate,
 //!   proving the harness still has teeth.
 
-#![no_std]
+#![cfg_attr(feature = "panic-handler", no_std)]
 
 #[cfg(feature = "panic-handler")]
 #[panic_handler]
@@ -118,9 +118,13 @@ pub unsafe extern "C" fn ct_fix__pkcs1v15_blinded_sign__fb8__N64(
     unsafe { *out_ptr = black_box(sig) }
 }
 
-/// Negative control — data-dependent branch on a secret byte. MUST
-/// trip every gate (asm-grep sees the conditional branch; taint sees
-/// the secret-flagged jump). A clean pass here means the harness is
+/// Negative control — a secret-dependent *early-exit loop*. MUST trip
+/// every gate. A variable-trip-count loop can't be flattened into a
+/// branchless select the way a simple `if x { … }` can (which LLVM
+/// lowers to `csel`/`cmov` — invisible to a taint tool that only sees
+/// conditional *jumps*), so the loop's condition on a tainted byte is a
+/// real conditional jump on every target. Counts leading zero bytes;
+/// the `break` is the branch. A clean pass here means the harness is
 /// broken.
 /// # Safety
 /// `s_ptr` must be a valid, aligned pointer to a 64-byte array;
@@ -131,28 +135,42 @@ pub unsafe extern "C" fn nct_fix__neg__secret_branch__fb8__N64(
     out_ptr: *mut u8,
 ) {
     let s = black_box(unsafe { *s_ptr });
-    let mut acc = 0u8;
-    // Branch whose taken/not-taken depends on secret bytes.
+    let mut n = 0u8;
     for &b in s.iter() {
-        if b > 0x7f {
-            acc = acc.wrapping_add(b);
+        if b != 0 {
+            break;
         }
+        n = n.wrapping_add(1);
     }
-    unsafe { *out_ptr = black_box(acc) }
+    unsafe { *out_ptr = black_box(n) }
 }
 
-/// Negative control — variable-time remainder on a secret dividend.
-/// MUST trip: `%` on a runtime value lowers to a data-dependent
-/// division/branch sequence on every target the driver covers.
+/// Negative control — a non-constant-time comparison (lexicographic,
+/// early-exit on the first differing byte, like a naive `memcmp`). MUST
+/// trip: the early `break` on a tainted byte is a conditional jump that
+/// survives optimization on every target.
 /// # Safety
-/// `s_ptr` must be a valid, aligned pointer to an 8-byte array;
-/// `out_ptr` to a writable `u64`.
+/// `s_ptr` must be a valid, aligned pointer to a 64-byte array;
+/// `out_ptr` to a writable byte.
 #[no_mangle]
-pub unsafe extern "C" fn nct_fix__neg__vartime_rem__fb8__N64(
-    s_ptr: *const [u8; 8],
-    out_ptr: *mut u64,
+pub unsafe extern "C" fn nct_fix__neg__vartime_cmp__fb8__N64(
+    s_ptr: *const [u8; 64],
+    out_ptr: *mut u8,
 ) {
-    let s = u64::from_le_bytes(black_box(unsafe { *s_ptr }));
-    let r = black_box(s) % black_box(0x1_0000_000du64);
-    unsafe { *out_ptr = black_box(r) }
+    let s = black_box(unsafe { *s_ptr });
+    let reference = [0u8; 64];
+    let mut equal = 1u8;
+    for i in 0..64 {
+        if s[i] != reference[i] {
+            equal = 0;
+            break;
+        }
+    }
+    unsafe { *out_ptr = black_box(equal) }
 }
+
+/// No-op that forces this rlib onto a consumer's link line. The taint
+/// harness links `ct-fixtures` as an rlib and calls its `#[no_mangle]`
+/// symbols by name across the C ABI; without a referenced Rust item the
+/// linker may drop the rlib entirely (and with it every fixture symbol).
+pub fn link_anchor() {}
