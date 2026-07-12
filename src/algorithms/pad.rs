@@ -30,14 +30,26 @@ pub fn left_pad_into<'a>(
         return Err(Error::InvalidPadLen);
     }
 
-    if storage.len() < padded_len {
-        return Err(Error::OutputBufferTooSmall);
-    }
-
     let start = padded_len - input.len();
-    storage[..start].fill(0);
-    storage[start..start + input.len()].copy_from_slice(input);
-    Ok(&storage[..padded_len])
+    {
+        // Fallible slicing (`get_mut`/`split_at_mut_checked`) and a
+        // byte-copy loop instead of `[..]` indexing + `copy_from_slice`,
+        // so no `slice_index_fail` / `copy_from_slice` panic path is
+        // synthesized into the (embedded) sign binary. `tail.len()` ==
+        // `padded_len - start` == `input.len()`, so the zip copies all
+        // of `input`.
+        let region = storage
+            .get_mut(..padded_len)
+            .ok_or(Error::OutputBufferTooSmall)?;
+        let (zeros, tail) = region
+            .split_at_mut_checked(start)
+            .ok_or(Error::InvalidPadLen)?;
+        zeros.fill(0);
+        for (dst, src) in tail.iter_mut().zip(input.iter()) {
+            *dst = *src;
+        }
+    }
+    storage.get(..padded_len).ok_or(Error::OutputBufferTooSmall)
 }
 
 /// Converts input to the new vector of the given length, using BE and with 0s left padded.
@@ -59,7 +71,8 @@ where
     let leading_zeros = input.leading_zeros() as usize / 8;
     let bytes = input.to_be_bytes();
     let borrow: &[u8] = bytes.borrow();
-    left_pad_into(&borrow[leading_zeros..], padded_len, storage)
+    let trimmed = borrow.get(leading_zeros..).ok_or(Error::Internal)?;
+    left_pad_into(trimmed, padded_len, storage)
 }
 
 /// Converts input to the new vector of the given length, using BE and with 0s left padded.
@@ -87,7 +100,8 @@ where
     let m = Zeroizing::new(input);
     let m = Zeroizing::new(m.to_be_bytes());
     let bytes: &[u8] = m.as_ref();
-    left_pad_into(&bytes[leading_zeros..], padded_len, storage)
+    let trimmed = bytes.get(leading_zeros..).ok_or(Error::Internal)?;
+    left_pad_into(trimmed, padded_len, storage)
 }
 
 #[cfg(test)]

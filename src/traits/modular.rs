@@ -72,7 +72,15 @@ where
         if bytes.len() > out_len {
             return Err(Error::InvalidArguments);
         }
-        out[out_len - bytes.len()..].copy_from_slice(bytes);
+        // Fallible slice + byte-copy loop rather than `[..]` +
+        // `copy_from_slice`, so no panic path reaches the sign binary;
+        // `dst.len()` == `bytes.len()` by construction.
+        let dst = out
+            .get_mut(out_len - bytes.len()..)
+            .ok_or(Error::InvalidArguments)?;
+        for (d, s) in dst.iter_mut().zip(bytes.iter()) {
+            *d = *s;
+        }
         Ok(NumFromBytes::from_be_bytes(&repr))
     }
 
@@ -105,7 +113,15 @@ where
         if bytes.len() > out_len {
             return Err(Error::InvalidArguments);
         }
-        out[out_len - bytes.len()..].copy_from_slice(bytes);
+        // Fallible slice + byte-copy loop rather than `[..]` +
+        // `copy_from_slice`, so no panic path reaches the sign binary;
+        // `dst.len()` == `bytes.len()` by construction.
+        let dst = out
+            .get_mut(out_len - bytes.len()..)
+            .ok_or(Error::InvalidArguments)?;
+        for (d, s) in dst.iter_mut().zip(bytes.iter()) {
+            *d = *s;
+        }
         Ok(NumFromBytes::from_be_bytes(&repr))
     }
 

@@ -173,14 +173,32 @@ pub fn pkcs1v15_sign_pad_into<'a>(
         return Err(Error::MessageTooLong);
     }
 
-    // EM = 0x00 || 0x01 || PS || 0x00 || T
+    // EM = 0x00 || 0x01 || PS || 0x00 || prefix || hashed.
+    // All writes go through fallible `get_mut` + byte-copy loops rather
+    // than `[..]` indexing / `copy_from_slice`, so no `slice_index_fail`
+    // / `copy_from_slice` panic path is synthesized into the (embedded)
+    // sign binary. `k >= t_len + 11` (guarded above), so every index is
+    // in range and no subtraction underflows.
     let em = storage.get_mut(..k).ok_or(Error::OutputBufferTooSmall)?;
-    em[0] = 0;
-    em[1] = 1;
-    em[2..k - t_len - 1].fill(0xff);
-    em[k - t_len - 1] = 0;
-    em[k - t_len..k - hash_len].copy_from_slice(prefix);
-    em[k - hash_len..k].copy_from_slice(hashed);
+    *em.get_mut(0).ok_or(Error::OutputBufferTooSmall)? = 0x00;
+    *em.get_mut(1).ok_or(Error::OutputBufferTooSmall)? = 0x01;
+    em.get_mut(2..k - t_len - 1)
+        .ok_or(Error::OutputBufferTooSmall)?
+        .fill(0xff);
+    *em.get_mut(k - t_len - 1)
+        .ok_or(Error::OutputBufferTooSmall)? = 0x00;
+    let prefix_dst = em
+        .get_mut(k - t_len..k - hash_len)
+        .ok_or(Error::OutputBufferTooSmall)?;
+    for (dst, src) in prefix_dst.iter_mut().zip(prefix.iter()) {
+        *dst = *src;
+    }
+    let hashed_dst = em
+        .get_mut(k - hash_len..k)
+        .ok_or(Error::OutputBufferTooSmall)?;
+    for (dst, src) in hashed_dst.iter_mut().zip(hashed.iter()) {
+        *dst = *src;
+    }
 
     Ok(em)
 }
@@ -330,20 +348,39 @@ where
     let oid = D::OID.as_bytes();
     let oid_len = oid.len() as u8;
     let digest_len = <D as Digest>::output_size() as u8;
+    let total = oid.len() + 10;
+    // Fallible slicing + byte-copy loops (no `[..]` indexing /
+    // `copy_from_slice`) so no `slice_index_fail` / `copy_from_slice`
+    // panic path is synthesized into the (embedded) sign binary.
     let out = storage
-        .get_mut(..oid.len() + 10)
+        .get_mut(..total)
         .ok_or(Error::OutputBufferTooSmall)?;
-    out[..6].copy_from_slice(&[
+    let header = [
         0x30,
         oid_len + 8 + digest_len,
         0x30,
         oid_len + 4,
         0x6,
         oid_len,
-    ]);
-    out[6..6 + oid.len()].copy_from_slice(oid);
-    out[6 + oid.len()..oid.len() + 10].copy_from_slice(&[0x05, 0x00, 0x04, digest_len]);
-    Ok(&out[..oid.len() + 10])
+    ];
+    let head_dst = out.get_mut(..6).ok_or(Error::OutputBufferTooSmall)?;
+    for (dst, src) in head_dst.iter_mut().zip(header.iter()) {
+        *dst = *src;
+    }
+    let oid_dst = out
+        .get_mut(6..6 + oid.len())
+        .ok_or(Error::OutputBufferTooSmall)?;
+    for (dst, src) in oid_dst.iter_mut().zip(oid.iter()) {
+        *dst = *src;
+    }
+    let trailer = [0x05, 0x00, 0x04, digest_len];
+    let tail_dst = out
+        .get_mut(6 + oid.len()..total)
+        .ok_or(Error::OutputBufferTooSmall)?;
+    for (dst, src) in tail_dst.iter_mut().zip(trailer.iter()) {
+        *dst = *src;
+    }
+    out.get(..total).ok_or(Error::OutputBufferTooSmall)
 }
 
 #[cfg(test)]

@@ -1,0 +1,27 @@
+[package]
+name = "panic-free-audit"
+version = "0.0.0"
+edition = "2021"
+rust-version = "1.87"
+publish = false
+description = "Linker-DCE audit: confirm the heapless sign path synthesizes no panic symbols."
+
+[lib]
+# staticlib so a cross-target build produces a `.a` that llvm-nm can
+# read without a linker script or runtime. Same shape as ct-fixtures.
+crate-type = ["staticlib"]
+
+[features]
+default = []
+# See lib.rs — enabled by check.sh for the cross-built staticlib.
+panic-handler = []
+
+[dependencies]
+rsa = { path = "../..", package = "rsa_heapless", default-features = false, features = ["modmath"] }
+fixed-bigint = { version = "0.5.0", default-features = false, features = ["zeroize", "use-unsafe", "cios"] }
+const-num-traits = { version = "0.2.0", default-features = false, features = ["ct"] }
+sha2 = { version = "0.11", default-features = false, features = ["oid"] }
+rand_core = { version = "0.10", default-features = false }
+
+# Workspace [profile.release] (lto=fat, codegen-units=1, opt-level=z,
+# panic=abort) is what makes DCE worth measuring; do not override here.
