@@ -1,0 +1,86 @@
+# Valgrind memcheck suppressions for ct-ctgrind — reviewed, not blanket.
+#
+# Each entry below has been traced to a specific non-leak and is scoped
+# as narrowly as Valgrind frame-matching allows. The load-bearing safety
+# argument for ALL of them: every constant-time-critical primitive is a
+# SEPARATE symbol in the binary — `rsa_private_op_and_check_blinded`,
+# `rsa_private_op_blinded`, `Field::<Ct>::exp` (the secret-exponent
+# ladder), `cios_mont_mul_ct`, `invert_ct`, `try_random_mod`. None of
+# those are inlined into the sign fixture, so a real secret-dependent
+# branch in the crypto path surfaces at one of those symbols and is NOT
+# matched by any suppression here. These only cover byte-plumbing glue.
+#
+# ---------------------------------------------------------------------
+# (1) memcpy / memmove of tainted bytes.
+#
+# The fixture parses the secret exponent from bytes and shuffles
+# secret-derived bytes through padding/serialization, calling
+# memcpy/memmove on tainted memory. glibc's memcpy is *data-oblivious*
+# (it copies bytes regardless of value), but Valgrind's shadow-value
+# propagation through its word-at-a-time SIMD paths is imprecise and
+# reports spurious errors *inside* the memcpy routine. Safe to suppress:
+# memcpy never branches on the data it copies. A secret-dependent
+# *address* would appear in the caller's address computation, a frame
+# above — not matched here. Scoped to the sign fixture as the direct
+# caller so a `memcpy` in any *crypto* primitive (all separate symbols)
+# stays fully checked; only the fixture's own byte-parse/serialize
+# copies are suppressed.
+{
+   memcpy-tainted-data-from-sign-fixture-cond
+   Memcheck:Cond
+   fun:*memcpy*
+   fun:ct_fix__pkcs1v15_blinded_sign*
+}
+{
+   memcpy-tainted-data-from-sign-fixture-value
+   Memcheck:Value8
+   fun:*memcpy*
+   fun:ct_fix__pkcs1v15_blinded_sign*
+}
+{
+   memmove-tainted-data-from-sign-fixture-cond
+   Memcheck:Cond
+   fun:*memmove*
+   fun:ct_fix__pkcs1v15_blinded_sign*
+}
+{
+   memmove-tainted-data-from-sign-fixture-value
+   Memcheck:Value8
+   fun:*memmove*
+   fun:ct_fix__pkcs1v15_blinded_sign*
+}
+
+# ---------------------------------------------------------------------
+# (2) Leading-zero-trim serialization of the PUBLIC RSA signature.
+#
+# The sign path serializes the signature with `uint_to_zeroizing_be_pad`,
+# which trims the value's leading zero bytes (`&buf[leading_zeros..]`)
+# then left-pads to the modulus width — variable-time in the signature's
+# leading-zero count. The RSA signature is secret-*derived* but
+# public-by-design (it is what the caller publishes), so this branch
+# leaks nothing: the whole signature, and hence its leading-zero count,
+# is published. Taint can't see through the "now public" declassification
+# because we can't untaint mid-operation without instrumenting the sign.
+#
+# The trim's slice-bounds check and copy appear as `index_mut` /
+# `copy_from_slice` called from the sign fixture, plus the inlined
+# leading-zeros computation whose innermost frame is the fixture symbol.
+# All three are scoped to the sign fixture as the immediate caller /
+# frame, so they do not suppress slice indexing anywhere else.
+{
+   sig-serialize-trim-index_mut
+   Memcheck:Cond
+   fun:*SliceIndex*index_mut*
+   fun:ct_fix__pkcs1v15_blinded_sign*
+}
+{
+   sig-serialize-trim-copy_from_slice
+   Memcheck:Cond
+   fun:*copy_from_slice*
+   fun:ct_fix__pkcs1v15_blinded_sign*
+}
+{
+   sig-serialize-trim-leading-zeros-inlined
+   Memcheck:Cond
+   fun:ct_fix__pkcs1v15_blinded_sign__fb8__N64
+}

@@ -10,11 +10,12 @@ publish = false
 crate-type = ["staticlib", "rlib"]
 
 [features]
-# The staticlib cross-build is no_std and needs its own panic handler;
-# the rlib link into the (std) taint harness must NOT define one. On by
-# default for the driver; the ctgrind crate depends with
-# `default-features = false`.
-default = ["panic-handler"]
+# `panic-handler` makes the crate `no_std` with its own `#[panic_handler]`,
+# needed for the cross-built staticlib the asm-grep driver disassembles
+# (the driver passes `--features panic-handler` explicitly). Off by
+# default so the ctgrind crate can link this as an rlib into its std
+# binary, where std supplies the panic handler and a second would collide.
+default = []
 panic-handler = []
 
 [dependencies]

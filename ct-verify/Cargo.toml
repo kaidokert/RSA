@@ -5,7 +5,7 @@
 # `--release` builds. Same isolation pattern as `footprint/*`.
 [workspace]
 resolver = "2"
-members = ["ct-fixtures", "ct-driver"]
+members = ["ct-fixtures", "ct-driver", "ct-ctgrind"]
 
 # Deterministic codegen: the asm-grep / taint layers must inspect the
 # exact machine code a deployment build emits, and a passing run "locks"
