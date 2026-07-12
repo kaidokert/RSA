@@ -7,13 +7,16 @@
 # baseline ISA):
 #   docker build -t ct-ctgrind-dev -f ct-verify/ct-ctgrind/Dockerfile .
 #
-# Then run from the repo root:
-#   docker run --rm -v "$PWD:/work" -w /work \
+# Then run from the repo root (`ct-ctgrind` is a member of the nested
+# `ct-verify` workspace, so build from there and use the workspace's
+# absolute target path):
+#   docker run --rm -v "$PWD:/work" -w /work/ct-verify \
 #       -e CARGO_TARGET_DIR=/work/target/docker \
 #       ct-ctgrind-dev \
 #       bash -c "cargo build --release -p ct-ctgrind && \
-#                valgrind --tool=memcheck --error-limit=no --error-exitcode=0 -q \
-#                  target/docker/release/ct-ctgrind"
+#                valgrind --tool=memcheck --error-limit=no --error-exitcode=0 \
+#                  --suppressions=ct-ctgrind/ct-ctgrind.supp -q \
+#                  /work/target/docker/release/ct-ctgrind"
 #
 # Matches the CI image (ubuntu-latest = 24.04) so Valgrind versions and
 # crabgrind's C header dependencies line up.

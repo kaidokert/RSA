@@ -21,26 +21,33 @@
 # reports spurious errors *inside* the memcpy routine. Safe to suppress:
 # memcpy never branches on the data it copies. A secret-dependent
 # *address* would appear in the caller's address computation, a frame
-# above — not matched here.
+# above — not matched here. Scoped to the sign fixture as the direct
+# caller so a `memcpy` in any *crypto* primitive (all separate symbols)
+# stays fully checked; only the fixture's own byte-parse/serialize
+# copies are suppressed.
 {
-   memcpy-internal-cond-on-tainted-data
+   memcpy-tainted-data-from-sign-fixture-cond
    Memcheck:Cond
    fun:*memcpy*
+   fun:ct_fix__pkcs1v15_blinded_sign*
 }
 {
-   memcpy-internal-value-on-tainted-data
+   memcpy-tainted-data-from-sign-fixture-value
    Memcheck:Value8
    fun:*memcpy*
+   fun:ct_fix__pkcs1v15_blinded_sign*
 }
 {
-   memmove-internal-cond-on-tainted-data
+   memmove-tainted-data-from-sign-fixture-cond
    Memcheck:Cond
    fun:*memmove*
+   fun:ct_fix__pkcs1v15_blinded_sign*
 }
 {
-   memmove-internal-value-on-tainted-data
+   memmove-tainted-data-from-sign-fixture-value
    Memcheck:Value8
    fun:*memmove*
+   fun:ct_fix__pkcs1v15_blinded_sign*
 }
 
 # ---------------------------------------------------------------------

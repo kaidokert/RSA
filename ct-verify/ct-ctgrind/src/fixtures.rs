@@ -33,7 +33,7 @@ ctgrind_fixture!(ct_fix__pkcs1v15_blinded_sign__fb8__N64, {
 });
 
 // Negative control: a data-dependent branch on the secret bytes. MUST
-// trip — memcheck sees the tainted `if b > 0x7f`.
+// trip — memcheck sees the tainted early-exit loop condition.
 unsafe extern "C" {
     fn nct_fix__neg__secret_branch__fb8__N64(s_ptr: *const [u8; 64], out_ptr: *mut u8);
 }
