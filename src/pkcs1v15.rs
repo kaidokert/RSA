@@ -167,7 +167,7 @@ impl<const N: usize> AsRef<[u8]> for Prefix<N> {
 }
 
 #[cfg(not(feature = "alloc"))]
-pub(super) fn pkcs1v15_generate_prefix_helper<D: Digest>() -> Prefix
+pub(super) fn pkcs1v15_generate_prefix_helper<D>() -> Prefix
 where
     D: Digest + AssociatedOid,
 {
