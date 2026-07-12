@@ -18,10 +18,14 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Cross-compile the fixture staticlib for every ISA the driver
-  # disassembles, and assert the fixture symbols survive LTO. The
-  # disassembly scan is a separate job.
-  fixtures-build:
+  # Cross-build the fixture staticlib per ISA, disassemble it, and
+  # assert the secret-exponent ladder carries only its reviewed public
+  # bit-width loop branch (per-target count) and no more. Narrow by
+  # design — the whole-operation CT gate is the taint (ctgrind) harness;
+  # this confirms the one property asm-grep can prove cheaply. The
+  # driver fails closed if the ladder symbol is absent (inlined/renamed)
+  # or if the negative controls stop tripping the mnemonic tables.
+  ladder-check:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -36,19 +40,11 @@ jobs:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@master
         with:
-          # Pinned so codegen — and therefore the eventual asm-grep
-          # calibration — stays deterministic across CI runs.
+          # Pinned so codegen — and the calibrated per-ISA ladder branch
+          # counts — stay deterministic across CI runs.
           toolchain: 1.87.0
           targets: ${{ matrix.target }}
           components: llvm-tools-preview
-      - name: Cross-build fixtures
+      - name: Ladder branch-freedom check
         working-directory: ct-verify
-        run: cargo build -p ct-fixtures --release --target ${{ matrix.target }}
-      - name: Assert fixture symbols survived LTO
-        working-directory: ct-verify
-        run: |
-          NM=$(find "$(rustc --print sysroot)" -name llvm-nm | head -1)
-          AR=$(find target/${{ matrix.target }}/release -name libct_fixtures.a | head -1)
-          syms=$("$NM" "$AR" | grep -cE '(ct|nct)_fix__') || true
-          echo "fixture symbols: $syms"
-          test "$syms" -ge 3
+        run: cargo run --release -p ct-driver -- --target ${{ matrix.target }}
