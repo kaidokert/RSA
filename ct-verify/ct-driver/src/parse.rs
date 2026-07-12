@@ -205,3 +205,10 @@ pub fn scan_block(block: &FunctionBlock, pat: &Patterns) -> Vec<Violation> {
 pub fn is_negative_control(sym: &str) -> bool {
     sym.starts_with("nct_fix__neg__") || sym.starts_with("_nct_fix__neg__")
 }
+
+/// True if a `ct_fix__*` positive-fixture symbol. Each positive pins
+/// exactly one carrier instantiation, so their count is the expected
+/// number of distinct ladder monomorphizations in the same archive.
+pub fn is_positive_fixture(sym: &str) -> bool {
+    sym.starts_with("ct_fix__") || sym.starts_with("_ct_fix__")
+}

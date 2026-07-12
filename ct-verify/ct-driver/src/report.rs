@@ -7,9 +7,13 @@ use crate::parse::Violation;
 #[derive(Debug, Serialize)]
 pub struct Report {
     pub target: String,
-    /// Ladder symbols matched (must be ≥ 1; zero means the symbol was
-    /// inlined away or renamed, and we can no longer confirm it).
+    /// Ladder symbols matched (must equal `ladder_symbols_expected`;
+    /// fewer means some carrier's ladder was inlined away or renamed
+    /// and that carrier's attestation would be vacuous).
     pub ladder_symbols_matched: usize,
+    /// One distinct ladder monomorphization per positive fixture in the
+    /// archive (or the `--expect-ladder` override).
+    pub ladder_symbols_expected: usize,
     /// Conditional branches observed across ladder bodies.
     pub ladder_branches_seen: usize,
     /// The reviewed-and-documented allowance (the bit-width loop guard).
@@ -43,10 +47,12 @@ impl From<Violation> for ViolationOut {
 
 impl Report {
     pub fn exit_code(&self) -> i32 {
-        // Fail closed: a real violation, no ladder symbol to inspect, or
-        // a mnemonic-table self-test that didn't fire.
+        // Fail closed: a real violation, a missing (or extra) ladder
+        // monomorphization, an empty expectation, or a mnemonic-table
+        // self-test that didn't fire.
         if !self.ladder_violations.is_empty()
-            || self.ladder_symbols_matched == 0
+            || self.ladder_symbols_expected == 0
+            || self.ladder_symbols_matched != self.ladder_symbols_expected
             || self.negative_controls_tripped == 0
         {
             1
@@ -58,8 +64,8 @@ impl Report {
     pub fn print_human(&self) {
         println!("==== ladder-check report for {} ====", self.target);
         println!(
-            "  ladder symbols matched:    {}",
-            self.ladder_symbols_matched
+            "  ladder symbols matched:    {} (expected {})",
+            self.ladder_symbols_matched, self.ladder_symbols_expected
         );
         println!(
             "  ladder branches:           {} seen, {} allowed (bit-width loop guard)",
@@ -69,8 +75,13 @@ impl Report {
             "  negative controls tripped: {}",
             self.negative_controls_tripped
         );
-        if self.ladder_symbols_matched == 0 {
-            println!("  ✗ no ladder symbol found — cannot confirm the secret-exponent path");
+        if self.ladder_symbols_expected == 0 {
+            println!("  ✗ no positive fixtures found — nothing to attest");
+        } else if self.ladder_symbols_matched != self.ladder_symbols_expected {
+            println!(
+                "  ✗ ladder monomorphization count mismatch — a carrier's ladder was \
+                 inlined/renamed/DCE'd (or the fixture set changed without --expect-ladder)"
+            );
         }
         if self.negative_controls_tripped == 0 {
             println!("  ✗ no negative control tripped — mnemonic tables may be blind on this ISA");
