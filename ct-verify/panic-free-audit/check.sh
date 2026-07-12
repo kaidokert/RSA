@@ -24,7 +24,10 @@ fi
 
 cargo build --release -p panic-free-audit --features panic-handler --target "$TARGET"
 
-FOUND="$("$NM" "$ARCHIVE" | grep -E 'core9panicking|panic_fmt|unwrap_failed|expect_failed|panic_bounds_check|slice_(start|end)_index' || true)"
+# Two steps so a failing llvm-nm aborts via `set -e` (fail closed)
+# instead of vanishing into the `grep || true` pipeline.
+SYMBOLS="$("$NM" "$ARCHIVE")"
+FOUND="$(printf '%s\n' "$SYMBOLS" | grep -E 'core9panicking|panic_fmt|unwrap_failed|expect_failed|panic_bounds_check|slice_(start|end)_index' || true)"
 if [ -n "$FOUND" ]; then
     echo "panic machinery found in ${ARCHIVE}:" >&2
     echo "$FOUND" >&2

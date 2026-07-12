@@ -91,9 +91,14 @@ pub extern "C" fn panic_audit__pkcs1v15_blinded_sign__fb8__N64(out_ptr: *mut u8)
             let mut rng = FixedRng(0);
             let mut em = [0u8; 64];
             let mut sig = [0u8; 64];
-            signing_key
+            let ok = signing_key
                 .try_sign_prehash_with_rng_into(&mut rng, &prehash, &mut em, &mut sig)
-                .is_ok()
+                .is_ok();
+            // Keep the serialized signature live: with only `is_ok()`
+            // observed, LLVM may DCE the final serialization writes and
+            // the audit would vacuously skip that step.
+            black_box(&sig);
+            ok
         } else {
             false
         }
