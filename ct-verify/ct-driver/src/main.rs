@@ -16,7 +16,7 @@
 //!   2. find the resulting libct_fixtures.a
 //!   3. llvm-objdump --disassemble
 //!   4. assert every ladder-symbol body is branch-free (per-ISA mnemonic
-//!      tables, thumb IT-block aware), and fail closed if no ladder
+//!      tables; an IT-predicated branch still counts), fail closed if no ladder
 //!      symbol is present (inlined away / renamed → can't confirm)
 //!   5. self-test: assert the negative controls still trip the tables
 //!   6. emit JSON report; exit non-zero on any of the above
@@ -157,7 +157,7 @@ fn main() -> ExitCode {
     };
 
     // 3. Disassemble.
-    let objdump_text = match run_objdump(spec, &archive) {
+    let objdump_text = match run_objdump(&archive) {
         Ok(t) => t,
         Err(e) => {
             eprintln!("error: llvm-objdump failed: {}", e);
@@ -177,33 +177,30 @@ fn main() -> ExitCode {
     };
 
     let mut ladder_symbols_matched: usize = 0;
-    let mut ladder_branches: Vec<Violation> = Vec::new();
+    let mut ladder_branches_seen: usize = 0;
+    let mut ladder_violations: Vec<Violation> = Vec::new();
     let mut negative_controls_tripped: usize = 0;
 
     for block in &blocks {
-        // The secret-exponent ladder: at most the reviewed loop-guard
-        // branch, no more.
+        // The secret-exponent ladder: at most the reviewed loop-control
+        // branches, no more. The allowance applies *per block* — if the
+        // ladder is monomorphized for several carriers, each
+        // instantiation gets its own count rather than sharing one pool.
         if ladder_re.is_match(&block.symbol) {
             ladder_symbols_matched += 1;
-            ladder_branches.extend(parse::scan_block(block, spec, &pat));
+            let mut branches = parse::scan_block(block, &pat);
+            ladder_branches_seen += branches.len();
+            if branches.len() > spec.ladder_allowed_branches {
+                ladder_violations.extend(branches.split_off(spec.ladder_allowed_branches));
+            }
             continue;
         }
         // Negative controls: the mnemonic-table self-test. At least one
         // must trip, proving the tables detect branches on this ISA.
-        if parse::is_negative_control(&block.symbol)
-            && !parse::scan_block(block, spec, &pat).is_empty()
-        {
+        if parse::is_negative_control(&block.symbol) && !parse::scan_block(block, &pat).is_empty() {
             negative_controls_tripped += 1;
         }
     }
-
-    // Apply the counted allowance: the reviewed per-ISA count
-    // are the reviewed loop guard; anything beyond is a real finding.
-    let ladder_branches_seen = ladder_branches.len();
-    let ladder_violations: Vec<Violation> = ladder_branches
-        .into_iter()
-        .skip(spec.ladder_allowed_branches)
-        .collect();
 
     // 5. Emit report.
     let report = Report {
@@ -354,15 +351,14 @@ fn llvm_objdump_path() -> Result<PathBuf, String> {
     Ok(PathBuf::from("llvm-objdump"))
 }
 
-fn run_objdump(spec: &TargetSpec, archive: &Path) -> Result<String, String> {
+fn run_objdump(archive: &Path) -> Result<String, String> {
     let tool = llvm_objdump_path()?;
-    let arch_flag = arch_flag_for(spec.triple);
 
+    // No explicit --triple/--arch: llvm-objdump auto-detects the
+    // architecture per-object from the archive's ELF headers, AVR
+    // included (verified identical to an explicit flag).
     let mut cmd = Command::new(&tool);
     cmd.arg("--disassemble").arg("--no-show-raw-insn");
-    if let Some(arch) = arch_flag {
-        cmd.arg(format!("--triple={}", arch));
-    }
     cmd.arg(archive);
 
     let out = cmd.output().map_err(|e| e.to_string())?;
@@ -374,14 +370,4 @@ fn run_objdump(spec: &TargetSpec, archive: &Path) -> Result<String, String> {
         ));
     }
     Ok(String::from_utf8_lossy(&out.stdout).into_owned())
-}
-
-fn arch_flag_for(triple: &str) -> Option<&'static str> {
-    // llvm-objdump usually infers the architecture from the object file,
-    // but for some targets (notably AVR) we need to be explicit.
-    if triple.starts_with("avr-") {
-        Some("avr")
-    } else {
-        None
-    }
 }

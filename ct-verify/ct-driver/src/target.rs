@@ -23,8 +23,6 @@ pub struct TargetSpec {
     /// look conditional. E.g., aarch64 `csel` / x64 `cmovcc` / thumb
     /// `IT` predicate execution.
     pub allowed_cmov: &'static [&'static str],
-    /// Engage the thumb IT-state machine.
-    pub thumb_it_blocks: bool,
     /// Conditional branches the secret-exponent ladder is allowed to
     /// contain on this ISA — the public bit-width loop control, whose
     /// operands are compile-time immediates (the const-generic carrier
@@ -51,7 +49,6 @@ pub const TARGETS: &[TargetSpec] = &[
         toolchain: "1.86",
         forbidden: mnemonics::THUMB_FORBIDDEN,
         allowed_cmov: mnemonics::THUMB_ALLOWED,
-        thumb_it_blocks: true,
         ladder_allowed_branches: 1,
         extra_cargo_args: &[],
     },
@@ -61,7 +58,6 @@ pub const TARGETS: &[TargetSpec] = &[
         toolchain: "1.86",
         forbidden: mnemonics::THUMB_FORBIDDEN,
         allowed_cmov: mnemonics::THUMB_ALLOWED,
-        thumb_it_blocks: true,
         ladder_allowed_branches: 1,
         extra_cargo_args: &[],
     },
@@ -72,7 +68,6 @@ pub const TARGETS: &[TargetSpec] = &[
         toolchain: "1.86",
         forbidden: mnemonics::THUMB_FORBIDDEN,
         allowed_cmov: mnemonics::THUMB_ALLOWED,
-        thumb_it_blocks: false, // armv6m has no IT-state machine
         ladder_allowed_branches: 1,
         extra_cargo_args: &[],
     },
@@ -83,7 +78,6 @@ pub const TARGETS: &[TargetSpec] = &[
         toolchain: "1.86",
         forbidden: mnemonics::RISCV_FORBIDDEN,
         allowed_cmov: &[],
-        thumb_it_blocks: false,
         ladder_allowed_branches: 2,
         extra_cargo_args: &[],
     },
@@ -93,7 +87,6 @@ pub const TARGETS: &[TargetSpec] = &[
         toolchain: "1.86",
         forbidden: mnemonics::RISCV_FORBIDDEN,
         allowed_cmov: &[],
-        thumb_it_blocks: false,
         ladder_allowed_branches: 2,
         extra_cargo_args: &[],
     },
@@ -107,7 +100,6 @@ pub const TARGETS: &[TargetSpec] = &[
         toolchain: "nightly",
         forbidden: mnemonics::AVR_FORBIDDEN,
         allowed_cmov: &[],
-        thumb_it_blocks: false,
         ladder_allowed_branches: 1,
         extra_cargo_args: &["-Z", "build-std=core"],
     },
@@ -118,7 +110,6 @@ pub const TARGETS: &[TargetSpec] = &[
         toolchain: "1.86",
         forbidden: mnemonics::AARCH64_FORBIDDEN,
         allowed_cmov: mnemonics::AARCH64_ALLOWED,
-        thumb_it_blocks: false,
         ladder_allowed_branches: 1,
         extra_cargo_args: &[],
     },
@@ -129,7 +120,6 @@ pub const TARGETS: &[TargetSpec] = &[
         toolchain: "1.86",
         forbidden: mnemonics::X86_64_FORBIDDEN,
         allowed_cmov: mnemonics::X86_64_ALLOWED,
-        thumb_it_blocks: false,
         ladder_allowed_branches: 1,
         extra_cargo_args: &[],
     },
@@ -142,7 +132,6 @@ pub const TARGETS: &[TargetSpec] = &[
         toolchain: "stable",
         forbidden: mnemonics::AARCH64_FORBIDDEN,
         allowed_cmov: mnemonics::AARCH64_ALLOWED,
-        thumb_it_blocks: false,
         ladder_allowed_branches: 1,
         extra_cargo_args: &[],
     },

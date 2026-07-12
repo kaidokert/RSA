@@ -163,14 +163,9 @@ impl Patterns {
 }
 
 /// Scan one block for violations, applying the per-target rules.
-pub fn scan_block(block: &FunctionBlock, spec: &TargetSpec, pat: &Patterns) -> Vec<Violation> {
+pub fn scan_block(block: &FunctionBlock, pat: &Patterns) -> Vec<Violation> {
     let mut violations = Vec::new();
     let mut recent: VecDeque<String> = VecDeque::with_capacity(3);
-
-    // IT-state machine for thumb. `it_remaining > 0` means the next
-    // `it_remaining` insns are predicated. A forbidden conditional
-    // inside an active IT window is allowed.
-    let mut it_remaining: u32 = 0;
 
     for insn in &block.insns {
         recent.push_back(insn.full_line.clone());
@@ -180,36 +175,19 @@ pub fn scan_block(block: &FunctionBlock, spec: &TargetSpec, pat: &Patterns) -> V
 
         let m = insn.mnemonic.as_str();
 
-        // Thumb IT-block tracking. `it`, `itt`, `ite`, `ittt`, `itte`,
-        // etc. — the trailing t/e letters describe whether the next
-        // 1..4 instructions execute on true or false. We just need the
-        // count.
-        if spec.thumb_it_blocks && m.starts_with("it") && m.len() <= 5 {
-            // it = 1 conditional, itt = 2, ittt = 3, itttt = 4.
-            let n = m.len().saturating_sub(1) as u32; // "it" → 1, "itt" → 2, ...
-            it_remaining = n;
-            continue;
-        }
-
+        // Branchless conditional execution — the CT-safe select. On
+        // Thumb these are the `it`/`itt`/… headers; the predicated
+        // *data-processing* instructions they guard (`moveq`, `addeq`,
+        // …) aren't in any forbidden table, so they fall through and are
+        // ignored. We deliberately do NOT exempt a forbidden mnemonic
+        // just because an IT block is active: an IT-predicated `b<cc>`
+        // is still conditional control flow, and a secret-dependent one
+        // is exactly the leak this gate exists to catch.
         if pat.allowed_matches(m) {
-            // Allowed branchless conditional (csel/cmov/IT etc.) — not a violation.
-            it_remaining = it_remaining.saturating_sub(1);
             continue;
         }
 
         if pat.forbidden_matches(m) {
-            // Forbidden mnemonic. If it's inside an active IT window,
-            // it's actually allowed (predicate execution, branch-free).
-            if it_remaining > 0 {
-                it_remaining -= 1;
-                continue;
-            }
-
-            // Unconditional `b` is also caught by forbidden patterns if
-            // any author adds it there; the default tables don't list
-            // it as forbidden, so we don't special-case it here. The
-            // user-controlled regex set is sovereign.
-
             violations.push(Violation {
                 symbol: block.symbol.clone(),
                 offset: insn.offset,
@@ -217,12 +195,7 @@ pub fn scan_block(block: &FunctionBlock, spec: &TargetSpec, pat: &Patterns) -> V
                 line: insn.full_line.clone(),
                 context: recent.iter().cloned().collect(),
             });
-            continue;
         }
-
-        // Non-conditional instruction (mov, add, ldr, bl, ...). If we
-        // were in an IT window, count it down.
-        it_remaining = it_remaining.saturating_sub(1);
     }
 
     violations

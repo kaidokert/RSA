@@ -61,7 +61,7 @@ pub const RISCV_FORBIDDEN: &[&str] = &[
 // flag them.
 
 pub const AVR_FORBIDDEN: &[&str] = &[
-    r"^br(cc|cs|eq|ge|hc|hs|id|ie|lo|lt|mi|ne|pl|sh|tc|ts|vc|vs)$",
+    r"^br(cc|cs|eq|ge|hc|hs|id|ie|lo|lt|mi|ne|pl|sh|tc|ts|vc|vs|bs|bc)$",
     r"^s(bic|bis|brc|brs)$",
     r"^cpse$",
 ];
