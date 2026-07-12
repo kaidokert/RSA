@@ -18,7 +18,7 @@ panic-handler = []
 
 [dependencies]
 rsa = { path = "../..", package = "rsa_heapless", default-features = false, features = ["modmath"] }
-fixed-bigint = { version = "0.5.0", default-features = false, features = ["zeroize", "use-unsafe", "cios"] }
+fixed-bigint = { version = "0.5.2", default-features = false, features = ["zeroize", "use-unsafe", "cios"] }
 const-num-traits = { version = "0.2.0", default-features = false, features = ["ct"] }
 sha2 = { version = "0.11", default-features = false, features = ["oid"] }
 rand_core = { version = "0.10", default-features = false }

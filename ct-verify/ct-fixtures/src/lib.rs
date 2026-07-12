@@ -36,29 +36,32 @@ use rsa::GenericRsaPrivateKey;
 use sha2::Sha256;
 
 /// 512-bit Ct carrier (`u8` limbs — the most portable backend, and the
-/// width the taint layer runs at). Deployment width is 2048-bit; a
-/// wider carrier is its own fixture.
+/// width the PR-gate taint run uses).
 type Carrier = FixedUInt<u8, 64, Ct>;
 
-/// A real 512-bit RSA keypair (`e = 65537`). The values must be a valid
-/// keypair so the blinded-sign happy path (with its verify-after-sign)
-/// is the code under inspection rather than the retry-then-fail path.
-const N_512: [u8; 64] = [
-    0x9f, 0x7b, 0x0d, 0x2e, 0xfb, 0x10, 0xd4, 0x1b, 0x8c, 0x86, 0x0f, 0x90, 0x67, 0xee, 0xbd, 0xd4,
-    0x72, 0x2d, 0x7e, 0x9f, 0xc2, 0x3b, 0x95, 0x34, 0x33, 0x92, 0x09, 0xf9, 0x0f, 0xa8, 0xf7, 0xed,
-    0xf7, 0x49, 0xd0, 0x42, 0x31, 0xff, 0x52, 0x2e, 0xb0, 0xf6, 0x89, 0xfe, 0xc4, 0x75, 0x35, 0x1c,
-    0x2c, 0x76, 0x53, 0xaa, 0xa1, 0x4a, 0x05, 0xb3, 0xd9, 0x42, 0x6e, 0x41, 0xc4, 0xd8, 0xe4, 0x6f,
-];
-/// The paired secret exponent, exported so the taint harness can copy
-/// it into a buffer and mark that buffer undefined — Valgrind taint is
-/// metadata, so the real bytes must be present for the happy path to
-/// run while their V-bits carry the "secret" mark.
-pub const D_512: [u8; 64] = [
-    0x10, 0x44, 0x80, 0x02, 0xc3, 0xcf, 0x62, 0xa3, 0x70, 0xc1, 0x18, 0x03, 0x55, 0xe6, 0xaf, 0x6c,
-    0x65, 0x3d, 0x28, 0xc6, 0x69, 0x0c, 0xa4, 0xda, 0x8f, 0x4c, 0x1d, 0x42, 0x4f, 0x8b, 0x9f, 0xc6,
-    0x78, 0x0a, 0x6d, 0x42, 0xf4, 0xce, 0x9a, 0x37, 0x83, 0xf5, 0xf4, 0x59, 0x71, 0xb3, 0x8f, 0x5e,
-    0x1b, 0x70, 0xbe, 0xbb, 0x91, 0xd6, 0x74, 0xd8, 0x9c, 0xae, 0xc7, 0xd1, 0x3b, 0x8c, 0xaa, 0x39,
-];
+/// 2048-bit Ct carrier (`u32` limbs) — the deployment width. The gates
+/// verify fixture instantiations, not generic code, so the width we
+/// actually ship needs its own whole-operation fixture.
+type CarrierW = FixedUInt<u32, 64, Ct>;
+
+/// 2048-bit Ct carrier (`u8` limbs) — the AVR-class deployment shape
+/// at the same width. Limb width changes which per-limb code folds
+/// (the fixed-bigint 0.5.0 `holder_be` panic was invisible at `u8`,
+/// real at `u32`), so each shipped flavor gets its own instantiation.
+type CarrierW8 = FixedUInt<u8, 256, Ct>;
+
+/// 2048-bit Ct carrier (`u64` limbs) — the natural shape for 64-bit
+/// host consumers. Not a footprint-suite target, but it exercises the
+/// widest per-limb paths (double-word `u128` intermediates).
+type CarrierW64 = FixedUInt<u64, 32, Ct>;
+
+// Real RSA keypairs (`e = 65537`) shared with `panic-free-audit` via a
+// textual include — see the fragment's module docs. `D_*` are `pub` so
+// the taint harness can copy each secret exponent into a buffer and
+// mark that buffer undefined: Valgrind taint is metadata, the real
+// bytes must be present for the happy path to run while their V-bits
+// carry the "secret" mark.
+include!("../../test_keys.rs");
 
 /// Deterministic infallible RNG. The blinded sign path draws the
 /// blinding factor `r` from it; a fixed stream keeps taint attribution
@@ -113,6 +116,82 @@ pub unsafe extern "C" fn ct_fix__pkcs1v15_blinded_sign__fb8__N64(
     let mut rng = FixedRng(0);
     let mut em = [0u8; 64];
     let mut sig = [0u8; 64];
+    let _ = signing_key.try_sign_with_rng_into(&mut rng, b"ct fixture message", &mut em, &mut sig);
+
+    unsafe { *out_ptr = black_box(sig) }
+}
+
+/// Positive: the same whole blinded sign pipeline at the 2048-bit
+/// deployment width (`u32` limbs). Closes the "fixture instantiations,
+/// not generic code" gap: the 512-bit fixture proves the composition,
+/// this one proves it at the width we actually ship.
+/// # Safety
+/// `d_ptr` and `out_ptr` must be valid, aligned pointers to 256-byte
+/// arrays.
+#[no_mangle]
+pub unsafe extern "C" fn ct_fix__pkcs1v15_blinded_sign__fb32__N64(
+    d_ptr: *const [u8; 256],
+    out_ptr: *mut [u8; 256],
+) {
+    let d_bytes = black_box(unsafe { *d_ptr });
+
+    let pubkey = public_key_ct_from_be_bytes::<CarrierW>(&N_2048, 65537).unwrap();
+    let d = CarrierW::try_from_be_bytes_vartime(&d_bytes).unwrap();
+    let signing_key =
+        GenericSigningKey::<Sha256, _, _>::new(GenericRsaPrivateKey::from_public_and_d(pubkey, d));
+
+    let mut rng = FixedRng(0);
+    let mut em = [0u8; 256];
+    let mut sig = [0u8; 256];
+    let _ = signing_key.try_sign_with_rng_into(&mut rng, b"ct fixture message", &mut em, &mut sig);
+
+    unsafe { *out_ptr = black_box(sig) }
+}
+
+/// Positive: 2048-bit, `u8` limbs — the AVR-class flavor at deployment
+/// width.
+/// # Safety
+/// `d_ptr` and `out_ptr` must be valid, aligned pointers to 256-byte
+/// arrays.
+#[no_mangle]
+pub unsafe extern "C" fn ct_fix__pkcs1v15_blinded_sign__fb8__N256(
+    d_ptr: *const [u8; 256],
+    out_ptr: *mut [u8; 256],
+) {
+    let d_bytes = black_box(unsafe { *d_ptr });
+
+    let pubkey = public_key_ct_from_be_bytes::<CarrierW8>(&N_2048, 65537).unwrap();
+    let d = CarrierW8::try_from_be_bytes_vartime(&d_bytes).unwrap();
+    let signing_key =
+        GenericSigningKey::<Sha256, _, _>::new(GenericRsaPrivateKey::from_public_and_d(pubkey, d));
+
+    let mut rng = FixedRng(0);
+    let mut em = [0u8; 256];
+    let mut sig = [0u8; 256];
+    let _ = signing_key.try_sign_with_rng_into(&mut rng, b"ct fixture message", &mut em, &mut sig);
+
+    unsafe { *out_ptr = black_box(sig) }
+}
+
+/// Positive: 2048-bit, `u64` limbs — the 64-bit-host flavor.
+/// # Safety
+/// `d_ptr` and `out_ptr` must be valid, aligned pointers to 256-byte
+/// arrays.
+#[no_mangle]
+pub unsafe extern "C" fn ct_fix__pkcs1v15_blinded_sign__fb64__N32(
+    d_ptr: *const [u8; 256],
+    out_ptr: *mut [u8; 256],
+) {
+    let d_bytes = black_box(unsafe { *d_ptr });
+
+    let pubkey = public_key_ct_from_be_bytes::<CarrierW64>(&N_2048, 65537).unwrap();
+    let d = CarrierW64::try_from_be_bytes_vartime(&d_bytes).unwrap();
+    let signing_key =
+        GenericSigningKey::<Sha256, _, _>::new(GenericRsaPrivateKey::from_public_and_d(pubkey, d));
+
+    let mut rng = FixedRng(0);
+    let mut em = [0u8; 256];
+    let mut sig = [0u8; 256];
     let _ = signing_key.try_sign_with_rng_into(&mut rng, b"ct fixture message", &mut em, &mut sig);
 
     unsafe { *out_ptr = black_box(sig) }

@@ -16,8 +16,10 @@
 //!   2. find the resulting libct_fixtures.a
 //!   3. llvm-objdump --disassemble
 //!   4. assert every ladder-symbol body is branch-free (per-ISA mnemonic
-//!      tables; an IT-predicated branch still counts), fail closed if no ladder
-//!      symbol is present (inlined away / renamed → can't confirm)
+//!      tables; an IT-predicated branch still counts), fail closed unless
+//!      exactly one ladder monomorphization per positive fixture is present
+//!      (fewer = some carrier's ladder was inlined away / renamed → that
+//!      carrier's attestation would be vacuous)
 //!   5. self-test: assert the negative controls still trip the tables
 //!   6. emit JSON report; exit non-zero on any of the above
 
@@ -48,6 +50,7 @@ struct Args {
     skip_build: bool,
     archive_override: Option<PathBuf>,
     ladder: Option<String>,
+    expect_ladder: Option<usize>,
 }
 
 fn parse_args() -> Result<Args, String> {
@@ -71,6 +74,14 @@ fn parse_args() -> Result<Args, String> {
             }
             "--ladder" => {
                 args.ladder = Some(it.next().ok_or("--ladder requires a regex")?);
+            }
+            "--expect-ladder" => {
+                args.expect_ladder = Some(
+                    it.next()
+                        .ok_or("--expect-ladder requires a count")?
+                        .parse()
+                        .map_err(|_| "--expect-ladder requires an integer")?,
+                );
             }
             "-h" | "--help" => {
                 print_help();
@@ -97,6 +108,8 @@ fn print_help() {
            --json-out <PATH>   Write JSON report to PATH (also written to stdout in human form).\n\
            --skip-build        Don't run cargo build; reuse the existing libct_fixtures.a.\n\
            --archive <PATH>    Override the path to libct_fixtures.a (for debugging).\n\
+           --expect-ladder <N> Expected ladder monomorphization count (default: one per\n\
+                               ct_fix__* positive fixture found in the archive).\n\
          \n\
          Exit code 0 = clean. Non-zero = ct violations OR negative controls didn't trip."
     );
@@ -180,6 +193,7 @@ fn main() -> ExitCode {
     let mut ladder_branches_seen: usize = 0;
     let mut ladder_violations: Vec<Violation> = Vec::new();
     let mut negative_controls_tripped: usize = 0;
+    let mut positive_fixtures: usize = 0;
 
     for block in &blocks {
         // The secret-exponent ladder: at most the reviewed loop-control
@@ -195,6 +209,9 @@ fn main() -> ExitCode {
             }
             continue;
         }
+        if parse::is_positive_fixture(&block.symbol) {
+            positive_fixtures += 1;
+        }
         // Negative controls: the mnemonic-table self-test. At least one
         // must trip, proving the tables detect branches on this ISA.
         if parse::is_negative_control(&block.symbol) && !parse::scan_block(block, &pat).is_empty() {
@@ -202,10 +219,18 @@ fn main() -> ExitCode {
         }
     }
 
+    // Each positive fixture pins one carrier, hence one distinct ladder
+    // monomorphization; fewer matches than that means some carrier's
+    // ladder was inlined/renamed/DCE'd and its attestation would be
+    // vacuous. `--expect-ladder` overrides for the day two fixtures
+    // legitimately share a carrier (or LLVM merges identical bodies).
+    let ladder_symbols_expected = args.expect_ladder.unwrap_or(positive_fixtures);
+
     // 5. Emit report.
     let report = Report {
         target: triple.clone(),
         ladder_symbols_matched,
+        ladder_symbols_expected,
         ladder_branches_seen,
         ladder_branches_allowed: spec.ladder_allowed_branches,
         negative_controls_tripped,
