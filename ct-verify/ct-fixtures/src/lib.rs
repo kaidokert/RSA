@@ -1,6 +1,6 @@
 //! Constant-time verification fixtures for `rsa_heapless`.
 //!
-//! Each `#[no_mangle] pub extern "C"` symbol pins one instantiation of
+//! Each `#[no_mangle] pub unsafe extern "C"` symbol pins one instantiation of
 //! a secret-dependent code path so the driver (`ct-driver`) can
 //! disassemble it per target ISA and the taint harness (`ct-ctgrind`)
 //! can run it under Valgrind with the private inputs marked undefined.
@@ -36,7 +36,8 @@ use rsa::GenericRsaPrivateKey;
 use sha2::Sha256;
 
 /// 512-bit Ct carrier (`u8` limbs — the most portable backend, and the
-/// width the taint layer runs at; deployment-width fixtures come later).
+/// width the taint layer runs at). Deployment width is 2048-bit; a
+/// wider carrier is its own fixture.
 type Carrier = FixedUInt<u8, 64, Ct>;
 
 /// A real 512-bit RSA keypair (`e = 65537`). The values must be a valid

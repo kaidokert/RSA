@@ -10,8 +10,7 @@ members = ["ct-fixtures"]
 # Deterministic codegen: the asm-grep / taint layers must inspect the
 # exact machine code a deployment build emits, and a passing run "locks"
 # that inspection — so a toolchain bump that perturbs codegen surfaces
-# as a reviewable diff rather than silent drift. Mirrors the profile
-# modmath and fixed-bigint pin for their own harnesses.
+# as a reviewable diff rather than silent drift.
 [profile.release]
 lto = "fat"
 codegen-units = 1

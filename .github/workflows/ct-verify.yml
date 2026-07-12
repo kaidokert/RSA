@@ -18,9 +18,9 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Cross-compile the fixture staticlib for every ISA the driver will
-  # eventually disassemble. This job proves the fixtures build and their
-  # symbols survive LTO; the asm-grep scan lands in a follow-up.
+  # Cross-compile the fixture staticlib for every ISA the driver
+  # disassembles, and assert the fixture symbols survive LTO. The
+  # disassembly scan is a separate job.
   fixtures-build:
     runs-on: ubuntu-latest
     strategy:
