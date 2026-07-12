@@ -1,6 +1,6 @@
 [package]
 name = "rsa_heapless"
-version = "0.4.0"
+version = "0.4.1"
 authors = ["RustCrypto Developers", "dignifiedquire <dignifiedquire@gmail.com>", "kaidokert@gmail.com"]
 edition = "2021"
 description = "Pure Rust RSA implementation - heapless fork"

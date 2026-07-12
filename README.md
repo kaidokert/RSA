@@ -13,6 +13,8 @@ Focused on shrinking code size and stack usage. The heapless path covers verify 
 
 Key generation stays off the heapless path — it needs the heavy `crypto-primes` stack, and embedded keys arrive from a provisioning path (PEM/PKCS#8, HSM, firmware constants) rather than being generated on-device. It is available behind the `keygen` feature (on by default) on the heap-allocating backend. Decryption on the heapless path is out of scope. Full upstream behavior remains available via the `alloc` feature; license, MSRV, and security advisories there follow the upstream crate, preserved verbatim in [`UPSTREAM_README.md`](UPSTREAM_README.md).
 
+Constant-time testing is documented in [`ct-verify/README.md`](https://github.com/kaidokert/RSA/blob/heapless/ct-verify/README.md).
+
 #### Resource usage (as of version 0.10.0-rc.18)
 
 PSS signature verification. The `u8` backend uses 8-bit limbs (more portable, works on 8-bit AVR); the `u32` backend uses 32-bit limbs (natural on 32-bit cores). Full sweeps across key sizes, operations, and targets live under [`footprint/`](footprint/).
