@@ -13,6 +13,8 @@ Focused on shrinking code size and stack usage. The heapless path covers verify 
 
 Key generation stays off the heapless path — it needs the heavy `crypto-primes` stack, and embedded keys arrive from a provisioning path (PEM/PKCS#8, HSM, firmware constants) rather than being generated on-device. It is available behind the `keygen` feature (on by default) on the heap-allocating backend. Decryption on the heapless path is out of scope. Full upstream behavior remains available via the `alloc` feature; license, MSRV, and security advisories there follow the upstream crate, preserved verbatim in [`UPSTREAM_README.md`](UPSTREAM_README.md).
 
+Constant-time testing is documented in [`ct-verify/README.md`](ct-verify/README.md).
+
 #### Resource usage (as of version 0.10.0-rc.18)
 
 PSS signature verification. The `u8` backend uses 8-bit limbs (more portable, works on 8-bit AVR); the `u32` backend uses 32-bit limbs (natural on 32-bit cores). Full sweeps across key sizes, operations, and targets live under [`footprint/`](footprint/).
@@ -26,21 +28,6 @@ PSS signature verification. The `u8` backend uses 8-bit limbs (more portable, wo
 | Cortex-M3       | 2048 | SHA-256 | u32     |        13.1 |         11564 |
 | sifive_e (RV32) |  512 | SHA-1   | u32     |        11.3 |          2840 |
 | sifive_e (RV32) | 2048 | SHA-256 | u32     |        21.1 |         11736 |
-
-#### Constant-time verification
-
-The heapless sign path's CT and panic-free claims are machine-checked
-in CI by a four-layer harness under [`ct-verify/`](ct-verify/):
-typestate compile gates, a per-ISA branch-freedom check of the
-secret-exponent ladder (Thumb + RV32), a Valgrind taint gate over the
-whole blinded sign (x86_64 + aarch64), and a linker-DCE panic-free
-audit. Fixtures cover every shipped limb flavor (`u8`/`u32`/`u64`) at
-the 2048-bit deployment width. What exactly is attested — and what is
-honestly not — is documented in
-[`ct-verify/README.md`](ct-verify/README.md).
-
-Consumers of the no-alloc modmath backend who want the audited
-no-panic property should use `fixed-bigint` ≥ 0.5.2.
 
 #### Example (host, alloc)
 
