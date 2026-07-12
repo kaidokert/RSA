@@ -5,6 +5,9 @@ on:
     paths:
       - "ct-verify/**"
       - "src/**"
+      # ct-fixtures path-deps the root crate, so its manifest shapes
+      # this build too.
+      - "Cargo.toml"
       - ".github/workflows/ct-verify.yml"
   push:
     branches:

@@ -94,8 +94,11 @@ impl rand_core::TryCryptoRng for FixedRng {}
 /// `c^d` → `InvertCt`/`MulCt`), verify-after-sign, and serialization —
 /// the composition the primitive-level fixtures one layer down can't
 /// see.
+/// # Safety
+/// `d_ptr` and `out_ptr` must be valid, aligned pointers to 64-byte
+/// arrays.
 #[no_mangle]
-pub extern "C" fn ct_fix__pkcs1v15_blinded_sign__fb8__N64(
+pub unsafe extern "C" fn ct_fix__pkcs1v15_blinded_sign__fb8__N64(
     d_ptr: *const [u8; 64],
     out_ptr: *mut [u8; 64],
 ) {
@@ -118,8 +121,14 @@ pub extern "C" fn ct_fix__pkcs1v15_blinded_sign__fb8__N64(
 /// trip every gate (asm-grep sees the conditional branch; taint sees
 /// the secret-flagged jump). A clean pass here means the harness is
 /// broken.
+/// # Safety
+/// `s_ptr` must be a valid, aligned pointer to a 64-byte array;
+/// `out_ptr` to a writable byte.
 #[no_mangle]
-pub extern "C" fn nct_fix__neg__secret_branch__fb8__N64(s_ptr: *const [u8; 64], out_ptr: *mut u8) {
+pub unsafe extern "C" fn nct_fix__neg__secret_branch__fb8__N64(
+    s_ptr: *const [u8; 64],
+    out_ptr: *mut u8,
+) {
     let s = black_box(unsafe { *s_ptr });
     let mut acc = 0u8;
     // Branch whose taken/not-taken depends on secret bytes.
@@ -134,8 +143,14 @@ pub extern "C" fn nct_fix__neg__secret_branch__fb8__N64(s_ptr: *const [u8; 64], 
 /// Negative control — variable-time remainder on a secret dividend.
 /// MUST trip: `%` on a runtime value lowers to a data-dependent
 /// division/branch sequence on every target the driver covers.
+/// # Safety
+/// `s_ptr` must be a valid, aligned pointer to an 8-byte array;
+/// `out_ptr` to a writable `u64`.
 #[no_mangle]
-pub extern "C" fn nct_fix__neg__vartime_rem__fb8__N64(s_ptr: *const [u8; 8], out_ptr: *mut u64) {
+pub unsafe extern "C" fn nct_fix__neg__vartime_rem__fb8__N64(
+    s_ptr: *const [u8; 8],
+    out_ptr: *mut u64,
+) {
     let s = u64::from_le_bytes(black_box(unsafe { *s_ptr }));
     let r = black_box(s) % black_box(0x1_0000_000du64);
     unsafe { *out_ptr = black_box(r) }
