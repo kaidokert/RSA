@@ -139,12 +139,18 @@ impl<const N: usize> Prefix<N> {
     }
 
     pub fn from_slice(input: &[u8]) -> Result<Self> {
-        if input.len() > N {
-            return Err(Error::OutputBufferTooSmall);
-        }
-
         let mut out = Self::new();
-        out.data[..input.len()].copy_from_slice(input);
+        // Fallible `get_mut` + byte-copy loop (no `[..]` indexing /
+        // `copy_from_slice`) so no `slice_index_fail` / `copy_from_slice`
+        // panic path is synthesized into the (embedded) sign binary. The
+        // `get_mut` also subsumes the `input.len() > N` bounds check.
+        let dst = out
+            .data
+            .get_mut(..input.len())
+            .ok_or(Error::OutputBufferTooSmall)?;
+        for (d, s) in dst.iter_mut().zip(input.iter()) {
+            *d = *s;
+        }
         out.len = input.len();
         Ok(out)
     }
@@ -153,12 +159,15 @@ impl<const N: usize> Prefix<N> {
 #[cfg(not(feature = "alloc"))]
 impl<const N: usize> AsRef<[u8]> for Prefix<N> {
     fn as_ref(&self) -> &[u8] {
-        &self.data[..self.len]
+        // `get(..len)` rather than `[..len]` so no `slice_index_fail`
+        // panic path is synthesized; `len <= N` always holds (set only in
+        // `from_slice` after a bounded `get_mut`), so the fallback is dead.
+        self.data.get(..self.len).unwrap_or(&[])
     }
 }
 
 #[cfg(not(feature = "alloc"))]
-pub(super) fn pkcs1v15_generate_prefix_helper<D: Digest>() -> Prefix
+pub(super) fn pkcs1v15_generate_prefix_helper<D>() -> Prefix
 where
     D: Digest + AssociatedOid,
 {

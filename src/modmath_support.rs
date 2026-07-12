@@ -308,8 +308,13 @@ where
         for byte in buf.iter_mut().take(zero_bytes) {
             *byte = 0;
         }
-        if zero_bytes < buf.len() && zero_bits_in_next > 0 {
-            buf[zero_bytes] &= 0xFFu8 >> zero_bits_in_next;
+        if zero_bits_in_next > 0 {
+            // `get_mut` rather than `buf[zero_bytes]` so no
+            // `panic_bounds_check` is synthesized — the index guard is
+            // folded into the `Some` arm.
+            if let Some(b) = buf.get_mut(zero_bytes) {
+                *b &= 0xFFu8 >> zero_bits_in_next;
+            }
         }
         let candidate = <T as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(bytes.as_ref())?;
         let wrapped = wrap(candidate);

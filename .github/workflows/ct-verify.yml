@@ -48,3 +48,30 @@ jobs:
       - name: Ladder branch-freedom check
         working-directory: ct-verify
         run: cargo run --release -p ct-driver -- --target ${{ matrix.target }}
+
+  # Cross-build the whole heapless sign path as a DCE'd staticlib and
+  # assert the archive links in no `core::panicking` machinery. A
+  # reachable panic in a signer is both a DoS edge and a timing oracle
+  # (panic formatting's cost depends on the values formatted), so the
+  # sign path must resolve every fallible slice/index op to an error
+  # return rather than a panic. Target-invariant in practice (the symbols
+  # are `core::panicking` references), but run on one ARM + one RISC-V
+  # profile to catch any target-specific codegen that reintroduces one.
+  panic-free-audit:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - thumbv7m-none-eabi
+          - riscv32imc-unknown-none-elf
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.87.0
+          targets: ${{ matrix.target }}
+          components: llvm-tools-preview
+      - name: Panic-free sign-path audit
+        working-directory: ct-verify
+        run: sh panic-free-audit/check.sh ${{ matrix.target }}
