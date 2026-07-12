@@ -27,6 +27,21 @@ PSS signature verification. The `u8` backend uses 8-bit limbs (more portable, wo
 | sifive_e (RV32) |  512 | SHA-1   | u32     |        11.3 |          2840 |
 | sifive_e (RV32) | 2048 | SHA-256 | u32     |        21.1 |         11736 |
 
+#### Constant-time verification
+
+The heapless sign path's CT and panic-free claims are machine-checked
+in CI by a four-layer harness under [`ct-verify/`](ct-verify/):
+typestate compile gates, a per-ISA branch-freedom check of the
+secret-exponent ladder (Thumb + RV32), a Valgrind taint gate over the
+whole blinded sign (x86_64 + aarch64), and a linker-DCE panic-free
+audit. Fixtures cover every shipped limb flavor (`u8`/`u32`/`u64`) at
+the 2048-bit deployment width. What exactly is attested — and what is
+honestly not — is documented in
+[`ct-verify/README.md`](ct-verify/README.md).
+
+Consumers of the no-alloc modmath backend who want the audited
+no-panic property should use `fixed-bigint` ≥ 0.5.2.
+
 #### Example (host, alloc)
 
 ```rust,ignore
