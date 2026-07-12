@@ -11,7 +11,7 @@ keywords = ["rsa", "encryption", "security", "crypto", "no_std"]
 categories = ["cryptography", "no-std", "no-std::no-alloc"]
 readme = "README.md"
 rust-version = "1.87"
-exclude = ["marvin-toolkit/", "thirdparty/"]
+exclude = ["marvin-toolkit/", "thirdparty/", "ct-verify/"]
 
 [lib]
 name = "rsa"

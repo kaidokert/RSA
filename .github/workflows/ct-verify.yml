@@ -1,0 +1,54 @@
+name: CT verify
+
+on:
+  pull_request:
+    paths:
+      - "ct-verify/**"
+      - "src/**"
+      # ct-fixtures path-deps the root crate, so its manifest shapes
+      # this build too.
+      - "Cargo.toml"
+      - ".github/workflows/ct-verify.yml"
+  push:
+    branches:
+      - heapless
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  # Cross-compile the fixture staticlib for every ISA the driver
+  # disassembles, and assert the fixture symbols survive LTO. The
+  # disassembly scan is a separate job.
+  fixtures-build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - thumbv7em-none-eabi
+          - thumbv7m-none-eabi
+          - thumbv6m-none-eabi
+          - riscv32imc-unknown-none-elf
+          - riscv32imac-unknown-none-elf
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          # Pinned so codegen — and therefore the eventual asm-grep
+          # calibration — stays deterministic across CI runs.
+          toolchain: 1.87.0
+          targets: ${{ matrix.target }}
+          components: llvm-tools-preview
+      - name: Cross-build fixtures
+        working-directory: ct-verify
+        run: cargo build -p ct-fixtures --release --target ${{ matrix.target }}
+      - name: Assert fixture symbols survived LTO
+        working-directory: ct-verify
+        run: |
+          NM=$(find "$(rustc --print sysroot)" -name llvm-nm | head -1)
+          AR=$(find target/${{ matrix.target }}/release -name libct_fixtures.a | head -1)
+          syms=$("$NM" "$AR" | grep -cE '(ct|nct)_fix__') || true
+          echo "fixture symbols: $syms"
+          test "$syms" -ge 3

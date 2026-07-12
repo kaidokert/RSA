@@ -1,0 +1,25 @@
+[package]
+name = "ct-fixtures"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+# `staticlib` for the driver (cross-build → llvm-objdump the `.a`);
+# `rlib` so the taint harness can link the same symbols as a dependency.
+[lib]
+crate-type = ["staticlib", "rlib"]
+
+[features]
+# The staticlib cross-build is no_std and needs its own panic handler;
+# the rlib link into the (std) taint harness must NOT define one. On by
+# default for the driver; the ctgrind crate depends with
+# `default-features = false`.
+default = ["panic-handler"]
+panic-handler = []
+
+[dependencies]
+rsa = { path = "../..", package = "rsa_heapless", default-features = false, features = ["modmath"] }
+fixed-bigint = { version = "0.5.0", default-features = false, features = ["zeroize", "use-unsafe", "cios"] }
+const-num-traits = { version = "0.2.0", default-features = false, features = ["ct"] }
+sha2 = { version = "0.11", default-features = false, features = ["oid"] }
+rand_core = { version = "0.10", default-features = false }
