@@ -1,4 +1,4 @@
-//! ct-ctgrind — Valgrind-based taint verifier for modmath CT primitives.
+//! ct-ctgrind — Valgrind taint verifier for the rsa_heapless heapless sign path.
 //!
 //! Each fixture from `ct-fixtures` is called with its secret inputs
 //! tagged `MAKE_MEM_UNDEFINED` via crabgrind. Valgrind then flags any
