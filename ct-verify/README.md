@@ -36,6 +36,9 @@ a retry-then-fail path.
 
 ## The four layers
 
+All run commands below assume this directory (`ct-verify/`) as the
+working directory.
+
 **Layer 0 — typestate compile gates** (in `src/traits/modular.rs`
 tests, not this workspace). `static_assertions` pins that only
 `Ct`-personality modulus parameters implement `CtModulusParams`; an
@@ -68,7 +71,9 @@ on macOS). Negative controls — a secret-dependent early-exit loop and a
 vartime compare — must trip, proving the harness has teeth.
 
 ```sh
-cd ct-verify && cargo build --release -p ct-ctgrind
+# On x86_64, build with the same CPU baseline CI attests:
+#   export RUSTFLAGS="-C target-feature=+lzcnt,+bmi1"
+cargo build --release -p ct-ctgrind
 valgrind --tool=memcheck --error-limit=no --error-exitcode=0 \
   --suppressions=ct-ctgrind/ct-ctgrind.supp -q target/release/ct-ctgrind
 ```
@@ -90,7 +95,7 @@ prehash sign variant keeps `sha2` compression out of the archive,
 scoping the audit to this crate's composition.
 
 ```sh
-cd ct-verify && sh panic-free-audit/check.sh thumbv7m-none-eabi
+sh panic-free-audit/check.sh thumbv7m-none-eabi
 ```
 
 This layer has caught real bugs at real deployment widths twice
