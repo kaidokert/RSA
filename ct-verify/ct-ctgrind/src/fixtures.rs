@@ -47,6 +47,33 @@ ctgrind_fixture!(ct_fix__pkcs1v15_blinded_sign__fb32__N64, {
     let _ = black_box(out);
 });
 
+// Positive: 2048-bit, `u8` limbs — the AVR-class flavor at deployment
+// width.
+unsafe extern "C" {
+    fn ct_fix__pkcs1v15_blinded_sign__fb8__N256(d_ptr: *const [u8; 256], out_ptr: *mut [u8; 256]);
+}
+ctgrind_fixture!(ct_fix__pkcs1v15_blinded_sign__fb8__N256, {
+    let d = ct_fixtures::D_2048;
+    let mut out = [0u8; 256];
+    taint_val(&d);
+    unsafe { ct_fix__pkcs1v15_blinded_sign__fb8__N256(&d, &mut out) }
+    untaint_val(&out);
+    let _ = black_box(out);
+});
+
+// Positive: 2048-bit, `u64` limbs — the 64-bit-host flavor.
+unsafe extern "C" {
+    fn ct_fix__pkcs1v15_blinded_sign__fb64__N32(d_ptr: *const [u8; 256], out_ptr: *mut [u8; 256]);
+}
+ctgrind_fixture!(ct_fix__pkcs1v15_blinded_sign__fb64__N32, {
+    let d = ct_fixtures::D_2048;
+    let mut out = [0u8; 256];
+    taint_val(&d);
+    unsafe { ct_fix__pkcs1v15_blinded_sign__fb64__N32(&d, &mut out) }
+    untaint_val(&out);
+    let _ = black_box(out);
+});
+
 // Negative control: a data-dependent branch on the secret bytes. MUST
 // trip — memcheck sees the tainted early-exit loop condition.
 unsafe extern "C" {
