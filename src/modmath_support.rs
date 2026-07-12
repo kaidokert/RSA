@@ -196,7 +196,7 @@ where
         // type is fixed-width and `resize_unchecked` is a no-op, but the
         // check still needs to reject values that wouldn't survive a
         // narrower precision.
-        let value_bits = self.bits_precision() - self.leading_zeros();
+        let value_bits = self.0.bit_length();
         if value_bits <= at_least_bits_precision {
             Some(self)
         } else {
@@ -211,10 +211,6 @@ where
     T: FixedWidthUnsignedInt + PartialOrd,
 {
     type Bytes = <T as FixedWidthUnsignedInt>::Bytes;
-
-    fn leading_zeros(&self) -> u32 {
-        FixedWidthUnsignedInt::leading_zeros(&self.0)
-    }
 
     fn to_be_bytes(&self) -> Self::Bytes {
         FixedWidthUnsignedInt::to_be_bytes(&self.0)
@@ -236,7 +232,7 @@ where
     }
 
     fn bits(&self) -> u32 {
-        self.bits_precision() - self.leading_zeros()
+        FixedWidthUnsignedInt::bit_length(&self.0)
     }
 
     fn bits_precision(&self) -> u32 {

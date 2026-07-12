@@ -43,6 +43,11 @@ pub trait FixedWidthUnsignedInt: Zeroize + Clone + Copy {
     type Bytes: NumBytes + Default + AsMut<[u8]>;
 
     fn leading_zeros(&self) -> u32;
+    /// Bit length of the value itself (position of the highest set bit;
+    /// 0 for zero) — the value-defined primitive, as opposed to the
+    /// container-relative `leading_zeros`/`bits_precision` pair, which
+    /// only means anything because this trait is fixed-width.
+    fn bit_length(&self) -> u32;
     fn to_be_bytes(&self) -> Self::Bytes;
     fn try_from_be_bytes_vartime(bytes: &[u8]) -> Result<Self>;
     fn bits_precision(&self) -> u32;
@@ -59,6 +64,12 @@ where
 
     fn leading_zeros(&self) -> u32 {
         PrimBits::leading_zeros(*self)
+    }
+
+    fn bit_length(&self) -> u32 {
+        // Width minus leading zeros — valid exactly because this trait
+        // is fixed-width.
+        FixedWidthUnsignedInt::bits_precision(self) - PrimBits::leading_zeros(*self)
     }
 
     fn to_be_bytes(&self) -> Self::Bytes {
@@ -100,6 +111,12 @@ where
 
     fn leading_zeros(&self) -> u32 {
         PrimBits::leading_zeros(*self)
+    }
+
+    fn bit_length(&self) -> u32 {
+        // Width minus leading zeros — valid exactly because this trait
+        // is fixed-width.
+        FixedWidthUnsignedInt::bits_precision(self) - PrimBits::leading_zeros(*self)
     }
 
     fn to_be_bytes(&self) -> Self::Bytes {
@@ -147,7 +164,7 @@ where
         // fixed-width and `resize_unchecked` is a no-op, but the check
         // still needs to reject values that wouldn't survive a narrower
         // precision.
-        let value_bits = self.bits_precision() - self.leading_zeros();
+        let value_bits = self.bit_length();
         if value_bits <= at_least_bits_precision {
             Some(self)
         } else {
@@ -163,10 +180,6 @@ where
 {
     type Bytes = <T as FixedWidthUnsignedInt>::Bytes;
 
-    fn leading_zeros(&self) -> u32 {
-        FixedWidthUnsignedInt::leading_zeros(self)
-    }
-
     fn to_be_bytes(&self) -> Self::Bytes {
         FixedWidthUnsignedInt::to_be_bytes(self)
     }
@@ -176,7 +189,7 @@ where
     }
 
     fn bits(&self) -> u32 {
-        self.bits_precision() - self.leading_zeros()
+        FixedWidthUnsignedInt::bit_length(self)
     }
 
     fn bits_precision(&self) -> u32 {
@@ -207,9 +220,13 @@ pub trait UnsignedModularInt:
     Zeroize + Clone + PartialOrd + IntegerResize<Output = Self> + TryFromBeBytes
 {
     type Bytes: NumBytes + AsMut<[u8]>;
-    fn leading_zeros(&self) -> u32;
     fn to_be_bytes(&self) -> Self::Bytes;
     fn as_nz_ref(&self) -> NonZero<Self>;
+    /// Bit length of the value (position of the highest set bit; 0 for
+    /// zero). A value-defined primitive on purpose: no
+    /// `leading_zeros`-style container-relative accessor lives on this
+    /// trait, so runtime-length carriers can satisfy it without
+    /// committing to any notion of "width".
     fn bits(&self) -> u32;
     fn bits_precision(&self) -> u32;
     #[cfg(feature = "alloc")]
@@ -520,10 +537,6 @@ impl IntegerResize for BoxedUint {
 #[cfg(feature = "alloc")]
 impl UnsignedModularInt for BoxedUint {
     type Bytes = alloc::boxed::Box<[u8]>;
-
-    fn leading_zeros(&self) -> u32 {
-        self.leading_zeros()
-    }
 
     fn to_be_bytes(&self) -> Self::Bytes {
         self.to_be_bytes()
