@@ -112,19 +112,19 @@ impl rand_core::TryCryptoRng for FixedRng {}
 /// recomputes with the public exponent and compares), so a successful
 /// sign also proves the verify math on this carrier.
 ///
-/// Everything COMPILES; the run is ignored on two known upstream bugs
+/// Everything COMPILES; the run is ignored on one known upstream bug
 /// (the unblinded path fails identically, so it is the modular math,
-/// not the blinding):
-/// - modmath 0.5 sizes Montgomery R via `type_bit_width = size_of*8`,
-///   which reads HeaplessBigInt's STRUCT size (limbs + len field +
-///   padding) — a phantom extra limb. Retired-by-design in modmath 0.6
-///   (see fixed-bigint's WIDTH_AND_CT_MODEL notes).
-/// - fixed-bigint's WideMul width-split misbehaves on mismatched lens
-///   (under active investigation upstream).
+/// not the blinding): modmath 0.5 sizes Montgomery R via
+/// `type_bit_width = size_of*8`, which reads HeaplessBigInt's STRUCT
+/// size (limbs + len field + padding) — a phantom extra limb. Retired
+/// by design in modmath 0.6 (see fixed-bigint's WIDTH_AND_CT_MODEL
+/// notes). fixed-bigint's WideMul len-split (fixed in 0.6.0-alpha.16)
+/// was never RSA's blocker: montgomery operands here are full-width,
+/// so the operand-len and CAP splits coincided.
 ///
 /// Un-ignore when the modmath 0.6 jump lands on this branch.
 #[test]
-#[ignore = "known upstream: modmath 0.5 type_bit_width struct-size proxy + fixed-bigint WideMul len-split"]
+#[ignore = "known upstream: modmath 0.5 type_bit_width sizes R off the carrier STRUCT (phantom limb for runtime-len); needs the modmath 0.6 jump"]
 fn pkcs1v15_blinded_sign_2048() {
     use rsa::modmath_support::public_key_ct_from_be_bytes;
     use rsa::pkcs1v15::GenericSigningKey;
