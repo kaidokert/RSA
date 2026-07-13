@@ -39,7 +39,11 @@ pub trait IntegerResize: Sized {
     fn try_resize(self, at_least_bits_precision: u32) -> Option<Self::Output>;
 }
 
-pub trait FixedWidthUnsignedInt: Zeroize + Clone + Copy {
+// The vocabulary pair are supertraits: they are the primitives this
+// trait's width/bit-length accessors are defined over, and downstream
+// generic code (modmath 0.6 sizes Montgomery width from the modulus's
+// own `BitsPrecision`) needs them visible through the bound.
+pub trait FixedWidthUnsignedInt: Zeroize + Clone + Copy + BitsPrecision + BitWidth {
     type Bytes: NumBytes + Default + AsMut<[u8]>;
 
     fn leading_zeros(&self) -> u32;

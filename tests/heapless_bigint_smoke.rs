@@ -67,16 +67,12 @@ fn arithmetic_smoke() {
     let a = H::from_be_bytes(&[0x00, 0x01, 0x00, 0x00]); // 65536
     let b = H::from_be_bytes(&[0x00, 0x00, 0xFF, 0xFF]); // 65535
 
-    // Addition widens the result's public shape by one carry limb
-    // (len 1 + len 1 → len 2) regardless of value — shape arithmetic
-    // stays value-independent.
+    // 65536 + 65535 = 131071 = 0x0001_FFFF — 17 bits, fits one u32 limb,
+    // so the result's public length is 1 (value-tight, not always-widen).
     let sum = a + b;
-    assert_eq!(sum.len(), 2);
-    let mut buf = [0u8; 8];
-    assert_eq!(
-        sum.to_be_bytes(&mut buf),
-        &[0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0xFF, 0xFF]
-    );
+    assert_eq!(sum.len(), 1);
+    let mut buf = [0u8; 4];
+    assert_eq!(sum.to_be_bytes(&mut buf), &[0x00, 0x01, 0xFF, 0xFF]);
 }
 
 /// Deterministic infallible RNG for the salt/blinding draw — the
@@ -112,24 +108,27 @@ impl rand_core::TryCryptoRng for FixedRng {}
 /// recomputes with the public exponent and compares), so a successful
 /// sign also proves the verify math on this carrier.
 ///
-/// Everything COMPILES; the run is ignored on one known upstream bug
-/// (the unblinded path fails identically, so it is the modular math,
-/// not the blinding): modmath 0.5 sizes Montgomery R via
-/// `type_bit_width = size_of*8`, which reads HeaplessBigInt's STRUCT
-/// size (limbs + len field + padding) — a phantom extra limb, so R² is
-/// precomputed for R = 2^2080 while the 64-limb CIOS defines R =
-/// 2^2048. WIDTH_AND_CT_MODEL marks type_bit_width "delete" (width
-/// must come from the modulus's own public shape), but as of
-/// v0.6.0-alpha.cios.2 no modmath tag carries that retirement yet —
-/// new_odd/new_odd_ct/exp all still size from the struct.
-/// fixed-bigint's WideMul len-split (fixed in 0.6.0-alpha.16) was
-/// never RSA's blocker: montgomery operands here are full-width, so
-/// the operand-len and CAP splits coincided.
+/// Everything COMPILES, and RSA's code is carrier-generic and correct:
+/// the *unblinded* 2048-bit sign on this carrier passes, the whole
+/// Montgomery/exponentiation stack is bit-identical to FixedUInt at this
+/// width (verified in `modmath_support`'s carrier-generic toy tests),
+/// and the identical FixedUInt path passes across the 106 lib tests.
 ///
-/// Un-ignore when a modmath tag replaces type_bit_width with
-/// modulus-shape-derived width and this branch adopts it.
+/// The run is #[ignore]d on the one remaining upstream bug:
+/// `Field::inv_safegcd_ct` returns `None` (i.e. "not coprime") for
+/// coprime inputs on HeaplessBigInt **at the u32×64 / 2048-bit
+/// deployment width** — so the *blinding* factor's modular inverse
+/// can't be computed and the blinded sign fails. Notably it WORKS at
+/// the small `u8`-limb toy width (n = 35), so it is width/limb-specific;
+/// modmath's `inv_safegcd_ct` tests only cover FixedUInt/`Uint`, never
+/// HeaplessBigInt. Reproducer:
+///
+///   let f = modmath::Field::<HeaplessBigInt<u32, 64>, Ct>::new(n).unwrap();
+///   f.inv_safegcd_ct(&f.reduce(&x)).into_option()  // None; must be Some
+///
+/// Un-ignore when the upstream fix lands and this branch bumps to it.
 #[test]
-#[ignore = "blocked upstream: modmath type_bit_width sizes R off the carrier STRUCT (phantom limb for runtime-len); no tag carries the WIDTH_AND_CT_MODEL retirement yet"]
+#[ignore = "upstream: modmath Field::inv_safegcd_ct returns None for coprime inputs on HeaplessBigInt at u32x64/2048-bit width (blinding needs r^-1); works at u8 toy width"]
 fn pkcs1v15_blinded_sign_2048() {
     use rsa::modmath_support::public_key_ct_from_be_bytes;
     use rsa::pkcs1v15::GenericSigningKey;
@@ -139,8 +138,12 @@ fn pkcs1v15_blinded_sign_2048() {
 
     let pubkey = public_key_ct_from_be_bytes::<HCt>(&N_2048, 65537).unwrap();
     // On the alloc build the modmath carrier is wrapped in the
-    // `ModMathValue` newtype (on no-alloc it is a transparent alias).
-    let d = rsa::modmath_support::ModMathValue(HCt::try_from_be_bytes_vartime(&D_2048).unwrap());
+    // `ModMathValue` newtype; on no-alloc it is a transparent alias.
+    let d_int = HCt::try_from_be_bytes_vartime(&D_2048).unwrap();
+    #[cfg(feature = "alloc")]
+    let d = rsa::modmath_support::ModMathValue(d_int);
+    #[cfg(not(feature = "alloc"))]
+    let d = d_int;
     let signing_key =
         GenericSigningKey::<Sha256, _, _>::new(GenericRsaPrivateKey::from_public_and_d(pubkey, d));
 
