@@ -43,7 +43,7 @@ modmath-cios = { version = "0.1.1", optional = true, default-features = false }
 # EXPERIMENT (bigint-heapless-runtime-len): direct git pin — the
 # heapless-runtime-len carrier ships in fixed-bigint 0.6.0-alpha, which is
 # not semver-reachable from a [patch] over the crates-io 0.5 line.
-fixed-bigint = { git = "https://github.com/kaidokert/fixed-bigint-rs", tag = "v0.6.0-alpha.14", default-features = false, features = ["use-unsafe", "zeroize", "cios", "heapless-runtime-len"] }
+fixed-bigint = { git = "https://github.com/kaidokert/fixed-bigint-rs", tag = "v0.6.0-alpha.15", default-features = false, features = ["use-unsafe", "zeroize", "cios", "heapless-runtime-len"] }
 subtle = { version = "2.6", default-features = false }
 heapless = "0.9"
 
