@@ -103,32 +103,16 @@ impl rand_core::TryRng for FixedRng {
 impl rand_core::TryCryptoRng for FixedRng {}
 
 /// The prize: a whole 2048-bit blinded PKCS#1 v1.5 sign with the
-/// runtime-length carrier at full capacity. The sign path runs
-/// verify-after-sign internally (`rsa_private_op_and_check_blinded`
-/// recomputes with the public exponent and compares), so a successful
-/// sign also proves the verify math on this carrier.
-///
-/// Everything COMPILES, and RSA's code is carrier-generic and correct:
-/// the *unblinded* 2048-bit sign on this carrier passes, the whole
-/// Montgomery/exponentiation stack is bit-identical to FixedUInt at this
-/// width (verified in `modmath_support`'s carrier-generic toy tests),
-/// and the identical FixedUInt path passes across the 106 lib tests.
-///
-/// The run is #[ignore]d on the one remaining upstream bug:
-/// `Field::inv_safegcd_ct` returns `None` (i.e. "not coprime") for
-/// coprime inputs on HeaplessBigInt **at the u32×64 / 2048-bit
-/// deployment width** — so the *blinding* factor's modular inverse
-/// can't be computed and the blinded sign fails. Notably it WORKS at
-/// the small `u8`-limb toy width (n = 35), so it is width/limb-specific;
-/// modmath's `inv_safegcd_ct` tests only cover FixedUInt/`Uint`, never
-/// HeaplessBigInt. Reproducer:
-///
-///   let f = modmath::Field::<HeaplessBigInt<u32, 64>, Ct>::new(n).unwrap();
-///   f.inv_safegcd_ct(&f.reduce(&x)).into_option()  // None; must be Some
-///
-/// Un-ignore when the upstream fix lands and this branch bumps to it.
+/// runtime-length carrier at full capacity — now passing end to end.
+/// The sign path runs verify-after-sign internally
+/// (`rsa_private_op_and_check_blinded` recomputes with the public
+/// exponent and compares), so a successful sign also proves the verify
+/// math on this carrier. RSA's code is fully carrier-generic; the last
+/// upstream blocker (`Field::inv_safegcd_ct` returning `None` for
+/// coprime inputs on HeaplessBigInt at u32×64 width) was fixed by the
+/// width-preserving Shl / div_rem rework in fixed-bigint 0.6.0-alpha.21
+/// + modmath 0.6.0-alpha.cios.8.
 #[test]
-#[ignore = "upstream: modmath Field::inv_safegcd_ct returns None for coprime inputs on HeaplessBigInt at u32x64/2048-bit width (blinding needs r^-1); works at u8 toy width"]
 fn pkcs1v15_blinded_sign_2048() {
     use rsa::modmath_support::public_key_ct_from_be_bytes;
     use rsa::pkcs1v15::GenericSigningKey;
