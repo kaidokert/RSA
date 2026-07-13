@@ -5,10 +5,10 @@ use core::borrow::Borrow;
 
 #[cfg(feature = "alloc")]
 use alloc::boxed::Box;
-use const_num_traits::PrimBits;
 #[cfg(not(feature = "modmath"))]
 use const_num_traits::PrimInt;
-use const_num_traits::{FromBytes as NumFromBytes, ToBytes as NumToBytes, Zero};
+use const_num_traits::{BitWidth, BitsPrecision};
+use const_num_traits::{FromBytes as NumFromBytes, ToBytes as NumToBytes};
 #[cfg(feature = "alloc")]
 use crypto_bigint::{
     modular::{BoxedMontyForm, BoxedMontyParams},
@@ -56,20 +56,20 @@ pub trait FixedWidthUnsignedInt: Zeroize + Clone + Copy {
 #[cfg(feature = "modmath")]
 impl<T> FixedWidthUnsignedInt for T
 where
-    T: Zeroize + Clone + Copy + PrimBits + Zero + NumToBytes + NumFromBytes,
+    T: Zeroize + Clone + Copy + BitsPrecision + BitWidth + NumToBytes + NumFromBytes,
     T: NumToBytes<Bytes = <T as NumFromBytes>::Bytes>,
     <T as NumToBytes>::Bytes: NumBytes + Default + AsMut<[u8]>,
 {
     type Bytes = <T as NumToBytes>::Bytes;
 
     fn leading_zeros(&self) -> u32 {
-        PrimBits::leading_zeros(*self)
+        // Width minus bit-length: shape-relative, well-defined for any
+        // carrier whose operating width is a public value.
+        BitsPrecision::bits_precision(*self) - BitWidth::bit_width(*self)
     }
 
     fn bit_length(&self) -> u32 {
-        // Width minus leading zeros — valid exactly because this trait
-        // is fixed-width.
-        FixedWidthUnsignedInt::bits_precision(self) - PrimBits::leading_zeros(*self)
+        BitWidth::bit_width(*self)
     }
 
     fn to_be_bytes(&self) -> Self::Bytes {
@@ -96,27 +96,27 @@ where
     }
 
     fn bits_precision(&self) -> u32 {
-        PrimBits::count_zeros(<T as Zero>::zero())
+        BitsPrecision::bits_precision(*self)
     }
 }
 
 #[cfg(not(feature = "modmath"))]
 impl<T> FixedWidthUnsignedInt for T
 where
-    T: Zeroize + Clone + Copy + PrimInt + NumToBytes + NumFromBytes,
+    T: Zeroize + Clone + Copy + PrimInt + BitsPrecision + BitWidth + NumToBytes + NumFromBytes,
     T: NumToBytes<Bytes = <T as NumFromBytes>::Bytes>,
     <T as NumToBytes>::Bytes: NumBytes + Default + AsMut<[u8]>,
 {
     type Bytes = <T as NumToBytes>::Bytes;
 
     fn leading_zeros(&self) -> u32 {
-        PrimBits::leading_zeros(*self)
+        // Width minus bit-length: shape-relative, well-defined for any
+        // carrier whose operating width is a public value.
+        BitsPrecision::bits_precision(*self) - BitWidth::bit_width(*self)
     }
 
     fn bit_length(&self) -> u32 {
-        // Width minus leading zeros — valid exactly because this trait
-        // is fixed-width.
-        FixedWidthUnsignedInt::bits_precision(self) - PrimBits::leading_zeros(*self)
+        BitWidth::bit_width(*self)
     }
 
     fn to_be_bytes(&self) -> Self::Bytes {
@@ -143,7 +143,7 @@ where
     }
 
     fn bits_precision(&self) -> u32 {
-        <T as Zero>::zero().count_zeros()
+        BitsPrecision::bits_precision(*self)
     }
 }
 
