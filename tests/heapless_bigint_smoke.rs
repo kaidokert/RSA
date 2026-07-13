@@ -121,13 +121,9 @@ fn pkcs1v15_blinded_sign_2048() {
     use sha2::Sha256;
 
     let pubkey = public_key_ct_from_be_bytes::<HCt>(&N_2048, 65537).unwrap();
-    // On the alloc build the modmath carrier is wrapped in the
-    // `ModMathValue` newtype; on no-alloc it is a transparent alias.
-    let d_int = HCt::try_from_be_bytes_vartime(&D_2048).unwrap();
-    #[cfg(feature = "alloc")]
-    let d = rsa::modmath_support::ModMathValue(d_int);
-    #[cfg(not(feature = "alloc"))]
-    let d = d_int;
+    // `wrap` is the cross-config constructor: newtype ctor under `alloc`,
+    // identity under no-alloc — no cfg-gate needed at the call site.
+    let d = rsa::modmath_support::wrap(HCt::try_from_be_bytes_vartime(&D_2048).unwrap());
     let signing_key =
         GenericSigningKey::<Sha256, _, _>::new(GenericRsaPrivateKey::from_public_and_d(pubkey, d));
 

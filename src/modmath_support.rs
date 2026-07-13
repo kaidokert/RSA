@@ -123,6 +123,41 @@ fn wrap_value<T>(value: T) -> ModMathValue<T> {
     value
 }
 
+/// Cross-config constructor for [`ModMathValue`]. Under `alloc` it is
+/// the newtype constructor; under no-alloc `ModMathValue<T>` is a
+/// transparent alias for `T`, so it is the identity.
+///
+/// Prefer this over writing `ModMathValue(x)` directly: the tuple form
+/// only compiles on the `alloc` build and breaks the no-alloc one
+/// (`expected function / tuple struct, found type alias`). This is the
+/// only way to wrap a raw carrier value that compiles under both
+/// feature configurations.
+#[cfg(feature = "alloc")]
+pub fn wrap<T>(value: T) -> ModMathValue<T> {
+    ModMathValue(value)
+}
+
+/// See [`wrap`] — the no-alloc identity form.
+#[cfg(not(feature = "alloc"))]
+pub fn wrap<T>(value: T) -> ModMathValue<T> {
+    value
+}
+
+/// Cross-config unwrap for [`ModMathValue`]: `.0` under `alloc`, the
+/// identity under no-alloc. Prefer this over `.0` in code that must
+/// compile under both feature configurations. By-value (does not
+/// require `T: Copy`).
+#[cfg(feature = "alloc")]
+pub fn into_inner<T>(value: ModMathValue<T>) -> T {
+    value.0
+}
+
+/// See [`into_inner`] — the no-alloc identity form.
+#[cfg(not(feature = "alloc"))]
+pub fn into_inner<T>(value: ModMathValue<T>) -> T {
+    value
+}
+
 #[cfg(feature = "alloc")]
 fn unwrap_value<T: Copy>(value: &ModMathValue<T>) -> T {
     value.0
@@ -926,6 +961,17 @@ mod private_op_tests {
     // inline and gate the heapless instantiation behind `#[ignore]`.
     type HeaplessCt = fixed_bigint::HeaplessBigInt<u8, 64, Ct>;
 
+    // Build a small value at the carrier's full width, the way RSA
+    // always constructs operands (`try_from_be_bytes_vartime` parses a
+    // CAP-width byte holder). For the runtime-length carrier this yields
+    // `len == CAP` — matching the modulus and every other operand —
+    // rather than the `len == 1` value `T::from(x)` produces. A len-1
+    // modulus is a shape RSA never creates; using it would put operands
+    // of mismatched widths into one field.
+    fn val<T: FixedWidthUnsignedInt>(x: u8) -> T {
+        <T as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(&[x]).unwrap()
+    }
+
     // The full carrier bound for the CT sign+blind path: enough for
     // `ModMathParams<T, Ct>` and its `MontgomeryForm` to satisfy
     // `Pow + PowBoundedExp + InvertCt + MulCt`, and for `T` /
@@ -957,7 +1003,7 @@ mod private_op_tests {
     where
         <T as modmath_cios::CiosRowOps>::Word: const_num_traits::CtParity,
     {
-        ModMathParams::<T, Ct>::new(T::from(35u8)).unwrap()
+        ModMathParams::<T, Ct>::new(val::<T>(35)).unwrap()
     }
 
     // A 512-bit odd modulus used by the `sign_into` defensive-error
@@ -982,9 +1028,9 @@ mod private_op_tests {
             <T as modmath_cios::CiosRowOps>::Word: const_num_traits::CtParity,
         {
             let n_params = toy_params::<T>();
-            let c = wrap_value(T::from(32u8));
-            let d = wrap_value(T::from(29u8));
-            let expected = wrap_value(T::from(2u8));
+            let c = wrap_value(val::<T>(32));
+            let d = wrap_value(val::<T>(29));
+            let expected = wrap_value(val::<T>(2));
             let recovered = crate::algorithms::rsa::rsa_private_op(&c, &d, &n_params);
             assert_eq!(recovered, expected);
         }
@@ -1002,11 +1048,11 @@ mod private_op_tests {
         <T as modmath_cios::CiosRowOps>::Word: const_num_traits::CtParity,
     {
         let n_params = toy_params::<T>();
-        let c = wrap_value(T::from(32u8));
-        let d = wrap_value(T::from(29u8));
-        let e = wrap_value(T::from(5u8));
-        let r = wrap_value(T::from(6u8));
-        let expected = wrap_value(T::from(2u8));
+        let c = wrap_value(val::<T>(32));
+        let d = wrap_value(val::<T>(29));
+        let e = wrap_value(val::<T>(5));
+        let r = wrap_value(val::<T>(6));
+        let expected = wrap_value(val::<T>(2));
         let recovered =
             crate::algorithms::rsa::rsa_private_op_blinded(&r, &c, &d, &e, &n_params).unwrap();
         assert_eq!(recovered, expected);
@@ -1048,10 +1094,10 @@ mod private_op_tests {
         use rand_core::SeedableRng;
 
         let n_params = toy_params::<T>();
-        let c = wrap_value(T::from(32u8));
-        let d = wrap_value(T::from(29u8));
-        let e = wrap_value(T::from(5u8));
-        let expected = wrap_value(T::from(2u8));
+        let c = wrap_value(val::<T>(32));
+        let d = wrap_value(val::<T>(29));
+        let e = wrap_value(val::<T>(5));
+        let expected = wrap_value(val::<T>(2));
         let mut rng = ChaCha8Rng::from_seed([42; 32]);
         let recovered = crate::algorithms::rsa::rsa_private_op_and_check_blinded(
             &mut rng, &c, &d, &e, &n_params,
@@ -1059,17 +1105,10 @@ mod private_op_tests {
         .unwrap();
         assert_eq!(recovered, expected);
     }
-    // Fixed-width carrier only: the RNG draw samples uniform in `[0, n)`
-    // and for the toy `n = 35` as a runtime-length value (`len == 1`,
-    // `bits_precision == 8`) the mask is computed against 8 bits while
-    // the sample buffer is the full carrier width — the same narrow-
-    // modulus-in-wide-container mismatch documented on the sampler test.
-    // Real moduli fill the carrier (`len == CAP`), so this doesn't arise
-    // in deployment; the 2048-bit blinded path is covered end-to-end by
-    // the `heapless_bigint_smoke` integration test.
     #[test]
     fn rsa_private_op_and_check_blinded_round_trip() {
         and_check_blinded_round_trip_inner::<SmallUCt>();
+        and_check_blinded_round_trip_inner::<HeaplessCt>();
     }
 
     // Uses toy_params_wide's 512-bit modulus (`2^511 + 1`) so the
@@ -1109,31 +1148,37 @@ mod private_op_tests {
         try_random_mod_below_modulus_inner::<HeaplessCt>(wrap_value(nh));
     }
 
-    // An unmasked sampler's acceptance rate against a modulus `lz`
-    // bits narrower than the container is ~2⁻ˡᶻ, blowing the 128-tries
-    // cap. Masking must let sampling succeed even when the modulus
-    // occupies only ~6 bits of a 512-bit carrier — this is
-    // `toy_params()` (n = 35).
-    //
-    // Fixed-width carrier only: the "narrow modulus in a wide container"
-    // scenario is a fixed-width concept. On the runtime-length carrier
-    // `n = 35` is simply a len-1 value (`bits_precision == 8`), not a
-    // 6-bit value inside a 512-bit box — the mismatch the mask exists to
-    // paper over doesn't arise. The heapless sampler at its own full
-    // width is covered by `try_random_mod_modmath_stays_below_modulus`.
+    // An unmasked sampler's acceptance rate against a modulus whose
+    // value is many bits narrower than its width is ~2⁻ˡᶻ, blowing the
+    // 128-tries cap. Masking must let sampling succeed even when the
+    // value occupies only ~6 bits of a full-width modulus — this is
+    // `toy_params()` (n = 35). Runs on both carriers: `val` builds `n`
+    // at full carrier width (`len == CAP`), so `bits_precision` equals
+    // the sample-buffer width on both, and the ~6-bit *value* is the
+    // narrow quantity the mask brings the candidate down to. (The mask
+    // is keyed off the modulus width, which is why the modulus must be
+    // constructed at full width — a `len < CAP` heapless modulus, which
+    // RSA never produces, would desync it.)
     #[test]
     fn try_random_mod_modmath_succeeds_on_narrow_modulus_wide_carrier() {
-        use crate::traits::modular::TryRandomMod;
-        use rand::rngs::ChaCha8Rng;
-        use rand_core::SeedableRng;
+        fn inner<T: TestCt>()
+        where
+            <T as modmath_cios::CiosRowOps>::Word: const_num_traits::CtParity,
+        {
+            use crate::traits::modular::TryRandomMod;
+            use rand::rngs::ChaCha8Rng;
+            use rand_core::SeedableRng;
 
-        let n_params = toy_params::<SmallUCt>();
-        let n = *n_params.modulus().as_ref();
-        let mut rng = ChaCha8Rng::from_seed([42; 32]);
-        for _ in 0..64 {
-            let r = ModMathValue::<SmallUCt>::try_random_mod(&mut rng, &n).unwrap();
-            assert!(r < n);
+            let n_params = toy_params::<T>();
+            let n = *n_params.modulus().as_ref();
+            let mut rng = ChaCha8Rng::from_seed([42; 32]);
+            for _ in 0..64 {
+                let r = ModMathValue::<T>::try_random_mod(&mut rng, &n).unwrap();
+                assert!(r < n);
+            }
         }
+        inner::<SmallUCt>();
+        inner::<HeaplessCt>();
     }
 
     #[test]
@@ -1143,10 +1188,10 @@ mod private_op_tests {
             <T as modmath_cios::CiosRowOps>::Word: const_num_traits::CtParity,
         {
             let n_params = toy_params::<T>();
-            let c = wrap_value(T::from(32u8));
-            let d = wrap_value(T::from(29u8));
-            let e = wrap_value(T::from(5u8));
-            let expected = wrap_value(T::from(2u8));
+            let c = wrap_value(val::<T>(32));
+            let d = wrap_value(val::<T>(29));
+            let e = wrap_value(val::<T>(5));
+            let expected = wrap_value(val::<T>(2));
             let recovered =
                 crate::algorithms::rsa::rsa_private_op_and_check(&c, &d, &e, &n_params).unwrap();
             assert_eq!(recovered, expected);
@@ -1164,11 +1209,11 @@ mod private_op_tests {
     {
         use crate::traits::modular::{IntoMontyForm, InvertCt, PowBoundedExp};
         let n_params = toy_params::<T>();
-        let three = wrap_value(T::from(3u8));
+        let three = wrap_value(val::<T>(3));
         let mont_three = ModMathForm::<T, Ct>::from_reduced(three, &n_params);
         let mont_inv = mont_three.invert_ct().expect("3 is coprime to 35");
         let recovered = PowBoundedExp::<ModMathParams<T, Ct>>::retrieve(&mont_inv);
-        assert_eq!(recovered, wrap_value(T::from(12u8)));
+        assert_eq!(recovered, wrap_value(val::<T>(12)));
     }
     // Toy width (`u8` limbs, `n = 35`): invert works on both carriers.
     // At the 2048-bit deployment width (`u32` limbs, full-CAP modulus)
@@ -1190,12 +1235,12 @@ mod private_op_tests {
     {
         use crate::traits::modular::{IntoMontyForm, InvertCt, MulCt, PowBoundedExp};
         let n_params = toy_params::<T>();
-        let three = wrap_value(T::from(3u8));
+        let three = wrap_value(val::<T>(3));
         let mont_three = ModMathForm::<T, Ct>::from_reduced(three, &n_params);
         let mont_inv = mont_three.invert_ct().expect("3 is coprime to 35");
         let product = mont_three.mul_ct(&mont_inv);
         let recovered = PowBoundedExp::<ModMathParams<T, Ct>>::retrieve(&product);
-        assert_eq!(recovered, wrap_value(T::from(1u8)));
+        assert_eq!(recovered, wrap_value(val::<T>(1)));
     }
     #[test]
     fn mul_ct_modmath_inverse_round_trip() {
@@ -1212,9 +1257,9 @@ mod private_op_tests {
             // Same modulus + e, wrong `d` (11 vs 29). The recovered `m`
             // won't re-encrypt back to `c`, so the check should fail.
             let n_params = toy_params::<T>();
-            let c = wrap_value(T::from(32u8));
-            let bad_d = wrap_value(T::from(11u8));
-            let e = wrap_value(T::from(5u8));
+            let c = wrap_value(val::<T>(32));
+            let bad_d = wrap_value(val::<T>(11));
+            let e = wrap_value(val::<T>(5));
             let result =
                 crate::algorithms::rsa::rsa_private_op_and_check(&c, &bad_d, &e, &n_params);
             assert!(result.is_err());
