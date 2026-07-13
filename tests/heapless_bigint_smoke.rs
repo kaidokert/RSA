@@ -116,15 +116,20 @@ impl rand_core::TryCryptoRng for FixedRng {}
 /// (the unblinded path fails identically, so it is the modular math,
 /// not the blinding): modmath 0.5 sizes Montgomery R via
 /// `type_bit_width = size_of*8`, which reads HeaplessBigInt's STRUCT
-/// size (limbs + len field + padding) — a phantom extra limb. Retired
-/// by design in modmath 0.6 (see fixed-bigint's WIDTH_AND_CT_MODEL
-/// notes). fixed-bigint's WideMul len-split (fixed in 0.6.0-alpha.16)
-/// was never RSA's blocker: montgomery operands here are full-width,
-/// so the operand-len and CAP splits coincided.
+/// size (limbs + len field + padding) — a phantom extra limb, so R² is
+/// precomputed for R = 2^2080 while the 64-limb CIOS defines R =
+/// 2^2048. WIDTH_AND_CT_MODEL marks type_bit_width "delete" (width
+/// must come from the modulus's own public shape), but as of
+/// v0.6.0-alpha.cios.2 no modmath tag carries that retirement yet —
+/// new_odd/new_odd_ct/exp all still size from the struct.
+/// fixed-bigint's WideMul len-split (fixed in 0.6.0-alpha.16) was
+/// never RSA's blocker: montgomery operands here are full-width, so
+/// the operand-len and CAP splits coincided.
 ///
-/// Un-ignore when the modmath 0.6 jump lands on this branch.
+/// Un-ignore when a modmath tag replaces type_bit_width with
+/// modulus-shape-derived width and this branch adopts it.
 #[test]
-#[ignore = "known upstream: modmath 0.5 type_bit_width sizes R off the carrier STRUCT (phantom limb for runtime-len); needs the modmath 0.6 jump"]
+#[ignore = "blocked upstream: modmath type_bit_width sizes R off the carrier STRUCT (phantom limb for runtime-len); no tag carries the WIDTH_AND_CT_MODEL retirement yet"]
 fn pkcs1v15_blinded_sign_2048() {
     use rsa::modmath_support::public_key_ct_from_be_bytes;
     use rsa::pkcs1v15::GenericSigningKey;
