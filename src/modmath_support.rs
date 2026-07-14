@@ -961,17 +961,6 @@ mod private_op_tests {
     // inline and gate the heapless instantiation behind `#[ignore]`.
     type HeaplessCt = fixed_bigint::HeaplessBigInt<u8, 64, Ct>;
 
-    // Build a small value at the carrier's full width, the way RSA
-    // always constructs operands (`try_from_be_bytes_vartime` parses a
-    // CAP-width byte holder). For the runtime-length carrier this yields
-    // `len == CAP` — matching the modulus and every other operand —
-    // rather than the `len == 1` value `T::from(x)` produces. A len-1
-    // modulus is a shape RSA never creates; using it would put operands
-    // of mismatched widths into one field.
-    fn val<T: FixedWidthUnsignedInt>(x: u8) -> T {
-        <T as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(&[x]).unwrap()
-    }
-
     // The full carrier bound for the CT sign+blind path: enough for
     // `ModMathParams<T, Ct>` and its `MontgomeryForm` to satisfy
     // `Pow + PowBoundedExp + InvertCt + MulCt`, and for `T` /
@@ -1003,7 +992,10 @@ mod private_op_tests {
     where
         <T as modmath_cios::CiosRowOps>::Word: const_num_traits::CtParity,
     {
-        ModMathParams::<T, Ct>::new(val::<T>(35)).unwrap()
+        ModMathParams::<T, Ct>::new(
+            <T as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(&[35]).unwrap(),
+        )
+        .unwrap()
     }
 
     // A 512-bit odd modulus used by the `sign_into` defensive-error
@@ -1028,9 +1020,9 @@ mod private_op_tests {
             <T as modmath_cios::CiosRowOps>::Word: const_num_traits::CtParity,
         {
             let n_params = toy_params::<T>();
-            let c = wrap_value(val::<T>(32));
-            let d = wrap_value(val::<T>(29));
-            let expected = wrap_value(val::<T>(2));
+            let c = wrap_value(T::from(32u8));
+            let d = wrap_value(T::from(29u8));
+            let expected = wrap_value(T::from(2u8));
             let recovered = crate::algorithms::rsa::rsa_private_op(&c, &d, &n_params);
             assert_eq!(recovered, expected);
         }
@@ -1048,11 +1040,11 @@ mod private_op_tests {
         <T as modmath_cios::CiosRowOps>::Word: const_num_traits::CtParity,
     {
         let n_params = toy_params::<T>();
-        let c = wrap_value(val::<T>(32));
-        let d = wrap_value(val::<T>(29));
-        let e = wrap_value(val::<T>(5));
-        let r = wrap_value(val::<T>(6));
-        let expected = wrap_value(val::<T>(2));
+        let c = wrap_value(T::from(32u8));
+        let d = wrap_value(T::from(29u8));
+        let e = wrap_value(T::from(5u8));
+        let r = wrap_value(T::from(6u8));
+        let expected = wrap_value(T::from(2u8));
         let recovered =
             crate::algorithms::rsa::rsa_private_op_blinded(&r, &c, &d, &e, &n_params).unwrap();
         assert_eq!(recovered, expected);
@@ -1094,10 +1086,10 @@ mod private_op_tests {
         use rand_core::SeedableRng;
 
         let n_params = toy_params::<T>();
-        let c = wrap_value(val::<T>(32));
-        let d = wrap_value(val::<T>(29));
-        let e = wrap_value(val::<T>(5));
-        let expected = wrap_value(val::<T>(2));
+        let c = wrap_value(T::from(32u8));
+        let d = wrap_value(T::from(29u8));
+        let e = wrap_value(T::from(5u8));
+        let expected = wrap_value(T::from(2u8));
         let mut rng = ChaCha8Rng::from_seed([42; 32]);
         let recovered = crate::algorithms::rsa::rsa_private_op_and_check_blinded(
             &mut rng, &c, &d, &e, &n_params,
@@ -1188,10 +1180,10 @@ mod private_op_tests {
             <T as modmath_cios::CiosRowOps>::Word: const_num_traits::CtParity,
         {
             let n_params = toy_params::<T>();
-            let c = wrap_value(val::<T>(32));
-            let d = wrap_value(val::<T>(29));
-            let e = wrap_value(val::<T>(5));
-            let expected = wrap_value(val::<T>(2));
+            let c = wrap_value(T::from(32u8));
+            let d = wrap_value(T::from(29u8));
+            let e = wrap_value(T::from(5u8));
+            let expected = wrap_value(T::from(2u8));
             let recovered =
                 crate::algorithms::rsa::rsa_private_op_and_check(&c, &d, &e, &n_params).unwrap();
             assert_eq!(recovered, expected);
@@ -1209,11 +1201,11 @@ mod private_op_tests {
     {
         use crate::traits::modular::{IntoMontyForm, InvertCt, PowBoundedExp};
         let n_params = toy_params::<T>();
-        let three = wrap_value(val::<T>(3));
+        let three = wrap_value(T::from(3u8));
         let mont_three = ModMathForm::<T, Ct>::from_reduced(three, &n_params);
         let mont_inv = mont_three.invert_ct().expect("3 is coprime to 35");
         let recovered = PowBoundedExp::<ModMathParams<T, Ct>>::retrieve(&mont_inv);
-        assert_eq!(recovered, wrap_value(val::<T>(12)));
+        assert_eq!(recovered, wrap_value(T::from(12u8)));
     }
     // Toy width (`u8` limbs, `n = 35`): invert works on both carriers.
     // At the 2048-bit deployment width (`u32` limbs, full-CAP modulus)
@@ -1235,12 +1227,12 @@ mod private_op_tests {
     {
         use crate::traits::modular::{IntoMontyForm, InvertCt, MulCt, PowBoundedExp};
         let n_params = toy_params::<T>();
-        let three = wrap_value(val::<T>(3));
+        let three = wrap_value(T::from(3u8));
         let mont_three = ModMathForm::<T, Ct>::from_reduced(three, &n_params);
         let mont_inv = mont_three.invert_ct().expect("3 is coprime to 35");
         let product = mont_three.mul_ct(&mont_inv);
         let recovered = PowBoundedExp::<ModMathParams<T, Ct>>::retrieve(&product);
-        assert_eq!(recovered, wrap_value(val::<T>(1)));
+        assert_eq!(recovered, wrap_value(T::from(1u8)));
     }
     #[test]
     fn mul_ct_modmath_inverse_round_trip() {
@@ -1257,9 +1249,9 @@ mod private_op_tests {
             // Same modulus + e, wrong `d` (11 vs 29). The recovered `m`
             // won't re-encrypt back to `c`, so the check should fail.
             let n_params = toy_params::<T>();
-            let c = wrap_value(val::<T>(32));
-            let bad_d = wrap_value(val::<T>(11));
-            let e = wrap_value(val::<T>(5));
+            let c = wrap_value(T::from(32u8));
+            let bad_d = wrap_value(T::from(11u8));
+            let e = wrap_value(T::from(5u8));
             let result =
                 crate::algorithms::rsa::rsa_private_op_and_check(&c, &bad_d, &e, &n_params);
             assert!(result.is_err());

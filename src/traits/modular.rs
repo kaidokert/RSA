@@ -7,7 +7,7 @@ use core::borrow::Borrow;
 use alloc::boxed::Box;
 #[cfg(not(feature = "modmath"))]
 use const_num_traits::PrimInt;
-use const_num_traits::{BitWidth, BitsPrecision};
+use const_num_traits::{BitWidth, BitsPrecision, WithPrecision};
 use const_num_traits::{FromBytes as NumFromBytes, ToBytes as NumToBytes};
 #[cfg(feature = "alloc")]
 use crypto_bigint::{
@@ -43,7 +43,14 @@ pub trait IntegerResize: Sized {
 // trait's width/bit-length accessors are defined over, and downstream
 // generic code (modmath 0.6 sizes Montgomery width from the modulus's
 // own `BitsPrecision`) needs them visible through the bound.
-pub trait FixedWidthUnsignedInt: Zeroize + Clone + Copy + BitsPrecision + BitWidth {
+// `WithPrecision` (construct-at-width) joins them: modmath's
+// width-establishing call graph (`zero_with_precision_of`,
+// `widen_to_precision`) now requires it on the carrier — the "state a
+// width" contract entering the type system. Identity on fixed-width
+// carriers; real on the runtime-length one.
+pub trait FixedWidthUnsignedInt:
+    Zeroize + Clone + Copy + BitsPrecision + BitWidth + WithPrecision
+{
     type Bytes: NumBytes + Default + AsMut<[u8]>;
 
     fn leading_zeros(&self) -> u32;
@@ -60,7 +67,14 @@ pub trait FixedWidthUnsignedInt: Zeroize + Clone + Copy + BitsPrecision + BitWid
 #[cfg(feature = "modmath")]
 impl<T> FixedWidthUnsignedInt for T
 where
-    T: Zeroize + Clone + Copy + BitsPrecision + BitWidth + NumToBytes + NumFromBytes,
+    T: Zeroize
+        + Clone
+        + Copy
+        + BitsPrecision
+        + BitWidth
+        + WithPrecision
+        + NumToBytes
+        + NumFromBytes,
     T: NumToBytes<Bytes = <T as NumFromBytes>::Bytes>,
     <T as NumToBytes>::Bytes: NumBytes + Default + AsMut<[u8]>,
 {
@@ -107,7 +121,15 @@ where
 #[cfg(not(feature = "modmath"))]
 impl<T> FixedWidthUnsignedInt for T
 where
-    T: Zeroize + Clone + Copy + PrimInt + BitsPrecision + BitWidth + NumToBytes + NumFromBytes,
+    T: Zeroize
+        + Clone
+        + Copy
+        + PrimInt
+        + BitsPrecision
+        + BitWidth
+        + WithPrecision
+        + NumToBytes
+        + NumFromBytes,
     T: NumToBytes<Bytes = <T as NumFromBytes>::Bytes>,
     <T as NumToBytes>::Bytes: NumBytes + Default + AsMut<[u8]>,
 {
@@ -158,19 +180,26 @@ where
 {
     type Output = Self;
 
-    fn resize_unchecked(self, _at_least_bits_precision: u32) -> Self::Output {
-        self
+    fn resize_unchecked(self, at_least_bits_precision: u32) -> Self::Output {
+        // `WithPrecision::widen_to_precision` establishes the operating
+        // width on a runtime-length carrier (never shrinks, value-
+        // preserving) and is the identity on a fixed-width one — so this
+        // genuinely resizes for `HeaplessBigInt` instead of no-opping and
+        // leaning on the field's `reduce` to normalize downstream.
+        WithPrecision::widen_to_precision(self, at_least_bits_precision)
     }
 
     fn try_resize(self, at_least_bits_precision: u32) -> Option<Self::Output> {
         // Mirrors `crypto_bigint::Resize::try_resize`: returns `Some` iff
-        // the actual value fits in `at_least_bits_precision` bits. T is
-        // fixed-width and `resize_unchecked` is a no-op, but the check
-        // still needs to reject values that wouldn't survive a narrower
-        // precision.
+        // the value fits in `at_least_bits_precision` bits, resized to
+        // that width (identity on a fixed carrier, a real widen on the
+        // runtime-length one).
         let value_bits = self.bit_length();
         if value_bits <= at_least_bits_precision {
-            Some(self)
+            Some(WithPrecision::widen_to_precision(
+                self,
+                at_least_bits_precision,
+            ))
         } else {
             None
         }

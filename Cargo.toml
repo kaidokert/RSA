@@ -43,9 +43,9 @@ crypto-bigint = { version = "0.7.1", optional = true, default-features = false, 
 # modulus-shape-derived Montgomery width (type_bit_width retirement) in
 # modmath 0.6.0-alpha; neither is semver-reachable from a [patch] over
 # the crates-io lines.
-modmath = { git = "https://github.com/kaidokert/modmath-rs.git", tag = "v0.6.0-alpha.cios.8", optional = true, default-features = false, features = ["zeroize"] }
-modmath-cios = { git = "https://github.com/kaidokert/modmath-rs.git", tag = "v0.6.0-alpha.cios.8", optional = true, default-features = false }
-fixed-bigint = { git = "https://github.com/kaidokert/fixed-bigint-rs", tag = "v0.6.0-alpha.21", default-features = false, features = ["use-unsafe", "zeroize", "cios", "heapless-runtime-len"] }
+modmath = { git = "https://github.com/kaidokert/modmath-rs.git", tag = "v0.6.0-alpha.cios.9", optional = true, default-features = false, features = ["zeroize"] }
+modmath-cios = { git = "https://github.com/kaidokert/modmath-rs.git", tag = "v0.6.0-alpha.cios.9", optional = true, default-features = false }
+fixed-bigint = { git = "https://github.com/kaidokert/fixed-bigint-rs", tag = "v0.6.0-alpha.23", default-features = false, features = ["use-unsafe", "zeroize", "cios", "heapless-runtime-len"] }
 subtle = { version = "2.6", default-features = false }
 heapless = "0.9"
 
@@ -121,5 +121,5 @@ debug = true
 #   modmath-cios patch below covers any residual crates-io requirement in
 #   the graph (e.g. fixed-bigint's cios backend).
 [patch.crates-io]
-const-num-traits = { git = "https://github.com/kaidokert/num-traits.git", tag = "v0.2.1-alpha.1" }
-modmath-cios = { git = "https://github.com/kaidokert/modmath-rs.git", tag = "v0.6.0-alpha.cios.8" }
+const-num-traits = { git = "https://github.com/kaidokert/num-traits.git", tag = "v0.2.1-alpha.2" }
+modmath-cios = { git = "https://github.com/kaidokert/modmath-rs.git", tag = "v0.6.0-alpha.cios.9" }
