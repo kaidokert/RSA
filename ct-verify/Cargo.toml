@@ -24,3 +24,6 @@ codegen-units = 1
 opt-level = "z"
 panic = "abort"
 incremental = false
+
+[patch.crates-io]
+embedded-measure = { path = "../../embedded-measure" }

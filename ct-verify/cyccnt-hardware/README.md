@@ -11,7 +11,13 @@ separate diagnostic; the RSA secrecy contract treats the modulus as public.
 Both keys start from the same deterministic RNG seed. A preflight call asserts
 that they consume the same number of RNG words, so the recorded comparison
 uses matched streams rather than merely matched initial state. Trials use RTT,
-interrupt-free DWT `CYCCNT`, equal warm-up, and balanced ABBA order.
+interrupt-free DWT `CYCCNT`, two exact-path balanced warm-up blocks, and
+balanced ABBA/BAAB recorded order.
+
+The carrier uses `embedded-measure::PairedSuite` for DWT sampling, exact-path
+warmups, matched-input comparison, safe counter-region enforcement, versioned
+reporting, diagnostics, and totals. It emits lossless `EM_*` schema 1 records
+plus legacy `CT_*` records during host tooling migration.
 
 The default clock profile uses the internal 16 MHz HSI as the PLL source and
 runs the core/HCLK at 168 MHz, with APB1 at 42 MHz and APB2 at 84 MHz. This
@@ -45,6 +51,26 @@ cargo run --release --no-default-features --features rsa512,carrier-u8x64
 cargo run --release --no-default-features --features rsa1024,carrier-u32x32
 cargo run --release --no-default-features --features rsa2048,carrier-u32x64
 ```
+
+If live RTT polling starves debug access during the long `u8x64` measured
+region, run the already-built firmware detached and attach only after the
+campaign reaches its blocking RTT drain point:
+
+```sh
+probe-rs download --chip STM32F407VGTx --protocol swd \
+  --probe 1366:1020:001224000224 \
+  ../target/thumbv7em-none-eabihf/release/rsa-cyccnt-hardware
+probe-rs reset --chip STM32F407VGTx --protocol swd \
+  --probe 1366:1020:001224000224
+# Wait for the width/clock-qualified campaign duration, then drain evidence.
+probe-rs attach --chip STM32F407VGTx --protocol swd \
+  --probe 1366:1020:001224000224 \
+  ../target/thumbv7em-none-eabihf/release/rsa-cyccnt-hardware
+```
+
+The blocking 4 KiB RTT channel preserves records until attachment. Do not
+attach during the measured region; that recreates the debug-bus contention the
+detached procedure is intended to avoid.
 
 Initial 16 MHz STM32F407/J-Trace calibration passed both fixtures on both
 carriers:

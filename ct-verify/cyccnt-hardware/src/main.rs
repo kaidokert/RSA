@@ -3,24 +3,25 @@
 
 use const_num_traits::Ct;
 use core::{convert::Infallible, hint::black_box};
-use cortex_m::peripheral::DWT;
 use cortex_m_rt::entry;
+use embedded_measure::cortex_m::DwtCycleCounter;
+use embedded_measure::report::Field;
+use embedded_measure::suite::{PairedSuite, PairedSuiteConfig, PairedSuiteFields};
 use fixed_bigint::FixedUInt;
 use rand_core::{TryCryptoRng, TryRng};
 use rsa::GenericRsaPrivateKey;
 use rsa::modmath_support::{ModMathParams, public_key_ct_from_be_bytes};
 use rsa::pkcs1v15::GenericSigningKey;
 use rsa::traits::FixedWidthUnsignedInt;
-use rtt_target::{rprintln, rtt_init_print};
 use sha2::Sha256;
 
 include!("../../test_keys.rs");
 
 const TRIALS: usize = 4;
+const BATCHES: usize = 1;
 const MAX_POSITIVE_SPREAD: u32 = 32;
 const MAX_SAFE_DWT_REGION: u32 = 0xf000_0000;
 const RNG_SEED: u64 = 0x4354_5f52_5341_3531;
-const ORDER: [bool; TRIALS * 2] = [false, true, true, false, true, false, false, true];
 const MESSAGE: &[u8] = b"RSA CYCCNT fixture message";
 const STACK_PAINT: u8 = 0xaa;
 const STACK_SAFE_ZONE: usize = 512;
@@ -265,94 +266,6 @@ fn sign_once(signing_key: &SigningKey) -> SignOutcome {
     }
 }
 
-#[derive(Clone, Copy)]
-struct Samples {
-    a: [u32; TRIALS],
-    b: [u32; TRIALS],
-    outputs_ok: bool,
-}
-
-#[inline(always)]
-fn measure_once(signing_key: &SigningKey, expected_rng_words: u32) -> (u32, bool) {
-    cortex_m::interrupt::free(|_| {
-        cortex_m::asm::dsb();
-        cortex_m::asm::isb();
-        let start = DWT::cycle_count();
-        let outcome = sign_once(black_box(signing_key));
-        cortex_m::asm::dsb();
-        cortex_m::asm::isb();
-        let elapsed = DWT::cycle_count().wrapping_sub(start);
-        (
-            elapsed,
-            outcome.ok && outcome.rng_words == expected_rng_words && elapsed < MAX_SAFE_DWT_REGION,
-        )
-    })
-}
-
-fn measure_signing(key_a: &SigningKey, key_b: &SigningKey, expected_rng_words: u32) -> Samples {
-    let _ = black_box(sign_once(key_a));
-    let _ = black_box(sign_once(key_b));
-    let _ = black_box(sign_once(key_b));
-    let _ = black_box(sign_once(key_a));
-
-    let mut samples = Samples {
-        a: [0; TRIALS],
-        b: [0; TRIALS],
-        outputs_ok: true,
-    };
-    let mut ai = 0;
-    let mut bi = 0;
-    for use_b in ORDER {
-        let signing_key = if use_b { key_b } else { key_a };
-        let (cycles, ok) = measure_once(signing_key, expected_rng_words);
-        samples.outputs_ok &= ok;
-        if use_b {
-            samples.b[bi] = cycles;
-            bi += 1;
-        } else {
-            samples.a[ai] = cycles;
-            ai += 1;
-        }
-    }
-    samples
-}
-
-fn measure_setup() -> Samples {
-    let _ = black_box(prepare_key(&KEY_A).is_some());
-    let _ = black_box(prepare_key(&KEY_B).is_some());
-    let _ = black_box(prepare_key(&KEY_B).is_some());
-    let _ = black_box(prepare_key(&KEY_A).is_some());
-
-    let mut samples = Samples {
-        a: [0; TRIALS],
-        b: [0; TRIALS],
-        outputs_ok: true,
-    };
-    let mut ai = 0;
-    let mut bi = 0;
-    for use_b in ORDER {
-        let input = if use_b { &KEY_B } else { &KEY_A };
-        let (cycles, ok) = cortex_m::interrupt::free(|_| {
-            cortex_m::asm::dsb();
-            cortex_m::asm::isb();
-            let start = DWT::cycle_count();
-            let ok = black_box(prepare_key(input).is_some());
-            cortex_m::asm::dsb();
-            cortex_m::asm::isb();
-            (DWT::cycle_count().wrapping_sub(start), ok)
-        });
-        samples.outputs_ok &= ok;
-        if use_b {
-            samples.b[bi] = cycles;
-            bi += 1;
-        } else {
-            samples.a[ai] = cycles;
-            ai += 1;
-        }
-    }
-    samples
-}
-
 #[inline(never)]
 fn negative_early_exit(secret: &[u8; KEY_BYTES]) -> bool {
     let mut leading_zeroes = 0;
@@ -366,95 +279,6 @@ fn negative_early_exit(secret: &[u8; KEY_BYTES]) -> bool {
     true
 }
 
-fn measure_negative() -> Samples {
-    const ZERO: [u8; KEY_BYTES] = [0; KEY_BYTES];
-    let _ = black_box(negative_early_exit(&ZERO));
-    let _ = black_box(negative_early_exit(KEY_B.private_exponent));
-    let _ = black_box(negative_early_exit(KEY_B.private_exponent));
-    let _ = black_box(negative_early_exit(&ZERO));
-
-    let mut samples = Samples {
-        a: [0; TRIALS],
-        b: [0; TRIALS],
-        outputs_ok: true,
-    };
-    let mut ai = 0;
-    let mut bi = 0;
-    for use_b in ORDER {
-        let secret = if use_b { KEY_B.private_exponent } else { &ZERO };
-        let (cycles, ok) = cortex_m::interrupt::free(|_| {
-            cortex_m::asm::dsb();
-            cortex_m::asm::isb();
-            let start = DWT::cycle_count();
-            let ok = negative_early_exit(secret);
-            cortex_m::asm::dsb();
-            cortex_m::asm::isb();
-            (DWT::cycle_count().wrapping_sub(start), ok)
-        });
-        samples.outputs_ok &= ok;
-        if use_b {
-            samples.b[bi] = cycles;
-            bi += 1;
-        } else {
-            samples.a[ai] = cycles;
-            ai += 1;
-        }
-    }
-    samples
-}
-
-fn bounds(values: &[u32; TRIALS]) -> (u32, u32) {
-    let mut min = u32::MAX;
-    let mut max = 0;
-    for &value in values {
-        min = min.min(value);
-        max = max.max(value);
-    }
-    (min, max)
-}
-
-fn report(name: &str, class: &str, samples: Samples, expect_equal: bool) -> bool {
-    let (a_min, a_max) = bounds(&samples.a);
-    let (b_min, b_max) = bounds(&samples.b);
-    let spread = a_min.min(b_min).abs_diff(a_max.max(b_max));
-    let timing_ok = if expect_equal {
-        spread <= MAX_POSITIVE_SPREAD
-    } else {
-        a_max < b_min || b_max < a_min
-    };
-    let passed = samples.outputs_ok && timing_ok;
-    rprintln!(
-        "CT_RESULT fixture:{} carrier:{} class:{} a_min:{} a_max:{} b_min:{} b_max:{} spread:{} output_ok:{} status:{}",
-        name,
-        CARRIER,
-        class,
-        a_min,
-        a_max,
-        b_min,
-        b_max,
-        spread,
-        samples.outputs_ok as u8,
-        if passed { "PASS" } else { "FAIL" }
-    );
-    passed
-}
-
-fn report_diagnostic(name: &str, samples: Samples) {
-    let (a_min, a_max) = bounds(&samples.a);
-    let (b_min, b_max) = bounds(&samples.b);
-    rprintln!(
-        "CT_DIAGNOSTIC fixture:{} carrier:{} class:public-setup a_min:{} a_max:{} b_min:{} b_max:{} spread:{} output_ok:{}",
-        name,
-        CARRIER,
-        a_min,
-        a_max,
-        b_min,
-        b_max,
-        a_min.min(b_min).abs_diff(a_max.max(b_max)),
-        samples.outputs_ok as u8
-    );
-}
-
 fn stop() -> ! {
     loop {
         cortex_m::asm::nop();
@@ -463,70 +287,99 @@ fn stop() -> ! {
 
 #[entry]
 fn main() -> ! {
-    rtt_init_print!();
+    let mut reporter = embedded_measure::rtt::init_ct_compatible();
     let hclk_hz = configure_clock();
     let mut peripherals = cortex_m::Peripherals::take().unwrap();
-    assert!(DWT::has_cycle_counter());
-    peripherals.DCB.enable_trace();
-    peripherals.DWT.set_cycle_count(0);
-    peripherals.DWT.enable_cycle_counter();
-    cortex_m::asm::dsb();
-    cortex_m::asm::isb();
+    let mut counter = DwtCycleCounter::enable(
+        &mut peripherals.DCB,
+        &mut peripherals.DWT,
+        Some(hclk_hz as u64),
+    )
+    .unwrap();
     paint_stack();
 
     let Some(key_a) = prepare_key(&KEY_A) else {
-        rprintln!("SETUP_FAIL key:A");
+        embedded_measure::rtt::print(format_args!("SETUP_FAIL key:A\n"));
         stop();
     };
     let Some(key_b) = prepare_key(&KEY_B) else {
-        rprintln!("SETUP_FAIL key:B");
+        embedded_measure::rtt::print(format_args!("SETUP_FAIL key:B\n"));
         stop();
     };
     let preflight_a = sign_once(&key_a);
     let preflight_b = sign_once(&key_b);
     let streams_matched =
         preflight_a.ok && preflight_b.ok && preflight_a.rng_words == preflight_b.rng_words;
-    rprintln!(
-        "CT_BEGIN suite:{} carrier:{} clock_profile:{} hclk_hz:{} trials:{} max_positive_spread:{} rng_words_a:{} rng_words_b:{} streams_matched:{}",
-        SUITE,
-        CARRIER,
-        CLOCK_PROFILE,
-        hclk_hz,
-        TRIALS,
-        MAX_POSITIVE_SPREAD,
-        preflight_a.rng_words,
-        preflight_b.rng_words,
-        streams_matched as u8
-    );
-    report_diagnostic("key_construction", measure_setup());
-
-    let signing = report(
-        "pkcs1v15_blinded_sign",
-        "positive",
-        measure_signing(&key_a, &key_b, preflight_a.rng_words),
-        true,
-    ) && streams_matched;
-    let negative = report("negative_early_exit", "negative", measure_negative(), false);
+    let run_fields = [
+        Field::token("carrier", CARRIER),
+        Field::token("clock_profile", CLOCK_PROFILE),
+        Field::u64("hclk_hz", hclk_hz as u64),
+        Field::u64("trials", TRIALS as u64),
+        Field::u64("max_positive_spread", MAX_POSITIVE_SPREAD as u64),
+        Field::u64("rng_words_a", preflight_a.rng_words as u64),
+        Field::u64("rng_words_b", preflight_b.rng_words as u64),
+        Field::bool("streams_matched", streams_matched),
+    ];
+    let fixture_fields = [Field::token("carrier", CARRIER)];
+    let summary_fields = [Field::token("carrier", CARRIER)];
+    let mut suite = PairedSuite::<_, _, TRIALS>::start(
+        &mut counter,
+        &mut reporter,
+        PairedSuiteConfig {
+            suite: SUITE,
+            target: "thumbv7em-none-eabihf",
+            board: Some("stm32f407vg"),
+            unit: embedded_measure::Unit::CoreCycles,
+            frequency_hz: Some(hclk_hz as u64),
+            warmup_blocks: 2,
+            batches: BATCHES,
+            positive_max_spread: MAX_POSITIVE_SPREAD as u64,
+            positive_require_overlap: false,
+            fields: PairedSuiteFields {
+                run: &run_fields,
+                fixture: &fixture_fields,
+                summary: &summary_fields,
+            },
+        },
+    )
+    .unwrap()
+    .max_sample_ticks(MAX_SAFE_DWT_REGION as u64);
+    suite
+        .diagnostic(
+            "key_construction",
+            "public-setup",
+            &KEY_A,
+            &KEY_B,
+            |input| prepare_key(input).is_some(),
+        )
+        .unwrap();
+    suite
+        .positive("pkcs1v15_blinded_sign", &key_a, &key_b, |signing_key| {
+            let outcome = sign_once(signing_key);
+            streams_matched && outcome.ok && outcome.rng_words == preflight_a.rng_words
+        })
+        .unwrap();
+    const ZERO: [u8; KEY_BYTES] = [0; KEY_BYTES];
+    suite
+        .negative(
+            "negative_early_exit",
+            &ZERO,
+            KEY_B.private_exponent,
+            negative_early_exit,
+        )
+        .unwrap();
     let stack_bytes = stack_high_water_mark();
-    rprintln!(
-        "CT_STACK suite:{} carrier:{} bytes:{}",
-        SUITE,
-        CARRIER,
-        stack_bytes
-    );
-    let passed = signing as u32 + negative as u32;
-    rprintln!(
-        "CT_SUMMARY carrier:{} passed:{} failed:{}",
-        CARRIER,
-        passed,
-        2 - passed
-    );
+    embedded_measure::rtt::print(format_args!(
+        "CT_STACK suite:{} carrier:{} bytes:{}\n",
+        SUITE, CARRIER, stack_bytes
+    ));
+    suite.finish().unwrap();
     stop();
 }
 
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo) -> ! {
-    rprintln!("PANIC: {}", info);
+    embedded_measure::rtt::print(format_args!("PANIC: {}\n", info));
     loop {
         cortex_m::asm::nop();
     }
