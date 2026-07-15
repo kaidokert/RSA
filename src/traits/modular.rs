@@ -83,7 +83,7 @@ where
     fn leading_zeros(&self) -> u32 {
         // Width minus bit-length: shape-relative, well-defined for any
         // carrier whose operating width is a public value.
-        BitsPrecision::bits_precision(*self) - BitWidth::bit_width(*self)
+        BitsPrecision::bits_precision(self) - BitWidth::bit_width(*self)
     }
 
     fn bit_length(&self) -> u32 {
@@ -114,7 +114,7 @@ where
     }
 
     fn bits_precision(&self) -> u32 {
-        BitsPrecision::bits_precision(*self)
+        BitsPrecision::bits_precision(self)
     }
 }
 
@@ -138,7 +138,7 @@ where
     fn leading_zeros(&self) -> u32 {
         // Width minus bit-length: shape-relative, well-defined for any
         // carrier whose operating width is a public value.
-        BitsPrecision::bits_precision(*self) - BitWidth::bit_width(*self)
+        BitsPrecision::bits_precision(self) - BitWidth::bit_width(*self)
     }
 
     fn bit_length(&self) -> u32 {
@@ -169,7 +169,7 @@ where
     }
 
     fn bits_precision(&self) -> u32 {
-        BitsPrecision::bits_precision(*self)
+        BitsPrecision::bits_precision(self)
     }
 }
 

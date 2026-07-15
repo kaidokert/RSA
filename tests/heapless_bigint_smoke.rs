@@ -31,7 +31,7 @@ fn be_bytes_roundtrip_and_shape() {
     let v = H::from_be_bytes(&[0x01, 0x02]);
     assert_eq!(v.len(), 1);
     assert_eq!(v.capacity(), 64);
-    assert_eq!(BitsPrecision::bits_precision(v), 32);
+    assert_eq!(BitsPrecision::bits_precision(&v), 32);
     assert_eq!(BitWidth::bit_width(v), 9);
 
     let mut buf = [0u8; 4];
@@ -44,7 +44,7 @@ fn width_tracks_construction_not_capacity() {
     // A 256-byte (2048-bit) input fills all 64 limbs...
     let full = H::from_be_bytes(&[0xFF; 256]);
     assert_eq!(full.len(), 64);
-    assert_eq!(BitsPrecision::bits_precision(full), 2048);
+    assert_eq!(BitsPrecision::bits_precision(&full), 2048);
     assert_eq!(BitWidth::bit_width(full), 2048);
 
     // ...while a 64-byte (512-bit) input in the SAME carrier type is a
@@ -52,13 +52,13 @@ fn width_tracks_construction_not_capacity() {
     // never leaks into either quantity.
     let small = H::from_be_bytes(&[0xFF; 64]);
     assert_eq!(small.len(), 16);
-    assert_eq!(BitsPrecision::bits_precision(small), 512);
+    assert_eq!(BitsPrecision::bits_precision(&small), 512);
     assert_eq!(BitWidth::bit_width(small), 512);
 
     // Zero value, non-zero width: bit-length is value-defined (0),
     // width is shape-defined (64).
     let zero = H::new_zero_with_len(2);
-    assert_eq!(BitsPrecision::bits_precision(zero), 64);
+    assert_eq!(BitsPrecision::bits_precision(&zero), 64);
     assert_eq!(BitWidth::bit_width(zero), 0);
 }
 
