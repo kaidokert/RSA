@@ -8,6 +8,7 @@ autobenches = false
 
 [features]
 baseline = []
+jtrace-f407 = ["dep:rtt-target", "cortex-m/critical-section-single-core"]
 # Key-size selectors for the unified `rsa_verify` example. Pick exactly one.
 key_512 = []
 key_768 = []
@@ -28,6 +29,7 @@ cortex-m = "0.7"
 cortex-m-rt = "0.7"
 cortex-m-semihosting = "0.5"
 panic-semihosting = { version = "0.6", features = ["exit"] }
+rtt-target = { version = "0.6", optional = true }
 
 fixed-bigint = { version = "0.5.0", default-features = false, features = ["zeroize", "use-unsafe", "cios"] }
 rsa = { path = "../..", package = "rsa_heapless", default-features = false, features = ["modmath"] }

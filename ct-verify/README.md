@@ -1,7 +1,7 @@
 # Constant-time verification harness
 
 Machine-checked evidence for the heapless sign path's constant-time and
-panic-free claims. Four layers, each answering a question the others
+panic-free claims. Five layers, each answering a question the others
 can't, all pinned to one toolchain and one release profile so a passing
 run "locks" specific machine code rather than an optimizer's mood.
 
@@ -34,7 +34,7 @@ fixture crates via [`test_keys.rs`](test_keys.rs), so the happy path
 (including verify-after-sign) is the code under inspection rather than
 a retry-then-fail path.
 
-## The four layers
+## The five layers
 
 All run commands below assume this directory (`ct-verify/`) as the
 working directory.
@@ -104,6 +104,18 @@ This layer has caught real bugs at real deployment widths twice
 counts). **Consumers who want the no-panic property must use
 fixed-bigint ≥ 0.5.2**, where the byte serialization is structurally
 panic-free rather than dependent on the optimizer proving bounds.
+
+**Physical CYCCNT regression** ([`cyccnt-hardware`](cyccnt-hardware/)).
+Runs two independent real 512-bit keypairs through whole blinded signing on
+the J-Trace STM32F407VG. The keys use matched deterministic RNG streams whose
+draw counts must agree. Public key construction is reported separately; the
+gated region begins at the signing API because RSA's modulus is public.
+
+```sh
+cd cyccnt-hardware
+cargo run --release --features carrier-u32x16
+cargo run --release --features carrier-u8x64
+```
 
 ## Violation triage policy
 

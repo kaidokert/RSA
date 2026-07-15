@@ -8,11 +8,20 @@ fn main() {
 
     let include_bytes_cm0 = include_bytes!("memory_cm0.x").as_slice();
     let include_bytes_cm3 = include_bytes!("memory_cm3.x").as_slice();
-    let (memory_file, include_bytes) = match target.as_str() {
-        "thumbv6m-none-eabi" => ("memory_cm0.x", include_bytes_cm0),
-        "thumbv7m-none-eabi" => ("memory_cm3.x", include_bytes_cm3),
-        t if t.contains("thumbv7") => ("memory_cm3.x", include_bytes_cm3),
-        _ => panic!("Unsupported target: {}", target),
+    let include_bytes_f407 = include_bytes!("memory_f407.x").as_slice();
+    let jtrace_f407 = env::var_os("CARGO_FEATURE_JTRACE_F407").is_some();
+    let (memory_file, include_bytes) = if jtrace_f407 {
+        if target != "thumbv7em-none-eabihf" {
+            panic!("jtrace-f407 requires --target thumbv7em-none-eabihf");
+        }
+        ("memory_f407.x", include_bytes_f407)
+    } else {
+        match target.as_str() {
+            "thumbv6m-none-eabi" => ("memory_cm0.x", include_bytes_cm0),
+            "thumbv7m-none-eabi" => ("memory_cm3.x", include_bytes_cm3),
+            t if t.contains("thumbv7") => ("memory_cm3.x", include_bytes_cm3),
+            _ => panic!("Unsupported target: {}", target),
+        }
     };
 
     // Put `memory.x` in output directory and add to linker search path

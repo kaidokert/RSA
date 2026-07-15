@@ -1,0 +1,27 @@
+[package]
+name = "rsa-cyccnt-hardware"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[features]
+default = ["clock-168mhz"]
+clock-168mhz = ["dep:stm32f4xx-hal"]
+rsa512 = []
+rsa1024 = []
+rsa2048 = []
+carrier-u32x16 = []
+carrier-u32x32 = []
+carrier-u32x64 = []
+carrier-u8x64 = []
+
+[dependencies]
+const-num-traits = { version = "0.2", default-features = false, features = ["ct"] }
+cortex-m = { version = "0.7", features = ["critical-section-single-core"] }
+cortex-m-rt = "0.7"
+fixed-bigint = { version = "0.5.2", default-features = false, features = ["zeroize", "use-unsafe", "cios"] }
+rand_core = { version = "0.10", default-features = false }
+rsa = { path = "../..", package = "rsa_heapless", default-features = false, features = ["modmath"] }
+rtt-target = "0.6"
+sha2 = { version = "0.11", default-features = false, features = ["oid"] }
+stm32f4xx-hal = { version = "0.23", default-features = false, features = ["stm32f407"], optional = true }

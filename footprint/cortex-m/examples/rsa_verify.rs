@@ -114,5 +114,7 @@ fn main() -> ! {
         },
         BACKEND,
     );
-    loop {}
+    loop {
+        cortex_m::asm::nop();
+    }
 }
