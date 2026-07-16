@@ -130,10 +130,20 @@ def parse_output(output):
 
     result["accepted"] = "ACCEPT" in output
 
-    m = re.search(r"Time:\s*(\d+)\s*ms\s*\((\d+)\s*ticks\)", output)
-    if m:
-        result["time_ms"] = int(m.group(1))
-        result["ticks"] = int(m.group(2))
+    measurement = re.search(
+        r"EM_MEASUREMENT schema:\d+ benchmark:\S+ ticks:(\d+) "
+        r"unit:timer-ticks frequency_hz:(\d+) wrapped:([01])",
+        output,
+    )
+    if measurement:
+        if measurement.group(3) == "0" and int(measurement.group(2)) > 0:
+            result["ticks"] = int(measurement.group(1))
+            result["time_ms"] = result["ticks"] * 1000 // int(measurement.group(2))
+    else:
+        m = re.search(r"Time:\s*(\d+)\s*ms\s*\((\d+)\s*ticks\)", output)
+        if m:
+            result["time_ms"] = int(m.group(1))
+            result["ticks"] = int(m.group(2))
 
     m = re.search(r"Max stack usage:\s*(\d+)\s*bytes", output)
     if m:

@@ -127,6 +127,16 @@ def parse_metric(output):
         r"METRIC stack:(\d+) cycles:(\d+) target:(\S+) backend:(\S+)", output
     )
     if m:
+        measurements = re.findall(
+            r"EM_MEASUREMENT schema:\d+ benchmark:\S+ ticks:(\d+) "
+            r"unit:core-cycles frequency_hz:\S+ wrapped:([01])[^\r\n]*"
+            r"counter:(\S+)",
+            output,
+        )
+        preferred = next((row for row in measurements if row[2] == "mcycle"), None)
+        cycle_row = preferred or (measurements[0] if measurements else None)
+        if cycle_row and cycle_row[1] != "0":
+            return None
         stack = re.search(
             r"EM_STACK schema:\d+ benchmark:\S+ used:(\d+) available:(\d+) "
             r"painted:(\d+) safe_zone:(\d+) overflowed:([01])",
@@ -136,7 +146,7 @@ def parse_metric(output):
             return None
         return {
             "stack": int(stack.group(1)) if stack else int(m.group(1)),
-            "cycles": int(m.group(2)),
+            "cycles": int(cycle_row[0]) // 1000 if cycle_row else int(m.group(2)),
             "target": m.group(3),
             "backend": m.group(4),
         }

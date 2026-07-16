@@ -24,7 +24,10 @@ const _: () = {
 #[cfg(all(feature = "hash_sha1", not(feature = "key_512")))]
 compile_error!("hash_sha1 only paired with key_512 (no fixture exists for other key sizes)");
 
-use embedded_measure::report::{Field, StackRecord, write_stack_ufmt};
+use embedded_measure::avr::timer_measurement;
+use embedded_measure::report::{
+    Field, MeasurementRecord, StackRecord, write_measurement_ufmt, write_stack_ufmt,
+};
 use fixed_bigint::FixedUInt;
 use rsa::modmath_support::public_key_from_be_bytes;
 use rsa::pkcs1v15::{GenericSignature, GenericVerifyingKey};
@@ -97,6 +100,18 @@ fn main() -> ! {
         &StackRecord {
             benchmark: "rsa-footprint",
             measurement: stack,
+            fields: &[
+                Field::token("target", "atmega2560"),
+                Field::token("operation", "verify"),
+            ],
+        },
+    )
+    .unwrap();
+    write_measurement_ufmt(
+        &mut serial,
+        &MeasurementRecord {
+            benchmark: "rsa-footprint",
+            measurement: timer_measurement(ticks as u64, 15_625, false),
             fields: &[
                 Field::token("target", "atmega2560"),
                 Field::token("operation", "verify"),

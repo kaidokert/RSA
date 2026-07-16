@@ -25,14 +25,13 @@ fn TIMER1_OVF() {
 /// Read total ticks (wraps × 65536 + TCNT1) with a consistency check
 /// against an overflow interrupt firing between the two reads.
 fn read_total(tc1: &TC1) -> u64 {
-    loop {
-        let wraps1 = avr_device::interrupt::free(|cs| TIMER1_WRAPS.borrow(cs).get());
-        let tcnt = tc1.tcnt1.read().bits();
-        let wraps2 = avr_device::interrupt::free(|cs| TIMER1_WRAPS.borrow(cs).get());
-        if wraps1 == wraps2 {
-            return (wraps1 as u64) * 65536 + (tcnt as u64);
-        }
-    }
+    avr_device::interrupt::free(|cs| {
+        embedded_measure::avr::extend_timer16(
+            TIMER1_WRAPS.borrow(cs).get(),
+            tc1.tcnt1.read().bits(),
+            tc1.tifr1.read().tov1().bit_is_set(),
+        )
+    })
 }
 
 /// Tick counter that survives Timer1 overflows by counting them in an ISR.
