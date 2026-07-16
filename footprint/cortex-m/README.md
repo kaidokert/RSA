@@ -1,6 +1,9 @@
 # Cortex-M footprint harness
 
-`run_suite.py` retains the QEMU M0/M3/M4 matrix and semihosting transport.
+The shared Rust runner owns the QEMU M0/M3/M4 matrix, semihosting capture,
+ELF accounting, deadlines, baseline deltas, and reports. Run
+`cargo embedded-measure run rsa-cortex-m0` (or the `m3`/`m4` campaign) in this
+directory; configuration lives in `embedded-measure.toml`.
 
 The measured RSA examples also run on the J-Trace reference board's
 STM32F407VG using RTT:

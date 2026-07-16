@@ -3,7 +3,7 @@
 use core::fmt::Write;
 use core::hint::black_box;
 use embedded_measure::Counter;
-use embedded_measure::report::{Field, MeasurementRecord, Reporter, StackRecord, TextReporter};
+use embedded_measure::report::{Field, MeasurementRecord, OutcomeRecord, Reporter, StackRecord};
 use embedded_measure::risc_v::{McycleCounter, MinstretCounter};
 
 pub mod stack;
@@ -24,7 +24,7 @@ pub const SIGNATURE: [u8; 64] = [
 pub const MESSAGE: &[u8] = b"hello world!";
 
 use stack::paint_stack;
-use uart::{UartWriter, uart_init};
+use uart::{uart_init, uart_reporter};
 
 pub fn test_fixture(testable: fn() -> bool, backend: &str) -> ! {
     uart_init();
@@ -40,8 +40,7 @@ pub fn test_fixture(testable: fn() -> bool, backend: &str) -> ! {
     let elapsed = measurement.ticks / 1000;
     let stack = stack_probe.measure();
 
-    let mut w = UartWriter;
-    let mut reporter = TextReporter::new(UartWriter);
+    let mut reporter = uart_reporter();
     reporter
         .stack_measurement(&StackRecord {
             benchmark: "rsa-footprint",
@@ -75,17 +74,27 @@ pub fn test_fixture(testable: fn() -> bool, backend: &str) -> ! {
         })
         .unwrap();
     if result {
-        let _ = writeln!(w, "rsa ACCEPT");
+        let _ = writeln!(reporter, "rsa ACCEPT");
     } else {
-        let _ = writeln!(w, "rsa REJECT");
+        let _ = writeln!(reporter, "rsa REJECT");
     }
     let _ = write!(
-        w,
+        reporter,
         "METRIC stack:{} cycles:{} target:riscv32 backend:",
         stack.high_water_bytes, elapsed
     );
-    let _ = w.write_str(backend);
-    let _ = w.write_str("\n");
+    let _ = reporter.write_str(backend);
+    let _ = reporter.write_str("\n");
+    reporter
+        .outcome(&OutcomeRecord {
+            benchmark: "rsa-footprint",
+            passed: result,
+            fields: &[
+                Field::token("target", "riscv32"),
+                Field::token("backend", backend),
+            ],
+        })
+        .unwrap();
 
     // sifive_e has no exit mechanism — loop forever, wrapper kills QEMU
     loop {
@@ -103,8 +112,8 @@ pub fn fake_verify(modulus: [u8; 64], msg: &[u8], signature: [u8; 64]) -> bool {
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo) -> ! {
     uart_init();
-    let mut w = UartWriter;
-    let _ = writeln!(w, "PANIC: {}", info);
+    let mut reporter = uart_reporter();
+    let _ = writeln!(reporter, "PANIC: {}", info);
     loop {
         unsafe { core::arch::asm!("wfi") }
     }

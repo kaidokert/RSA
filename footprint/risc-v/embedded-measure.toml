@@ -1,0 +1,86 @@
+[profiles.qemu-riscv32]
+preset = "qemu-riscv32-sifive-e"
+timeout-seconds = 300
+
+[[case-sets.rsa-verify]]
+name = "baseline"
+example = "baseline"
+features = ["baseline"]
+expected-benchmark = "rsa-footprint"
+
+[[case-sets.rsa-verify]]
+name = "rsa512-sha1-u8"
+example = "rsa_verify"
+features = ["key_512", "limb_u8", "hash_sha1"]
+expected-benchmark = "rsa-footprint"
+
+[[case-sets.rsa-verify]]
+name = "rsa512-sha1-u32"
+example = "rsa_verify"
+features = ["key_512", "limb_u32", "hash_sha1"]
+expected-benchmark = "rsa-footprint"
+
+[[case-sets.rsa-verify]]
+name = "rsa512-sha256-u8"
+example = "rsa_verify"
+features = ["key_512", "limb_u8", "hash_sha256"]
+expected-benchmark = "rsa-footprint"
+
+[[case-sets.rsa-verify]]
+name = "rsa512-sha256-u32"
+example = "rsa_verify"
+features = ["key_512", "limb_u32", "hash_sha256"]
+expected-benchmark = "rsa-footprint"
+
+[[case-sets.rsa-verify]]
+name = "rsa768-sha256-u8"
+example = "rsa_verify"
+features = ["key_768", "limb_u8", "hash_sha256"]
+expected-benchmark = "rsa-footprint"
+
+[[case-sets.rsa-verify]]
+name = "rsa768-sha256-u32"
+example = "rsa_verify"
+features = ["key_768", "limb_u32", "hash_sha256"]
+expected-benchmark = "rsa-footprint"
+
+[[case-sets.rsa-verify]]
+name = "rsa1024-sha256-u8"
+example = "rsa_verify"
+features = ["key_1024", "limb_u8", "hash_sha256"]
+expected-benchmark = "rsa-footprint"
+
+[[case-sets.rsa-verify]]
+name = "rsa1024-sha256-u32"
+example = "rsa_verify"
+features = ["key_1024", "limb_u32", "hash_sha256"]
+expected-benchmark = "rsa-footprint"
+
+[[case-sets.rsa-verify]]
+name = "rsa1536-sha256-u8"
+example = "rsa_verify"
+features = ["key_1536", "limb_u8", "hash_sha256"]
+expected-benchmark = "rsa-footprint"
+
+[[case-sets.rsa-verify]]
+name = "rsa1536-sha256-u32"
+example = "rsa_verify"
+features = ["key_1536", "limb_u32", "hash_sha256"]
+expected-benchmark = "rsa-footprint"
+
+[[case-sets.rsa-verify]]
+name = "rsa2048-sha256-u8"
+example = "rsa_verify"
+features = ["key_2048", "limb_u8", "hash_sha256"]
+expected-benchmark = "rsa-footprint"
+
+[[case-sets.rsa-verify]]
+name = "rsa2048-sha256-u32"
+example = "rsa_verify"
+features = ["key_2048", "limb_u32", "hash_sha256"]
+expected-benchmark = "rsa-footprint"
+
+[campaigns.rsa-riscv32]
+profile = "qemu-riscv32"
+case-set = "rsa-verify"
+baseline-case = "baseline"

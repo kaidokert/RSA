@@ -2,11 +2,7 @@
 
 use core::fmt::Write;
 use core::hint::black_box;
-use embedded_measure::report::{Field, MeasurementRecord, Reporter, StackRecord, TextReporter};
-#[cfg(feature = "jtrace-f407")]
-use embedded_measure::rtt::RttWriter as OutputWriter;
-#[cfg(not(feature = "jtrace-f407"))]
-use embedded_measure::semihosting::SemihostingWriter as OutputWriter;
+use embedded_measure::report::{Field, MeasurementRecord, OutcomeRecord, Reporter, StackRecord};
 use embedded_measure::stack::StackMeasurement;
 use embedded_measure::{Measurement, Unit};
 
@@ -15,17 +11,6 @@ pub mod stack;
 
 use cyclecount::{CycleCounter, CycleMeasurement};
 use stack::paint_stack;
-
-fn init_output() -> OutputWriter {
-    #[cfg(not(feature = "jtrace-f407"))]
-    {
-        embedded_measure::semihosting::init().unwrap().into_inner()
-    }
-    #[cfg(feature = "jtrace-f407")]
-    {
-        embedded_measure::rtt::init_blocking().into_inner()
-    }
-}
 
 pub fn target_arch_name() -> &'static str {
     #[cfg(thumbv6m)]
@@ -49,8 +34,10 @@ fn report(result: bool, stack: StackMeasurement, measurement: CycleMeasurement, 
         Field::token("backend", backend),
     ];
 
-    let mut output = init_output();
-    let mut reporter = TextReporter::new(&mut output);
+    #[cfg(not(feature = "jtrace-f407"))]
+    let mut reporter = embedded_measure::semihosting::init().unwrap();
+    #[cfg(feature = "jtrace-f407")]
+    let mut reporter = embedded_measure::rtt::init_blocking();
     reporter
         .stack_measurement(&StackRecord {
             benchmark: "rsa-footprint",
@@ -86,9 +73,9 @@ fn report(result: bool, stack: StackMeasurement, measurement: CycleMeasurement, 
             ],
         })
         .unwrap();
-    writeln!(output, "rsa {}", if result { "ACCEPT" } else { "REJECT" }).unwrap();
+    writeln!(reporter, "rsa {}", if result { "ACCEPT" } else { "REJECT" }).unwrap();
     write!(
-        output,
+        reporter,
         "METRIC stack:{} cycles:{} target:{} backend:{}",
         stack.high_water_bytes,
         elapsed,
@@ -98,12 +85,19 @@ fn report(result: bool, stack: StackMeasurement, measurement: CycleMeasurement, 
     .unwrap();
     #[cfg(feature = "jtrace-f407")]
     write!(
-        output,
+        reporter,
         " dwt_cycles:{} systick_cycles:{}",
         measurement.dwt, measurement.systick
     )
     .unwrap();
-    writeln!(output).unwrap();
+    writeln!(reporter).unwrap();
+    reporter
+        .outcome(&OutcomeRecord {
+            benchmark: "rsa-footprint",
+            passed: result,
+            fields: &fields,
+        })
+        .unwrap();
 }
 
 pub fn test_fixture(testable: fn() -> bool, backend: &str) {

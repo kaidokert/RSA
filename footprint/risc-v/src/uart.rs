@@ -1,4 +1,4 @@
-use core::fmt;
+use embedded_measure::uart::{UartReporter, WriteByte, reporter};
 
 const UART0_BASE: usize = 0x10013000;
 const TXDATA_OFFSET: usize = 0x00;
@@ -11,7 +11,7 @@ pub fn uart_init() {
     }
 }
 
-pub fn uart_putc(c: u8) {
+fn uart_putc(c: u8) {
     unsafe {
         let txdata = (UART0_BASE + TXDATA_OFFSET) as *mut u32;
         // Wait until TX FIFO is not full (bit 31)
@@ -20,13 +20,16 @@ pub fn uart_putc(c: u8) {
     }
 }
 
-pub struct UartWriter;
+pub struct SifiveUart;
 
-impl fmt::Write for UartWriter {
-    fn write_str(&mut self, s: &str) -> fmt::Result {
-        for b in s.bytes() {
-            uart_putc(b);
-        }
-        Ok(())
+impl WriteByte for SifiveUart {
+    fn write_byte(&mut self, byte: u8) {
+        uart_putc(byte);
     }
+}
+
+pub type Reporter = UartReporter<SifiveUart>;
+
+pub const fn uart_reporter() -> Reporter {
+    reporter(SifiveUart)
 }
