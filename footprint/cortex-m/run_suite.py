@@ -132,8 +132,15 @@ def parse_metric(output):
         r"METRIC stack:(\d+) cycles:(\d+) target:(\S+) backend:(\S+)", output
     )
     if m:
+        stack = re.search(
+            r"EM_STACK schema:\d+ benchmark:\S+ used:(\d+) available:(\d+) "
+            r"painted:(\d+) safe_zone:(\d+) overflowed:([01])",
+            output,
+        )
+        if stack and stack.group(5) != "0":
+            return None
         return {
-            "stack": int(m.group(1)),
+            "stack": int(stack.group(1)) if stack else int(m.group(1)),
             "cycles": int(m.group(2)),
             "target": m.group(3),
             "backend": m.group(4),

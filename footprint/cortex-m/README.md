@@ -19,3 +19,5 @@ Hardware metrics include the stack high-water mark, raw DWT `CYCCNT` as
 SysTick cycles divided by 1,000 for QEMU compatibility. DWT measurements must
 be shorter than 2^32 core cycles. Stack painting and scanning use the shared
 `embedded-measure` probe also used by the RISC-V and AVR harnesses.
+Stack results are emitted as versioned `EM_STACK` records; the legacy
+`METRIC stack:` field remains during parser migration.

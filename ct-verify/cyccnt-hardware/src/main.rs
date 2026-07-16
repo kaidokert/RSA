@@ -357,16 +357,9 @@ fn main() -> ! {
         )
         .unwrap();
     let stack = stack_probe.measure();
-    embedded_measure::rtt::print(format_args!(
-        "CT_STACK suite:{} carrier:{} bytes:{} available:{} painted:{} safe_zone:{} overflowed:{}\n",
-        SUITE,
-        CARRIER,
-        stack.high_water_bytes,
-        stack.available_bytes,
-        stack.painted_bytes,
-        stack.safe_zone_bytes,
-        stack.overflowed as u8,
-    ));
+    suite
+        .stack_measurement(stack, &[Field::token("carrier", CARRIER)])
+        .unwrap();
     assert!(!stack.overflowed);
     suite.finish().unwrap();
     stop();
