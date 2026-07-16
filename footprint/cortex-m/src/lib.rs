@@ -10,9 +10,7 @@ pub mod cyclecount;
 pub mod stack;
 
 use cyclecount::{CycleCounter, CycleMeasurement};
-use stack::{
-    check_stack_high_water_mark, check_stack_high_water_mark_inner, paint_stack, paint_stack_inner,
-};
+use stack::paint_stack;
 
 #[cfg(feature = "jtrace-f407")]
 fn init_output() {
@@ -80,22 +78,22 @@ fn report(result: bool, stack: usize, measurement: CycleMeasurement, backend: &s
 pub fn test_fixture(testable: fn() -> bool, backend: &str) {
     #[cfg(feature = "jtrace-f407")]
     init_output();
-    paint_stack();
+    let stack_probe = paint_stack::<256>();
     let counter = CycleCounter::new();
     let result = testable();
     let measurement = counter.elapsed();
-    let stack = check_stack_high_water_mark();
+    let stack = stack_probe.measure().high_water_bytes;
     report(result, stack, measurement, backend);
 }
 
 pub fn test_fixture_arg<const SAFE_ZONE_BYTES: usize>(testable: fn() -> bool, backend: &str) {
     #[cfg(feature = "jtrace-f407")]
     init_output();
-    paint_stack_inner::<SAFE_ZONE_BYTES>();
+    let stack_probe = paint_stack::<SAFE_ZONE_BYTES>();
     let counter = CycleCounter::new();
     let result = testable();
     let measurement = counter.elapsed();
-    let stack = check_stack_high_water_mark_inner::<SAFE_ZONE_BYTES>();
+    let stack = stack_probe.measure().high_water_bytes;
     report(result, stack, measurement, backend);
 }
 

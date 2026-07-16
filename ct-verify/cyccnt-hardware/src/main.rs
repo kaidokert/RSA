@@ -6,6 +6,7 @@ use core::{convert::Infallible, hint::black_box};
 use cortex_m_rt::entry;
 use embedded_measure::cortex_m::DwtCycleCounter;
 use embedded_measure::report::Field;
+use embedded_measure::stack::{CortexM, LinkerStack, StackConfig, StackProbe};
 use embedded_measure::suite::{PairedSuite, PairedSuiteConfig, PairedSuiteFields};
 use fixed_bigint::FixedUInt;
 use rand_core::{TryCryptoRng, TryRng};
@@ -23,12 +24,11 @@ const MAX_POSITIVE_SPREAD: u32 = 32;
 const MAX_SAFE_DWT_REGION: u32 = 0xf000_0000;
 const RNG_SEED: u64 = 0x4354_5f52_5341_3531;
 const MESSAGE: &[u8] = b"RSA CYCCNT fixture message";
-const STACK_PAINT: u8 = 0xaa;
 const STACK_SAFE_ZONE: usize = 512;
 
 unsafe extern "C" {
-    static _stack_start: u32;
-    static _stack_end: u32;
+    static _stack_start: u8;
+    static _stack_end: u8;
 }
 
 const _: () = assert!(
@@ -118,27 +118,15 @@ fn configure_clock() -> u32 {
     16_000_000
 }
 
-fn paint_stack() {
-    unsafe {
-        let stack_end = &_stack_end as *const u32 as usize;
-        let sp: usize;
-        core::arch::asm!("mov {}, sp", out(reg) sp, options(nomem, nostack));
-        let paint_end = sp.saturating_sub(STACK_SAFE_ZONE).max(stack_end);
-        core::ptr::write_bytes(stack_end as *mut u8, STACK_PAINT, paint_end - stack_end);
-    }
-}
-
-fn stack_high_water_mark() -> usize {
-    unsafe {
-        let stack_start = &_stack_start as *const u32 as usize;
-        let stack_end = &_stack_end as *const u32 as usize;
-        let mut current = stack_end;
-        while current < stack_start && core::ptr::read_volatile(current as *const u8) == STACK_PAINT
-        {
-            current += 1;
-        }
-        stack_start - current
-    }
+fn paint_stack() -> StackProbe {
+    let stack = unsafe {
+        LinkerStack::new(
+            core::ptr::addr_of!(_stack_end).cast_mut(),
+            core::ptr::addr_of!(_stack_start).cast_mut(),
+            CortexM,
+        )
+    };
+    StackProbe::paint(&stack, StackConfig::new(STACK_SAFE_ZONE)).unwrap()
 }
 
 #[derive(Clone, Copy)]
@@ -296,7 +284,7 @@ fn main() -> ! {
         Some(hclk_hz as u64),
     )
     .unwrap();
-    paint_stack();
+    let stack_probe = paint_stack();
 
     let Some(key_a) = prepare_key(&KEY_A) else {
         embedded_measure::rtt::print(format_args!("SETUP_FAIL key:A\n"));
@@ -368,11 +356,18 @@ fn main() -> ! {
             negative_early_exit,
         )
         .unwrap();
-    let stack_bytes = stack_high_water_mark();
+    let stack = stack_probe.measure();
     embedded_measure::rtt::print(format_args!(
-        "CT_STACK suite:{} carrier:{} bytes:{}\n",
-        SUITE, CARRIER, stack_bytes
+        "CT_STACK suite:{} carrier:{} bytes:{} available:{} painted:{} safe_zone:{} overflowed:{}\n",
+        SUITE,
+        CARRIER,
+        stack.high_water_bytes,
+        stack.available_bytes,
+        stack.painted_bytes,
+        stack.safe_zone_bytes,
+        stack.overflowed as u8,
     ));
+    assert!(!stack.overflowed);
     suite.finish().unwrap();
     stop();
 }

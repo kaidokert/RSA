@@ -17,4 +17,5 @@ probe-rs run --chip STM32F407VGTx --protocol swd \
 Hardware metrics include the stack high-water mark, raw DWT `CYCCNT` as
 `dwt_cycles`, and raw `systick_cycles`. The legacy `cycles` field remains
 SysTick cycles divided by 1,000 for QEMU compatibility. DWT measurements must
-be shorter than 2^32 core cycles.
+be shorter than 2^32 core cycles. Stack painting and scanning use the shared
+`embedded-measure` probe also used by the RISC-V and AVR harnesses.
