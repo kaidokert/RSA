@@ -24,23 +24,24 @@ runs the core/HCLK at 168 MHz, with APB1 at 42 MHz and APB2 at 84 MHz. This
 does not depend on a board-specific external crystal. Every run reports the
 configured HCLK over RTT.
 
-Run the RSA-512 Cortex-M-relevant carriers at 168 MHz:
+Run the complete 168 MHz declarative campaign:
 
 ```sh
-cargo run --release --features rsa512,carrier-u32x16
-cargo run --release --features rsa512,carrier-u8x64
+cargo embedded-measure run rsa-signing-ct-jtrace-f407
 ```
 
-Run RSA-1024 with the Cortex-M-native carrier:
+Use repeatable `--case` options to select `rsa512-u32x16`, `rsa512-u8x64`,
+`rsa1024-u32x32`, or `rsa2048-u32x64`. The runner cross-compiles each exact
+feature set, downloads and resets the target, releases the probe for the
+width-qualified delay, and then attaches only to drain the blocking RTT
+channel. It retains the ELF, exact download/reset/attach commands, preparation
+and RTT logs, parsed result, report, and reproducibility metadata below
+`target/embedded-measure/rsa-signing-ct-jtrace-f407/`.
+
+Direct development runs remain available, for example:
 
 ```sh
 cargo run --release --features rsa1024,carrier-u32x32
-```
-
-Run RSA-2048 with the Cortex-M-native carrier:
-
-```sh
-cargo run --release --features rsa2048,carrier-u32x64
 ```
 
 For a reset-clock comparison at 16 MHz, disable the default clock feature:
@@ -52,9 +53,8 @@ cargo run --release --no-default-features --features rsa1024,carrier-u32x32
 cargo run --release --no-default-features --features rsa2048,carrier-u32x64
 ```
 
-If live RTT polling starves debug access during the long `u8x64` measured
-region, run the already-built firmware detached and attach only after the
-campaign reaches its blocking RTT drain point:
+The declarative runner automates the following detached sequence because live
+RTT polling can starve debug access during long measured regions:
 
 ```sh
 probe-rs download --chip STM32F407VGTx --protocol swd \
@@ -69,8 +69,9 @@ probe-rs attach --chip STM32F407VGTx --protocol swd \
 ```
 
 The blocking 4 KiB RTT channel preserves records until attachment. Do not
-attach during the measured region; that recreates the debug-bus contention the
-detached procedure is intended to avoid.
+replace the declarative detached profile with `probe-rs run` for the full
+campaign; attaching during the measured region recreates the debug-bus
+contention this sequence avoids.
 
 Initial 16 MHz STM32F407/J-Trace calibration passed both fixtures on both
 carriers:

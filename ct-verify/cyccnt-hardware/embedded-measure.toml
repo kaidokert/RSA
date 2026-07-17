@@ -1,0 +1,84 @@
+[profiles.jtrace-f407-168mhz]
+runner = "command"
+target = "thumbv7em-none-eabihf"
+build-features = ["clock-168mhz"]
+board = "jtrace-reference-board"
+mcu = "STM32F407VG"
+transport = "rtt"
+probe = "1366:1020:001224000224"
+clock-frequency-hz = 168000000
+executable = "probe-rs"
+args = [
+  "attach",
+  "--chip", "STM32F407VGTx",
+  "--protocol", "swd",
+  "--probe", "1366:1020:001224000224",
+  "--non-interactive",
+  "--disable-progressbars",
+  "--no-location",
+  "{artifact}",
+]
+completion-marker = "EM_SUMMARY"
+completion-action = "interrupt"
+timeout-seconds = 900
+target-dir = "target"
+artifact-extension = ""
+
+[[profiles.jtrace-f407-168mhz.prepare]]
+executable = "probe-rs"
+args = [
+  "download",
+  "--chip", "STM32F407VGTx",
+  "--protocol", "swd",
+  "--probe", "1366:1020:001224000224",
+  "--non-interactive",
+  "--disable-progressbars",
+  "{artifact}",
+]
+timeout-seconds = 120
+
+[[profiles.jtrace-f407-168mhz.prepare]]
+executable = "probe-rs"
+args = [
+  "reset",
+  "--chip", "STM32F407VGTx",
+  "--protocol", "swd",
+  "--probe", "1366:1020:001224000224",
+  "--non-interactive",
+]
+timeout-seconds = 30
+
+[[case-sets.rsa-signing-cyccnt]]
+name = "rsa512-u32x16"
+binary = "rsa-cyccnt-hardware"
+features = ["rsa512", "carrier-u32x16"]
+expected-suite = "rsa512-cyccnt"
+delay-before-run-seconds = 60
+
+[[case-sets.rsa-signing-cyccnt]]
+name = "rsa512-u8x64"
+binary = "rsa-cyccnt-hardware"
+features = ["rsa512", "carrier-u8x64"]
+expected-suite = "rsa512-cyccnt"
+timeout-seconds = 900
+delay-before-run-seconds = 120
+
+[[case-sets.rsa-signing-cyccnt]]
+name = "rsa1024-u32x32"
+binary = "rsa-cyccnt-hardware"
+features = ["rsa1024", "carrier-u32x32"]
+expected-suite = "rsa1024-cyccnt"
+timeout-seconds = 900
+delay-before-run-seconds = 120
+
+[[case-sets.rsa-signing-cyccnt]]
+name = "rsa2048-u32x64"
+binary = "rsa-cyccnt-hardware"
+features = ["rsa2048", "carrier-u32x64"]
+expected-suite = "rsa2048-cyccnt"
+timeout-seconds = 1800
+delay-before-run-seconds = 300
+
+[campaigns.rsa-signing-ct-jtrace-f407]
+profile = "jtrace-f407-168mhz"
+case-set = "rsa-signing-cyccnt"
