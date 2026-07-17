@@ -10,6 +10,26 @@ timeout-seconds = 300
 preset = "qemu-cortex-m4"
 timeout-seconds = 300
 
+[profiles.jtrace-f407]
+runner = "command"
+target = "thumbv7em-none-eabihf"
+build-features = ["jtrace-f407"]
+executable = "probe-rs"
+args = [
+  "run",
+  "--chip", "STM32F407VGTx",
+  "--protocol", "swd",
+  "--probe", "1366:1020:001224000224",
+  "--non-interactive",
+  "--disable-progressbars",
+  "--no-location",
+  "{artifact}",
+]
+completion-marker = "EM_OUTCOME"
+completion-action = "interrupt"
+timeout-seconds = 120
+artifact-extension = ""
+
 [[case-sets.rsa-verify]]
 name = "baseline"
 example = "baseline"
@@ -100,5 +120,10 @@ baseline-case = "baseline"
 
 [campaigns.rsa-cortex-m4]
 profile = "qemu-cortex-m4"
+case-set = "rsa-verify"
+baseline-case = "baseline"
+
+[campaigns.rsa-jtrace-f407]
+profile = "jtrace-f407"
 case-set = "rsa-verify"
 baseline-case = "baseline"

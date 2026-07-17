@@ -5,8 +5,15 @@ ELF accounting, deadlines, baseline deltas, and reports. Run
 `cargo embedded-measure run rsa-cortex-m0` (or the `m3`/`m4` campaign) in this
 directory; configuration lives in `embedded-measure.toml`.
 
-The measured RSA examples also run on the J-Trace reference board's
-STM32F407VG using RTT:
+The same case set runs on the J-Trace reference board through the declarative
+`probe-rs` profile. For a focused RSA-512 run:
+
+```sh
+cargo embedded-measure run rsa-jtrace-f407 \
+  --case baseline --case rsa512-sha1-u32
+```
+
+The equivalent direct command remains useful when diagnosing probe failures:
 
 ```sh
 cargo build --release --target thumbv7em-none-eabihf \
