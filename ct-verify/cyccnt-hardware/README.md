@@ -73,6 +73,42 @@ replace the declarative detached profile with `probe-rs run` for the full
 campaign; attaching during the measured region recreates the debug-bus
 contention this sequence avoids.
 
+## Bounded ETM constant-time gate
+
+The `etm-single-trial` feature turns this same signing boundary into a
+host-selected, one-operation ETM fixture. Both keys remain in one identical
+ELF. While the reset core is halted, `cargo embedded-measure
+jtrace-ct-gate` writes the key index into the exported uninitialized selector,
+arms DWT comparators as ETM start/stop events, and runs until a terminal
+`BKPT` outside the measured region. The target then exposes the observed key,
+signing validity, RNG draw count, and its DWT cycle delta for host validation.
+
+Build RSA-512 explicitly from the nested workspace root:
+
+```sh
+cargo build --manifest-path ct-verify/Cargo.toml \
+  -p rsa-cyccnt-hardware --target thumbv7em-none-eabihf --release \
+  --no-default-features \
+  --features rsa512,carrier-u32x16,clock-168mhz,etm-single-trial
+```
+
+On 2026-07-18, a two-key, three-repetition J-Trace run produced a valid
+hardware **FAIL**: same-key compact ETM profiles stayed within the calibrated
+128-count allowance (maximum distance 92), but cross-key distance reached
+1,827. All six operations succeeded and consumed 40 RNG words. In contrast,
+every target DWT measurement was exactly 142,389,660 cycles. The first DWT
+value was read directly from target memory and independently recovered from
+the RTT `ETM_TRIAL` record with an exact match.
+
+This finding means aggregate cycle equality did not imply an equivalent ETM
+execution-address profile. It does not by itself prove an exploitable timing
+leak: SEGGER's compact counters have observable repeat-run attribution jitter,
+and they do not expose data-memory addresses. The retained symbolized diff is
+the starting point for reviewing the key-dependent profile in fixed-bigint,
+modular exponentiation, and signing code. Generated evidence lives under
+`target/embedded-measure/rsa512-etm-ct-gate-final/` and is intentionally not
+committed.
+
 Initial 16 MHz STM32F407/J-Trace calibration passed both fixtures on both
 carriers:
 

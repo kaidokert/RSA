@@ -148,7 +148,6 @@ const KEY_A: KeyInput = KeyInput {
     private_exponent: &D_512,
 };
 #[cfg(feature = "rsa512")]
-#[cfg(not(feature = "etm-single-trial"))]
 const KEY_B: KeyInput = KeyInput {
     modulus: &N_512_B,
     private_exponent: &D_512_B,
@@ -160,7 +159,6 @@ const KEY_A: KeyInput = KeyInput {
     private_exponent: &D_2048,
 };
 #[cfg(feature = "rsa2048")]
-#[cfg(not(feature = "etm-single-trial"))]
 const KEY_B: KeyInput = KeyInput {
     modulus: &N_2048_B,
     private_exponent: &D_2048_B,
@@ -172,7 +170,6 @@ const KEY_A: KeyInput = KeyInput {
     private_exponent: &D_1024,
 };
 #[cfg(feature = "rsa1024")]
-#[cfg(not(feature = "etm-single-trial"))]
 const KEY_B: KeyInput = KeyInput {
     modulus: &N_1024_B,
     private_exponent: &D_1024_B,
@@ -283,7 +280,28 @@ pub extern "C" fn embedded_measure_trace_end() {
 }
 
 #[cfg(feature = "etm-single-trial")]
-fn run_etm_single_trial(signing_key: &SigningKey, hclk_hz: u32) -> ! {
+#[unsafe(no_mangle)]
+#[unsafe(link_section = ".uninit.embedded_measure")]
+pub static mut embedded_measure_etm_key_index: u32 = 0;
+
+#[cfg(feature = "etm-single-trial")]
+#[unsafe(no_mangle)]
+pub static mut embedded_measure_etm_dwt_ticks: u32 = 0;
+
+#[cfg(feature = "etm-single-trial")]
+#[unsafe(no_mangle)]
+pub static mut embedded_measure_etm_observed_key: u32 = u32::MAX;
+
+#[cfg(feature = "etm-single-trial")]
+#[unsafe(no_mangle)]
+pub static mut embedded_measure_etm_output_ok: u32 = 0;
+
+#[cfg(feature = "etm-single-trial")]
+#[unsafe(no_mangle)]
+pub static mut embedded_measure_etm_rng_words: u32 = 0;
+
+#[cfg(feature = "etm-single-trial")]
+fn run_etm_single_trial(signing_key: &SigningKey, key_index: u32, hclk_hz: u32) -> ! {
     // Keep trace disabled during cache/path warm-up. The ETM start comparator
     // enables collection only when the exported begin marker executes.
     let warmup = sign_once(black_box(signing_key));
@@ -294,10 +312,34 @@ fn run_etm_single_trial(signing_key: &SigningKey, hclk_hz: u32) -> ! {
     let trace_end: extern "C" fn() = black_box(embedded_measure_trace_end);
     trace_end();
     let ticks = cortex_m::peripheral::DWT::cycle_count().wrapping_sub(start);
+    // SAFETY: the trace fixture has exclusive access before halting and the
+    // host reads this checkpoint only after the terminal BKPT.
+    unsafe {
+        core::ptr::write_volatile(
+            core::ptr::addr_of_mut!(embedded_measure_etm_dwt_ticks),
+            ticks,
+        );
+        core::ptr::write_volatile(
+            core::ptr::addr_of_mut!(embedded_measure_etm_observed_key),
+            key_index,
+        );
+        core::ptr::write_volatile(
+            core::ptr::addr_of_mut!(embedded_measure_etm_output_ok),
+            (warmup.ok && outcome.ok) as u32,
+        );
+        core::ptr::write_volatile(
+            core::ptr::addr_of_mut!(embedded_measure_etm_rng_words),
+            outcome.rng_words,
+        );
+    };
     embedded_measure::rtt::print(format_args!(
-        "ETM_TRIAL fixture:pkcs1v15_blinded_sign ticks:{} frequency_hz:{} warmup_ok:{} output_ok:{} rng_words:{}\n",
-        ticks, hclk_hz, warmup.ok as u8, outcome.ok as u8, outcome.rng_words,
+        "ETM_TRIAL fixture:pkcs1v15_blinded_sign key:{} ticks:{} frequency_hz:{} warmup_ok:{} output_ok:{} rng_words:{}\n",
+        key_index, ticks, hclk_hz, warmup.ok as u8, outcome.ok as u8, outcome.rng_words,
     ));
+    // This feature is only used under a trace debugger. Halt after publishing
+    // RTT so the host can retrieve trace statistics without polling or placing
+    // a breakpoint inside the measured interval.
+    cortex_m::asm::bkpt();
     stop()
 }
 
@@ -331,19 +373,38 @@ fn main() -> ! {
         Some(hclk_hz as u64),
     )
     .unwrap();
-    let Some(key_a) = prepare_key(&KEY_A) else {
-        embedded_measure::rtt::print(format_args!("SETUP_FAIL key:A\n"));
-        stop();
-    };
     #[cfg(feature = "etm-single-trial")]
     {
         let _reporter = embedded_measure::rtt::init_ct_compatible();
         let _ = counter;
-        run_etm_single_trial(&key_a, hclk_hz);
+        // SAFETY: the host writes this selector while the core is halted at
+        // reset, before main executes.
+        let key_index = unsafe {
+            core::ptr::read_volatile(core::ptr::addr_of!(embedded_measure_etm_key_index))
+        };
+        let key_input = match key_index {
+            0 => &KEY_A,
+            1 => &KEY_B,
+            _ => {
+                embedded_measure::rtt::print(format_args!("SETUP_FAIL key:{}\n", key_index));
+                stop();
+            }
+        };
+        let Some(key) = prepare_key(key_input) else {
+            embedded_measure::rtt::print(format_args!("SETUP_FAIL key:{}\n", key_index));
+            stop();
+        };
+        run_etm_single_trial(&key, key_index, hclk_hz);
     }
 
     #[cfg(not(feature = "etm-single-trial"))]
-    run_campaign(key_a, counter, hclk_hz)
+    {
+        let Some(key_a) = prepare_key(&KEY_A) else {
+            embedded_measure::rtt::print(format_args!("SETUP_FAIL key:A\n"));
+            stop();
+        };
+        run_campaign(key_a, counter, hclk_hz)
+    }
 }
 
 #[cfg(not(feature = "etm-single-trial"))]
