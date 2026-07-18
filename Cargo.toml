@@ -24,7 +24,7 @@ rand_core = { version = "0.10", default-features = false }
 signature = { version = "3", default-features = false, features = ["digest", "rand_core"] }
 zeroize = { version = "1.8", default-features = false }
 ctutils = { version = "0.4", default-features = false }
-const-num-traits = { version = "0.2.0", default-features = false, features = ["ct"] }
+const-num-traits = { version = "0.2.1", default-features = false, features = ["ct"] }
 
 # optional dependencies
 crypto-common = { version = "0.2", optional = true, features = ["getrandom"] }
@@ -38,14 +38,15 @@ serde = { version = "1.0.184", optional = true, default-features = false, featur
 
 # Big integer backend
 crypto-bigint = { version = "0.7.1", optional = true, default-features = false, features = ["zeroize","rand_core"] }
-# EXPERIMENT (bigint-heapless-runtime-len): direct git pins — the
-# heapless-runtime-len carrier ships in fixed-bigint 0.6.0-alpha, and the
-# modulus-shape-derived Montgomery width (type_bit_width retirement) in
-# modmath 0.6.0-alpha; neither is semver-reachable from a [patch] over
-# the crates-io lines.
-modmath = { git = "https://github.com/kaidokert/modmath-rs.git", tag = "v0.6.0-alpha.cios.25", optional = true, default-features = false, features = ["zeroize"] }
-modmath-cios = { git = "https://github.com/kaidokert/modmath-rs.git", tag = "v0.6.0-alpha.cios.25", optional = true, default-features = false }
-fixed-bigint = { git = "https://github.com/kaidokert/fixed-bigint-rs", tag = "v0.6.0-alpha.27", default-features = false, features = ["use-unsafe", "zeroize", "cios", "heapless-runtime-len"] }
+# EXPERIMENT (bigint-heapless-runtime-len). const-num-traits (0.2.1) and
+# fixed-bigint (0.6.0) now resolve from crates.io; only modmath itself is
+# unpublished, so it (and its in-repo modmath-cios) stay git-pinned by the
+# immutable tag. The runtime-length HeaplessBigInt carrier is unconditional
+# in fixed-bigint 0.6.0 — the old `heapless-runtime-len` feature was folded
+# in, so it's no longer named here.
+modmath = { git = "https://github.com/kaidokert/modmath-rs.git", tag = "v0.6.0-alpha.cios.36", optional = true, default-features = false, features = ["zeroize"] }
+modmath-cios = { git = "https://github.com/kaidokert/modmath-rs.git", tag = "v0.6.0-alpha.cios.36", optional = true, default-features = false }
+fixed-bigint = { version = "0.6.0", default-features = false, features = ["use-unsafe", "zeroize", "cios"] }
 subtle = { version = "2.6", default-features = false }
 heapless = "0.9"
 
@@ -114,12 +115,10 @@ opt-level = 2
 [profile.bench]
 debug = true
 
-# EXPERIMENT (bigint-heapless-runtime-len) source pins.
-# - const-num-traits: unifies the whole graph on one 0.2.1 (alpha).
-# - modmath / modmath-cios moved to direct [dependencies] git pins (0.6.0
-#   is not semver-reachable from a patch over the crates-io lines); the
-#   modmath-cios patch below covers any residual crates-io requirement in
-#   the graph (e.g. fixed-bigint's cios backend).
+# EXPERIMENT (bigint-heapless-runtime-len) source pins. const-num-traits
+# and fixed-bigint resolve from crates.io now, so no patch for them.
+# modmath-cios is unpublished (an in-repo member of the git-pinned modmath
+# rev); the patch points any residual crates-io requirement in the graph
+# at the matching git tag.
 [patch.crates-io]
-const-num-traits = { git = "https://github.com/kaidokert/num-traits.git", tag = "v0.2.1-alpha.3" }
-modmath-cios = { git = "https://github.com/kaidokert/modmath-rs.git", tag = "v0.6.0-alpha.cios.25" }
+modmath-cios = { git = "https://github.com/kaidokert/modmath-rs.git", tag = "v0.6.0-alpha.cios.36" }
