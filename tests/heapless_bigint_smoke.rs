@@ -14,6 +14,12 @@
 //! runtime widths come from the carrier's inherent constructors and the
 //! future runtime-len modmath kernels, not from this byte path.
 
+// The whole file exercises the `modmath` backend (`rsa::modmath_support`,
+// which is `#[cfg(feature = "modmath")]`), so it compiles to nothing when
+// that feature is off — the `--feature-powerset` config with modmath
+// disabled must not try to resolve the module.
+#![cfg(feature = "modmath")]
+
 use const_num_traits::{BitWidth, BitsPrecision, Ct, Nct};
 use fixed_bigint::HeaplessBigInt;
 
