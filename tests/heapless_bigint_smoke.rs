@@ -29,7 +29,7 @@ type H = HeaplessBigInt<u32, 64>;
 type HCt = HeaplessBigInt<u32, 64, Ct>;
 
 // Real 2048-bit RSA keypair shared with the CT-verification harness.
-include!("../ct-verify/test_keys.rs");
+include!("fixtures/test_keys.rs");
 
 #[test]
 fn be_bytes_roundtrip_and_shape() {
@@ -79,6 +79,23 @@ fn arithmetic_smoke() {
     assert_eq!(sum.len(), 1);
     let mut buf = [0u8; 4];
     assert_eq!(sum.to_be_bytes(&mut buf), &[0x00, 0x01, 0xFF, 0xFF]);
+
+    // Carry into a new limb. `+` is fixed-width *at the operand width* — it
+    // does NOT auto-grow (this carrier is "FixedUInt at a runtime-chosen
+    // len", not a growable bignum): a carry past the operand width panics
+    // on Nct / wraps on Ct. So the carry must have room, which the operand
+    // width provides. `0xFFFF_FFFF` held at len 2 (leading zero limb) plus
+    // 1 = `0x1_0000_0000` (33 bits) fills the second limb; the value-tight
+    // result length is then 2 and the carry shows in the BE encoding.
+    let wide = H::from_be_bytes(&[0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF]); // 2^32-1, len 2
+    let one = H::from_be_bytes(&[0x01]);
+    let carried = wide + one;
+    assert_eq!(carried.len(), 2);
+    let mut buf2 = [0u8; 8];
+    assert_eq!(
+        carried.to_be_bytes(&mut buf2),
+        &[0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00]
+    );
 }
 
 /// Deterministic infallible RNG for the salt/blinding draw — the

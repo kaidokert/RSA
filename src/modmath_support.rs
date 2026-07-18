@@ -10,6 +10,7 @@ use core::ops::{Shr, ShrAssign};
 
 use const_num_traits::ops::overflowing::OverflowingAdd;
 use const_num_traits::ops::wrapping::{WrappingAdd, WrappingMul, WrappingSub};
+use const_num_traits::WithPrecision;
 use const_num_traits::{Ct, HasPersonality, Nct, Personality};
 use const_num_traits::{One, Zero};
 use modmath::{CiosMontMul, CiosMontMulCt, Field as ModmathField, Parity, WideMul};
@@ -221,19 +222,28 @@ where
 {
     type Output = Self;
 
-    fn resize_unchecked(self, _at_least_bits_precision: u32) -> Self::Output {
-        self
+    fn resize_unchecked(self, at_least_bits_precision: u32) -> Self::Output {
+        // `T` is our fixed-bigint carrier (it satisfies `FixedWidthUnsignedInt`,
+        // hence `WithPrecision`), so establish the operating width on the
+        // wrapped value — a real widen on a runtime-length carrier, the
+        // identity on a fixed-width one. Matches the no-alloc `T` impl in
+        // `traits::modular`; this is not the upstream `BoxedUint` path
+        // (that has its own `IntegerResize` via `crypto_bigint::Resize`).
+        Self(WithPrecision::widen_to_precision(
+            self.0,
+            at_least_bits_precision,
+        ))
     }
 
     fn try_resize(self, at_least_bits_precision: u32) -> Option<Self::Output> {
-        // Mirrors `crypto_bigint::Resize::try_resize`: returns `Some` iff
-        // the actual value fits in `at_least_bits_precision` bits. Our
-        // type is fixed-width and `resize_unchecked` is a no-op, but the
-        // check still needs to reject values that wouldn't survive a
-        // narrower precision.
+        // Mirrors `crypto_bigint::Resize::try_resize`: `Some` iff the value
+        // fits in `at_least_bits_precision` bits, resized to that width.
         let value_bits = self.0.bit_length();
         if value_bits <= at_least_bits_precision {
-            Some(self)
+            Some(Self(WithPrecision::widen_to_precision(
+                self.0,
+                at_least_bits_precision,
+            )))
         } else {
             None
         }
@@ -1055,21 +1065,29 @@ mod private_op_tests {
         blinded_matches_unblinded_inner::<HeaplessCt>();
     }
 
-    // Blinded op must fail if `r` shares a factor with `n` — inverse
-    // doesn't exist, `invert_ct` returns None, primitive returns Err.
-    // Toy: n = 35 = 5·7, r = 5 (shares factor with n). No retry at
-    // the primitive level — caller policy. Reference carrier only:
-    // on HeaplessBigInt `invert_ct` returns None for *every* input
-    // (the upstream bug), so this test would pass vacuously there.
+    // Blinded op must fail if `r` shares a factor with `n` — the inverse
+    // doesn't exist, `invert_ct` returns None, and the primitive returns
+    // Err. Toy: n = 35 = 5·7, r = 5 (shares factor with n). No retry at
+    // the primitive level — caller policy. Runs on both carriers: 5 is
+    // genuinely non-invertible mod 35 on each, so `invert_ct` returns
+    // None for the *right* reason (not vacuously).
     #[test]
     fn rsa_private_op_blinded_rejects_non_coprime_r() {
-        let n_params = toy_params::<SmallUCt>();
-        let c = wrap_value(SmallUCt::from(32u8));
-        let d = wrap_value(SmallUCt::from(29u8));
-        let e = wrap_value(SmallUCt::from(5u8));
-        let r_bad = wrap_value(SmallUCt::from(5u8));
-        let result = crate::algorithms::rsa::rsa_private_op_blinded(&r_bad, &c, &d, &e, &n_params);
-        assert!(result.is_err());
+        fn inner<T: TestCt>()
+        where
+            <T as modmath_cios::CiosRowOps>::Word: const_num_traits::CtParity,
+        {
+            let n_params = toy_params::<T>();
+            let c = wrap_value(T::from(32u8));
+            let d = wrap_value(T::from(29u8));
+            let e = wrap_value(T::from(5u8));
+            let r_bad = wrap_value(T::from(5u8)); // shares factor 5 with n = 35
+            let result =
+                crate::algorithms::rsa::rsa_private_op_blinded(&r_bad, &c, &d, &e, &n_params);
+            assert!(result.is_err());
+        }
+        inner::<SmallUCt>();
+        inner::<HeaplessCt>();
     }
 
     // Full-stack blinded op with RNG-driven `r` sampling. Same toy
@@ -1207,10 +1225,11 @@ mod private_op_tests {
         let recovered = PowBoundedExp::<ModMathParams<T, Ct>>::retrieve(&mont_inv);
         assert_eq!(recovered, wrap_value(T::from(12u8)));
     }
-    // Toy width (`u8` limbs, `n = 35`): invert works on both carriers.
-    // At the 2048-bit deployment width (`u32` limbs, full-CAP modulus)
-    // `inv_safegcd_ct` returns `None` for HeaplessBigInt — an upstream
-    // bug covered by the ignored `heapless_bigint_smoke` sign test.
+    // `invert_ct` works on both carriers at every width — the toy `n = 35`
+    // here and the 2048-bit full-CAP deployment modulus exercised
+    // end-to-end by the `heapless_bigint_smoke` blinded-sign test (which
+    // passes; the earlier `inv_safegcd_ct` None-at-u32x64 bug was fixed
+    // upstream in the alpha.21 / cios.8 chain).
     #[test]
     fn invert_ct_modmath_known_answer() {
         invert_ct_known_answer_inner::<SmallUCt>();
