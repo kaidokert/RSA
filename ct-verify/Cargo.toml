@@ -17,10 +17,3 @@ codegen-units = 1
 opt-level = "z"
 panic = "abort"
 incremental = false
-
-# modmath-cios is unpublished (in-repo member of the git-pinned modmath
-# rev the parent rsa crate uses via its path dep). Published fixed-bigint's
-# `cios` feature pulls a crates.io modmath-cios; unify it to the git rev so
-# CiosRowOps/CtParity resolve to one crate (mirrors rsa's own patch).
-[patch.crates-io]
-modmath-cios = { git = "https://github.com/kaidokert/modmath-rs.git", tag = "v0.6.0-alpha.cios.36" }
