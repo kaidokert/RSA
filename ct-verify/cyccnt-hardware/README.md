@@ -75,6 +75,9 @@ contention this sequence avoids.
 
 ## Bounded ETM constant-time gate
 
+The detailed verdict and address-family classification are recorded in
+[`ETM_PROFILE_FINDINGS.md`](ETM_PROFILE_FINDINGS.md).
+
 The `etm-single-trial` feature turns this same signing boundary into a
 host-selected, one-operation ETM fixture. Both keys remain in one identical
 ELF. While the reset core is halted, `cargo embedded-measure
