@@ -29,7 +29,7 @@ cortex-m-rt = "0.7"
 cortex-m-semihosting = "0.5"
 panic-semihosting = { version = "0.6", features = ["exit"] }
 
-fixed-bigint = { version = "0.5.0", default-features = false, features = ["zeroize", "use-unsafe", "cios"] }
+fixed-bigint = { version = "0.6.0", default-features = false, features = ["zeroize", "use-unsafe", "cios"] }
 rsa = { path = "../..", package = "rsa_heapless", default-features = false, features = ["modmath"] }
 sha1 = { version = "0.11.0-rc.5", default-features = false, features = ["oid"] }
 sha2 = { version = "0.11.0-rc.5", default-features = false, features = ["oid"] }
@@ -46,3 +46,10 @@ unexpected_cfgs = { level = "warn", check-cfg = [
     'cfg(thumbv7m)',
     'cfg(thumbv7em)',
 ] }
+
+# modmath-cios is unpublished (in-repo member of the git-pinned modmath
+# rev). Published fixed-bigint's `cios` feature pulls a crates.io
+# modmath-cios; this patch unifies it to the same git rev RSA uses, so
+# CiosRowOps/CtParity resolve to one crate (mirrors RSA's own patch).
+[patch.crates-io]
+modmath-cios = { git = "https://github.com/kaidokert/modmath-rs.git", tag = "v0.6.0-alpha.cios.36" }
