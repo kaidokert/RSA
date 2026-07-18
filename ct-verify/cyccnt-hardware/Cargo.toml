@@ -14,6 +14,7 @@ carrier-u32x16 = []
 carrier-u32x32 = []
 carrier-u32x64 = []
 carrier-u8x64 = []
+etm-single-trial = []
 
 [dependencies]
 const-num-traits = { version = "0.2", default-features = false, features = ["ct"] }

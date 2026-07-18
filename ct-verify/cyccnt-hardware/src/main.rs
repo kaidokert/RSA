@@ -5,8 +5,11 @@ use const_num_traits::Ct;
 use core::{convert::Infallible, hint::black_box};
 use cortex_m_rt::entry;
 use embedded_measure::cortex_m::DwtCycleCounter;
+#[cfg(not(feature = "etm-single-trial"))]
 use embedded_measure::report::Field;
+#[cfg(not(feature = "etm-single-trial"))]
 use embedded_measure::stack::{CortexM, LinkerStack, StackConfig, StackProbe};
+#[cfg(not(feature = "etm-single-trial"))]
 use embedded_measure::suite::{PairedSuite, PairedSuiteConfig, PairedSuiteFields};
 use fixed_bigint::FixedUInt;
 use rand_core::{TryCryptoRng, TryRng};
@@ -18,12 +21,17 @@ use sha2::Sha256;
 
 include!("../../test_keys.rs");
 
+#[cfg(not(feature = "etm-single-trial"))]
 const TRIALS: usize = 4;
+#[cfg(not(feature = "etm-single-trial"))]
 const BATCHES: usize = 1;
+#[cfg(not(feature = "etm-single-trial"))]
 const MAX_POSITIVE_SPREAD: u32 = 32;
+#[cfg(not(feature = "etm-single-trial"))]
 const MAX_SAFE_DWT_REGION: u32 = 0xf000_0000;
 const RNG_SEED: u64 = 0x4354_5f52_5341_3531;
 const MESSAGE: &[u8] = b"RSA CYCCNT fixture message";
+#[cfg(not(feature = "etm-single-trial"))]
 const STACK_SAFE_ZONE: usize = 512;
 
 const _: () = assert!(
@@ -50,16 +58,19 @@ const _: () = assert!(
 );
 
 #[cfg(feature = "rsa512")]
+#[cfg(not(feature = "etm-single-trial"))]
 const SUITE: &str = "rsa512-cyccnt";
 #[cfg(feature = "rsa512")]
 const KEY_BYTES: usize = 64;
 
 #[cfg(feature = "rsa1024")]
+#[cfg(not(feature = "etm-single-trial"))]
 const SUITE: &str = "rsa1024-cyccnt";
 #[cfg(feature = "rsa1024")]
 const KEY_BYTES: usize = 128;
 
 #[cfg(feature = "rsa2048")]
+#[cfg(not(feature = "etm-single-trial"))]
 const SUITE: &str = "rsa2048-cyccnt";
 #[cfg(feature = "rsa2048")]
 const KEY_BYTES: usize = 256;
@@ -67,28 +78,34 @@ const KEY_BYTES: usize = 256;
 #[cfg(feature = "carrier-u32x16")]
 type Carrier = FixedUInt<u32, 16, Ct>;
 #[cfg(feature = "carrier-u32x16")]
+#[cfg(not(feature = "etm-single-trial"))]
 const CARRIER: &str = "u32x16";
 
 #[cfg(feature = "carrier-u32x32")]
 type Carrier = FixedUInt<u32, 32, Ct>;
 #[cfg(feature = "carrier-u32x32")]
+#[cfg(not(feature = "etm-single-trial"))]
 const CARRIER: &str = "u32x32";
 
 #[cfg(feature = "carrier-u32x64")]
 type Carrier = FixedUInt<u32, 64, Ct>;
 #[cfg(feature = "carrier-u32x64")]
+#[cfg(not(feature = "etm-single-trial"))]
 const CARRIER: &str = "u32x64";
 
 #[cfg(feature = "carrier-u8x64")]
 type Carrier = FixedUInt<u8, 64, Ct>;
 #[cfg(feature = "carrier-u8x64")]
+#[cfg(not(feature = "etm-single-trial"))]
 const CARRIER: &str = "u8x64";
 
 type SigningKey = GenericSigningKey<Sha256, Carrier, ModMathParams<Carrier, Ct>>;
 
 #[cfg(feature = "clock-168mhz")]
+#[cfg(not(feature = "etm-single-trial"))]
 const CLOCK_PROFILE: &str = "hsi-pll-168mhz";
 #[cfg(not(feature = "clock-168mhz"))]
+#[cfg(not(feature = "etm-single-trial"))]
 const CLOCK_PROFILE: &str = "reset-hsi-16mhz";
 
 #[cfg(feature = "clock-168mhz")]
@@ -113,6 +130,7 @@ fn configure_clock() -> u32 {
     16_000_000
 }
 
+#[cfg(not(feature = "etm-single-trial"))]
 fn paint_stack() -> StackProbe {
     let stack = unsafe { LinkerStack::<CortexM>::cortex_m_runtime() };
     StackProbe::paint(&stack, StackConfig::new(STACK_SAFE_ZONE)).unwrap()
@@ -130,6 +148,7 @@ const KEY_A: KeyInput = KeyInput {
     private_exponent: &D_512,
 };
 #[cfg(feature = "rsa512")]
+#[cfg(not(feature = "etm-single-trial"))]
 const KEY_B: KeyInput = KeyInput {
     modulus: &N_512_B,
     private_exponent: &D_512_B,
@@ -141,6 +160,7 @@ const KEY_A: KeyInput = KeyInput {
     private_exponent: &D_2048,
 };
 #[cfg(feature = "rsa2048")]
+#[cfg(not(feature = "etm-single-trial"))]
 const KEY_B: KeyInput = KeyInput {
     modulus: &N_2048_B,
     private_exponent: &D_2048_B,
@@ -152,6 +172,7 @@ const KEY_A: KeyInput = KeyInput {
     private_exponent: &D_1024,
 };
 #[cfg(feature = "rsa1024")]
+#[cfg(not(feature = "etm-single-trial"))]
 const KEY_B: KeyInput = KeyInput {
     modulus: &N_1024_B,
     private_exponent: &D_1024_B,
@@ -243,7 +264,45 @@ fn sign_once(signing_key: &SigningKey) -> SignOutcome {
     }
 }
 
+// Stable instruction addresses for non-halting ETM start/stop comparators.
+// Keep the markers distinct so link-time optimization cannot fold them.
+#[cfg(feature = "etm-single-trial")]
+#[unsafe(no_mangle)]
 #[inline(never)]
+pub extern "C" fn embedded_measure_trace_begin() {
+    // SAFETY: `nop` has no architectural side effects beyond advancing PC.
+    unsafe { core::arch::asm!("nop", options(nomem, nostack)) };
+}
+
+#[cfg(feature = "etm-single-trial")]
+#[unsafe(no_mangle)]
+#[inline(never)]
+pub extern "C" fn embedded_measure_trace_end() {
+    // SAFETY: `nop` has no architectural side effects beyond advancing PC.
+    unsafe { core::arch::asm!("nop", "nop", options(nomem, nostack)) };
+}
+
+#[cfg(feature = "etm-single-trial")]
+fn run_etm_single_trial(signing_key: &SigningKey, hclk_hz: u32) -> ! {
+    // Keep trace disabled during cache/path warm-up. The ETM start comparator
+    // enables collection only when the exported begin marker executes.
+    let warmup = sign_once(black_box(signing_key));
+    let start = cortex_m::peripheral::DWT::cycle_count();
+    let trace_begin: extern "C" fn() = black_box(embedded_measure_trace_begin);
+    trace_begin();
+    let outcome = sign_once(black_box(signing_key));
+    let trace_end: extern "C" fn() = black_box(embedded_measure_trace_end);
+    trace_end();
+    let ticks = cortex_m::peripheral::DWT::cycle_count().wrapping_sub(start);
+    embedded_measure::rtt::print(format_args!(
+        "ETM_TRIAL fixture:pkcs1v15_blinded_sign ticks:{} frequency_hz:{} warmup_ok:{} output_ok:{} rng_words:{}\n",
+        ticks, hclk_hz, warmup.ok as u8, outcome.ok as u8, outcome.rng_words,
+    ));
+    stop()
+}
+
+#[inline(never)]
+#[cfg(not(feature = "etm-single-trial"))]
 fn negative_early_exit(secret: &[u8; KEY_BYTES]) -> bool {
     let mut leading_zeroes = 0;
     for &byte in black_box(secret) {
@@ -264,21 +323,33 @@ fn stop() -> ! {
 
 #[entry]
 fn main() -> ! {
-    let mut reporter = embedded_measure::rtt::init_ct_compatible();
     let hclk_hz = configure_clock();
     let mut peripherals = cortex_m::Peripherals::take().unwrap();
-    let mut counter = DwtCycleCounter::enable(
+    let counter = DwtCycleCounter::enable(
         &mut peripherals.DCB,
         &mut peripherals.DWT,
         Some(hclk_hz as u64),
     )
     .unwrap();
-    let stack_probe = paint_stack();
-
     let Some(key_a) = prepare_key(&KEY_A) else {
         embedded_measure::rtt::print(format_args!("SETUP_FAIL key:A\n"));
         stop();
     };
+    #[cfg(feature = "etm-single-trial")]
+    {
+        let _reporter = embedded_measure::rtt::init_ct_compatible();
+        let _ = counter;
+        run_etm_single_trial(&key_a, hclk_hz);
+    }
+
+    #[cfg(not(feature = "etm-single-trial"))]
+    run_campaign(key_a, counter, hclk_hz)
+}
+
+#[cfg(not(feature = "etm-single-trial"))]
+fn run_campaign(key_a: SigningKey, mut counter: DwtCycleCounter, hclk_hz: u32) -> ! {
+    let mut reporter = embedded_measure::rtt::init_ct_compatible();
+    let stack_probe = paint_stack();
     let Some(key_b) = prepare_key(&KEY_B) else {
         embedded_measure::rtt::print(format_args!("SETUP_FAIL key:B\n"));
         stop();
