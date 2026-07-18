@@ -10,6 +10,7 @@ use core::ops::{Shr, ShrAssign};
 
 use const_num_traits::ops::overflowing::OverflowingAdd;
 use const_num_traits::ops::wrapping::{WrappingAdd, WrappingMul, WrappingSub};
+use const_num_traits::FromByteSlice;
 use const_num_traits::WithPrecision;
 use const_num_traits::{Ct, HasPersonality, Nct, Personality};
 use const_num_traits::{One, Zero};
@@ -327,6 +328,7 @@ pub type ModMathValue<T> = T;
 #[cfg(feature = "modmath")]
 fn try_random_mod_masked<R, T, W, F>(
     rng: &mut R,
+    modulus_bits: u32,
     leading_zero_bits: u32,
     modulus: &W,
     wrap: F,
@@ -342,22 +344,43 @@ where
 
     const MAX_TRIES: u32 = 128;
     let mut bytes = <T as FixedWidthUnsignedInt>::Bytes::default();
+    // The `Bytes` holder is capacity-width, but the modulus operates at
+    // `modulus_bits` (its `bits_precision`, always a whole number of
+    // limbs). Sample only the trailing `window_bytes` (big-endian: the
+    // low-order bytes): the mask (`leading_zero_bits` = the modulus's own
+    // headroom) is then relative to the modulus width, so acceptance is
+    // >= 50% even when the modulus is much narrower than the capacity,
+    // and parsing just that window yields a candidate at `len ==
+    // modulus.len` — width-consistent with the field it feeds rather than
+    // a capacity-width operand. For a full-width modulus (`modulus_bits ==
+    // capacity`) the window is the whole buffer, so the deployment path is
+    // unchanged.
+    let window_bytes = (modulus_bits as usize).div_ceil(8);
+    let lo = bytes.as_ref().len().saturating_sub(window_bytes);
     for _ in 0..MAX_TRIES {
         rng.try_fill_bytes(bytes.as_mut()).map_err(|_| Error::Rng)?;
-        // Big-endian: top bytes are the leading bytes.
+        // Big-endian within the window: mask the leading bytes of the
+        // window. `skip(lo)` / `get_mut(lo + …)` keep the accesses
+        // bounds-check-free (folded into the iterator / `Some` arm), same
+        // discipline as the panic-free audit requires elsewhere.
         let buf = bytes.as_mut();
-        for byte in buf.iter_mut().take(zero_bytes) {
+        for byte in buf.iter_mut().skip(lo).take(zero_bytes) {
             *byte = 0;
         }
         if zero_bits_in_next > 0 {
-            // `get_mut` rather than `buf[zero_bytes]` so no
-            // `panic_bounds_check` is synthesized — the index guard is
-            // folded into the `Some` arm.
-            if let Some(b) = buf.get_mut(zero_bytes) {
+            if let Some(b) = buf.get_mut(lo + zero_bytes) {
                 *b &= 0xFFu8 >> zero_bits_in_next;
             }
         }
-        let candidate = <T as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(bytes.as_ref())?;
+        let window = bytes.as_ref().get(lo..).ok_or(Error::Internal)?;
+        // `from_be_slice`, not the `Bytes`-holder `try_from_be_bytes_vartime`:
+        // its output width is the window length — the (public) modulus
+        // width — so on the runtime-length carrier `r` lands at the field
+        // width the blinded arithmetic needs, rather than padded to
+        // capacity. `window.len()` is derived from `modulus_bits`, never
+        // from `r`'s bytes, so `r`'s width leaks nothing. On a fixed-width
+        // carrier it's the same value zero-extended to capacity (a no-op).
+        let candidate = <T as FromByteSlice>::from_be_slice(window).map_err(|_| Error::Internal)?;
         let wrapped = wrap(candidate);
         if wrapped < *modulus {
             return Ok(wrapped);
@@ -380,7 +403,13 @@ where
         if leading_zero_bits >= container_bits {
             return Err(Error::InvalidModulus);
         }
-        try_random_mod_masked::<R, T, _, _>(rng, leading_zero_bits, modulus, wrap_value::<T>)
+        try_random_mod_masked::<R, T, _, _>(
+            rng,
+            container_bits,
+            leading_zero_bits,
+            modulus,
+            wrap_value::<T>,
+        )
     }
 }
 
@@ -398,7 +427,7 @@ where
         if leading_zero_bits >= container_bits {
             return Err(Error::InvalidModulus);
         }
-        try_random_mod_masked::<R, T, T, _>(rng, leading_zero_bits, modulus, |x| x)
+        try_random_mod_masked::<R, T, T, _>(rng, container_bits, leading_zero_bits, modulus, |x| x)
     }
 }
 
@@ -1162,13 +1191,12 @@ mod private_op_tests {
     // value is many bits narrower than its width is ~2⁻ˡᶻ, blowing the
     // 128-tries cap. Masking must let sampling succeed even when the
     // value occupies only ~6 bits of a full-width modulus — this is
-    // `toy_params()` (n = 35). Runs on both carriers: `val` builds `n`
-    // at full carrier width (`len == CAP`), so `bits_precision` equals
-    // the sample-buffer width on both, and the ~6-bit *value* is the
-    // narrow quantity the mask brings the candidate down to. (The mask
-    // is keyed off the modulus width, which is why the modulus must be
-    // constructed at full width — a `len < CAP` heapless modulus, which
-    // RSA never produces, would desync it.)
+    // `toy_params()` (n = 35, built at full carrier width `len == CAP`),
+    // so here `bits_precision` equals the sample-buffer width and the
+    // ~6-bit *value* is the narrow quantity the mask brings the candidate
+    // down to. The complementary case — a modulus narrow in *width*
+    // (`len < CAP`), where the window is a strict sub-slice of the buffer
+    // — is `try_random_mod_accepts_narrow_modulus`.
     #[test]
     fn try_random_mod_modmath_succeeds_on_narrow_modulus_wide_carrier() {
         fn inner<T: TestCt>()
@@ -1257,6 +1285,82 @@ mod private_op_tests {
     fn mul_ct_modmath_inverse_round_trip() {
         mul_ct_inverse_round_trip_inner::<SmallUCt>();
         mul_ct_inverse_round_trip_inner::<HeaplessCt>();
+    }
+
+    // ── Sub-capacity operation: a runtime-length modulus narrower than
+    // the carrier capacity (`len < CAP`). This is the deployment target
+    // for one binary serving multiple key sizes — e.g. a 4096-bit-CAP
+    // `HeaplessBigInt` operating on 1024/2048-bit keys at their own width
+    // rather than padded to capacity. `HeaplessCt` is `u8 × 64` (512-bit
+    // CAP); a natural-width `n = 35` (built with the inherent slice
+    // constructor) has `bits_precision = 8`, so `len = 1 << 64`.
+
+    // The rejection sampler must accept on a narrow modulus. Its buffer is
+    // capacity-width, so the mask/window has to be taken relative to the
+    // modulus width — otherwise `leading_zeros(modulus)` (headroom within
+    // the modulus width, here 0) masks nothing of a 512-bit buffer and the
+    // candidate is ~2^512 ≫ 35, rejected every try.
+    #[test]
+    fn try_random_mod_accepts_narrow_modulus() {
+        use crate::traits::modular::TryRandomMod;
+        use rand::rngs::ChaCha8Rng;
+        use rand_core::SeedableRng;
+        let n_nat = HeaplessCt::from_be_bytes(&[35]); // inherent -> len 1
+        assert_eq!(
+            const_num_traits::BitsPrecision::bits_precision(&n_nat),
+            8,
+            "modulus must be at its natural width, not padded to CAP"
+        );
+        let n = wrap_value(n_nat);
+        let mut rng = ChaCha8Rng::from_seed([7; 32]);
+        for _ in 0..16 {
+            let r = <ModMathValue<HeaplessCt> as TryRandomMod>::try_random_mod(&mut rng, &n)
+                .expect("sampler must accept on a narrow modulus");
+            assert!(r < n, "sampled r must be < modulus");
+        }
+    }
+
+    // The field itself operates correctly at a narrow width: plain op and
+    // blinded op both recover m = 2 when every operand shares the modulus
+    // width. (c = 32, d = 29, e = 5, r = 6, all len 1.)
+    #[test]
+    fn narrow_modulus_private_ops_round_trip() {
+        let n_params =
+            ModMathParams::<HeaplessCt, Ct>::new(HeaplessCt::from_be_bytes(&[35])).unwrap();
+        let c = wrap_value(HeaplessCt::from(32u8));
+        let d = wrap_value(HeaplessCt::from(29u8));
+        let e = wrap_value(HeaplessCt::from(5u8));
+        let two = HeaplessCt::from(2u8);
+
+        let m = crate::algorithms::rsa::rsa_private_op(&c, &d, &n_params);
+        assert_eq!(into_inner(m), two);
+
+        let r_nat = wrap_value(HeaplessCt::from(6u8)); // coprime with 35, len 1
+        let blinded =
+            crate::algorithms::rsa::rsa_private_op_blinded(&r_nat, &c, &d, &e, &n_params).unwrap();
+        assert_eq!(into_inner(blinded), two);
+    }
+
+    // Full sampled blinded op on a narrow modulus: the sampler now parses
+    // its modulus-width window with `FromByteSlice::from_be_slice`, so the
+    // sampled `r` lands at the field width and the blinded arithmetic (and
+    // verify-after-sign) closes. This is the end-to-end sub-capacity proof
+    // — the randomized sign path a `len < CAP` deployment actually runs.
+    #[test]
+    fn narrow_modulus_sampled_blinded_op() {
+        use rand::rngs::ChaCha8Rng;
+        use rand_core::SeedableRng;
+        let n_params =
+            ModMathParams::<HeaplessCt, Ct>::new(HeaplessCt::from_be_bytes(&[35])).unwrap();
+        let c = wrap_value(HeaplessCt::from(32u8));
+        let d = wrap_value(HeaplessCt::from(29u8));
+        let e = wrap_value(HeaplessCt::from(5u8));
+        let mut rng = ChaCha8Rng::from_seed([9; 32]);
+        let recovered = crate::algorithms::rsa::rsa_private_op_and_check_blinded(
+            &mut rng, &c, &d, &e, &n_params,
+        )
+        .unwrap();
+        assert_eq!(into_inner(recovered), HeaplessCt::from(2u8));
     }
 
     #[test]

@@ -7,7 +7,7 @@ use core::borrow::Borrow;
 use alloc::boxed::Box;
 #[cfg(not(feature = "modmath"))]
 use const_num_traits::PrimInt;
-use const_num_traits::{BitWidth, BitsPrecision, WithPrecision};
+use const_num_traits::{BitWidth, BitsPrecision, FromByteSlice, WithPrecision};
 use const_num_traits::{FromBytes as NumFromBytes, ToBytes as NumToBytes};
 #[cfg(feature = "alloc")]
 use crypto_bigint::{
@@ -48,8 +48,13 @@ pub trait IntegerResize: Sized {
 // `widen_to_precision`) now requires it on the carrier — the "state a
 // width" contract entering the type system. Identity on fixed-width
 // carriers; real on the runtime-length one.
+// `FromByteSlice` is the *slice*-taking constructor, distinct from the
+// `Bytes`-holder `try_from_be_bytes_vartime` below: its output width is
+// the slice length, not the capacity-sized holder. The blinding sampler
+// uses it to build `r` at the (public) modulus width — width-consistent
+// with the field, and never derived from `r`'s own bytes.
 pub trait FixedWidthUnsignedInt:
-    Zeroize + Clone + Copy + BitsPrecision + BitWidth + WithPrecision
+    Zeroize + Clone + Copy + BitsPrecision + BitWidth + WithPrecision + FromByteSlice
 {
     type Bytes: NumBytes + Default + AsMut<[u8]>;
 
@@ -73,6 +78,7 @@ where
         + BitsPrecision
         + BitWidth
         + WithPrecision
+        + FromByteSlice
         + NumToBytes
         + NumFromBytes,
     T: NumToBytes<Bytes = <T as NumFromBytes>::Bytes>,
@@ -128,6 +134,7 @@ where
         + BitsPrecision
         + BitWidth
         + WithPrecision
+        + FromByteSlice
         + NumToBytes
         + NumFromBytes,
     T: NumToBytes<Bytes = <T as NumFromBytes>::Bytes>,
