@@ -26,11 +26,6 @@ const RNG_SEED: u64 = 0x4354_5f52_5341_3531;
 const MESSAGE: &[u8] = b"RSA CYCCNT fixture message";
 const STACK_SAFE_ZONE: usize = 512;
 
-unsafe extern "C" {
-    static _stack_start: u8;
-    static _stack_end: u8;
-}
-
 const _: () = assert!(
     cfg!(feature = "rsa512") as usize
         + cfg!(feature = "rsa1024") as usize
@@ -119,13 +114,7 @@ fn configure_clock() -> u32 {
 }
 
 fn paint_stack() -> StackProbe {
-    let stack = unsafe {
-        LinkerStack::new(
-            core::ptr::addr_of!(_stack_end).cast_mut(),
-            core::ptr::addr_of!(_stack_start).cast_mut(),
-            CortexM,
-        )
-    };
+    let stack = unsafe { LinkerStack::<CortexM>::cortex_m_runtime() };
     StackProbe::paint(&stack, StackConfig::new(STACK_SAFE_ZONE)).unwrap()
 }
 
