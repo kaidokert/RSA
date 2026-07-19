@@ -21,7 +21,9 @@ use sha2::Sha256;
 
 include!("../../test_keys.rs");
 
-#[cfg(not(feature = "etm-single-trial"))]
+#[cfg(all(not(feature = "etm-single-trial"), feature = "statistical-campaign"))]
+const TRIALS: usize = 100;
+#[cfg(all(not(feature = "etm-single-trial"), not(feature = "statistical-campaign")))]
 const TRIALS: usize = 4;
 #[cfg(not(feature = "etm-single-trial"))]
 const BATCHES: usize = 1;

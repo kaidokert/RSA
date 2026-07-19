@@ -82,3 +82,17 @@ delay-before-run-seconds = 300
 [campaigns.rsa-signing-ct-jtrace-f407]
 profile = "jtrace-f407-168mhz"
 case-set = "rsa-signing-cyccnt"
+constant-time = { welch-threshold = 4.5, minimum-samples-per-class = 4, protected-classes = ["positive"], control-classes = ["negative"], gate = false }
+
+[[case-sets.rsa512-statistical-cyccnt]]
+name = "rsa512-u32x16-statistical"
+binary = "rsa-cyccnt-hardware"
+features = ["rsa512", "carrier-u32x16", "statistical-campaign"]
+expected-suite = "rsa512-cyccnt"
+timeout-seconds = 1200
+delay-before-run-seconds = 60
+
+[campaigns.rsa512-statistical-ct-jtrace-f407]
+profile = "jtrace-f407-168mhz"
+case-set = "rsa512-statistical-cyccnt"
+constant-time = { welch-threshold = 4.5, minimum-samples-per-class = 100, protected-classes = ["positive"], control-classes = ["negative"], gate = true }
