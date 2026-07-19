@@ -1,5 +1,7 @@
-### rsa heapless fork
+### RSA heapless fork
 
+[![crate](https://img.shields.io/crates/v/rsa_heapless.svg)](https://crates.io/crates/rsa_heapless)
+[![documentation](https://docs.rs/rsa_heapless/badge.svg)](https://docs.rs/rsa_heapless/)
 [![CI](https://github.com/kaidokert/RSA/actions/workflows/ci.yml/badge.svg)](https://github.com/kaidokert/RSA/actions/workflows/ci.yml)
 [![AVR](https://github.com/kaidokert/RSA/actions/workflows/avr.yml/badge.svg)](https://github.com/kaidokert/RSA/actions/workflows/avr.yml)
 [![Cortex-M](https://github.com/kaidokert/RSA/actions/workflows/cortex_m.yml/badge.svg)](https://github.com/kaidokert/RSA/actions/workflows/cortex_m.yml)
@@ -15,19 +17,19 @@ Key generation stays off the heapless path — it needs the heavy `crypto-primes
 
 Constant-time testing is documented in [`ct-verify/README.md`](https://github.com/kaidokert/RSA/blob/heapless/ct-verify/README.md).
 
-#### Resource usage (as of version 0.10.0-rc.18)
+#### Resource usage (as of version 0.5.0)
 
 PSS signature verification. The `u8` backend uses 8-bit limbs (more portable, works on 8-bit AVR); the `u32` backend uses 32-bit limbs (natural on 32-bit cores). Full sweeps across key sizes, operations, and targets live under [`footprint/`](footprint/).
 
 | Target          |  Key | Hash    | Backend | .text (KiB) | Stack (bytes) |
 | --------------- | ---: | ------- | ------- | ----------: | ------------: |
-| ATmega2560      |  512 | SHA-1   | u8      |        27.4 |          3099 |
-| Cortex-M0       |  512 | SHA-1   | u32     |         8.9 |          4208 |
-| Cortex-M0       | 2048 | SHA-256 | u32     |        15.5 |         11724 |
-| Cortex-M3       |  512 | SHA-1   | u32     |         9.2 |          4216 |
-| Cortex-M3       | 2048 | SHA-256 | u32     |        13.1 |         11564 |
-| sifive_e (RV32) |  512 | SHA-1   | u32     |        11.3 |          2840 |
-| sifive_e (RV32) | 2048 | SHA-256 | u32     |        21.1 |         11736 |
+| ATmega2560      |  512 | SHA-1   | u8      |        27.8 |          3882 |
+| Cortex-M0       |  512 | SHA-1   | u32     |         8.9 |          4536 |
+| Cortex-M0       | 2048 | SHA-256 | u32     |         7.0 |         13984 |
+| Cortex-M3       |  512 | SHA-1   | u32     |         9.0 |          4536 |
+| Cortex-M3       | 2048 | SHA-256 | u32     |         6.7 |         14596 |
+| sifive_e (RV32) |  512 | SHA-1   | u32     |        11.4 |          3580 |
+| sifive_e (RV32) | 2048 | SHA-256 | u32     |         9.4 |         14540 |
 
 #### Example (host, alloc)
 
