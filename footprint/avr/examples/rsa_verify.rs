@@ -25,7 +25,7 @@ const _: () = {
 compile_error!("hash_sha1 only paired with key_512 (no fixture exists for other key sizes)");
 
 use fixed_bigint::FixedUInt;
-use krabi_caliper::avr::timer_measurement;
+use krabi_caliper::avr::FootprintConfig;
 use krabi_caliper::report::{Field, UfmtReporter};
 use rsa::modmath_support::public_key_from_be_bytes;
 use rsa::pkcs1v15::{GenericSignature, GenericVerifyingKey};
@@ -80,50 +80,27 @@ fn main() -> ! {
     let pins = arduino_hal::pins!(dp);
     let serial = arduino_hal::default_serial!(dp, pins, 57600);
 
-    // SAFETY: ATmega2560 SRAM above `_end` is reserved for this single stack.
-    let stack_probe =
-        unsafe { krabi_caliper::stack::paint_avr_runtime::<64>(0x2200, 0xce) }.unwrap();
-    let counter = krabi_caliper::avr::Atmega2560Timer1Counter::start(&dp.TC1);
-    let result = {
-        let key =
-            public_key_from_be_bytes::<Key>(&fixture::MODULUS, fixture::PUBLIC_EXPONENT).unwrap();
-        let verifying_key = GenericVerifyingKey::<Hash, _, _>::new(key);
-        let signature = GenericSignature::from(Key::from_be_bytes(&fixture::SIGNATURE));
-        verifying_key.verify(fixture::MESSAGE, &signature).is_ok()
-    };
-    let ticks = counter.elapsed_ticks();
-    let ms = counter.elapsed_ms();
-    let stack = stack_probe.measure();
     let fields = [
         Field::token("target", "atmega2560"),
         Field::token("operation", "verify"),
     ];
     let mut reporter = UfmtReporter::new(serial);
-    krabi_caliper::report_completed!(
-        &mut reporter,
-        benchmark: "rsa-footprint",
-        passed: result,
-        fields: &fields,
-        stack: stack,
-        measurements: [("timer1", timer_measurement(ticks as u64, 15_625, false))]
-    )
+    // SAFETY: ATmega2560 SRAM above `_end` is reserved for this single stack.
+    unsafe {
+        krabi_caliper::avr::run_atmega2560_footprint::<64, _>(
+            &dp.TC1,
+            &mut reporter,
+            FootprintConfig::new("rsa-footprint", &fields).sentinel(0xce),
+            || {
+                let key =
+                    public_key_from_be_bytes::<Key>(&fixture::MODULUS, fixture::PUBLIC_EXPONENT)
+                        .unwrap();
+                let verifying_key = GenericVerifyingKey::<Hash, _, _>::new(key);
+                let signature = GenericSignature::from(Key::from_be_bytes(&fixture::SIGNATURE));
+                verifying_key.verify(fixture::MESSAGE, &signature).is_ok()
+            },
+        )
+    }
     .unwrap();
-    let mut serial = reporter.into_inner();
-
-    if result {
-        ufmt::uwriteln!(&mut serial, "rsa ACCEPT").ok();
-    } else {
-        ufmt::uwriteln!(&mut serial, "rsa REJECT").ok();
-    }
-    ufmt::uwriteln!(&mut serial, "Time: {} ms ({} ticks)", ms, ticks).ok();
-    ufmt::uwriteln!(
-        &mut serial,
-        "Max stack usage: {} bytes",
-        stack.high_water_bytes
-    )
-    .ok();
-
-    loop {
-        unsafe { core::arch::asm!("sleep") }
-    }
+    krabi_caliper::avr::park_simavr()
 }

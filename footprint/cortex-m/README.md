@@ -24,10 +24,7 @@ probe-rs run --chip STM32F407VGTx --protocol swd \
   target/thumbv7em-none-eabihf/release/examples/rsa_verify
 ```
 
-Hardware metrics include the stack high-water mark, raw DWT `CYCCNT` as
-`dwt_cycles`, and raw `systick_cycles`. The legacy `cycles` field remains
-SysTick cycles divided by 1,000 for QEMU compatibility. DWT measurements must
-be shorter than 2^32 core cycles. Stack painting and scanning use the shared
-`krabi-caliper` probe also used by the RISC-V and AVR harnesses.
-Stack results are emitted as versioned `EM_STACK` records; the legacy
-`METRIC stack:` field remains during parser migration.
+Hardware evidence uses canonical `EM_MEASUREMENT` records with `systick` and
+`dwt` counter names, plus a versioned `EM_STACK` record. DWT measurements must
+be shorter than 2^32 core cycles. Stack painting, counter acquisition, and
+reporting use the same `krabi-caliper` lifecycle adapter as the QEMU fixtures.

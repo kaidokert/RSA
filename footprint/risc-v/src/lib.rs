@@ -2,9 +2,8 @@
 
 use core::fmt::Write;
 use core::hint::black_box;
-use krabi_caliper::Counter;
 use krabi_caliper::report::Field;
-use krabi_caliper::risc_v::{McycleCounter, MinstretCounter, MmioTxFifo32, write_mmio32};
+use krabi_caliper::risc_v::{FootprintConfig, MmioTxFifo32, write_mmio32};
 use krabi_caliper::uart::{UartReporter, reporter};
 
 pub const MODULUS: [u8; 64] = [
@@ -35,53 +34,20 @@ fn uart_reporter() -> SifiveReporter {
 
 pub fn test_fixture(testable: fn() -> bool, backend: &str) -> ! {
     uart_init();
-
-    // SAFETY: riscv-rt owns the single stack described by its linker symbols.
-    let stack_probe = unsafe { krabi_caliper::stack::paint_riscv_runtime::<256>() }.unwrap();
-    let mut counter = McycleCounter::new(None);
-    let mut instructions = MinstretCounter::new(None);
-    let start = counter.now();
-    let instructions_start = instructions.now();
-    let result = testable();
-    let instruction_measurement = instructions.elapsed(instructions_start);
-    let measurement = counter.elapsed(start);
-    let elapsed = measurement.ticks / 1000;
-    let stack = stack_probe.measure();
-
-    let mut reporter = uart_reporter();
     let fields = [
         Field::token("target", "riscv32"),
         Field::token("backend", backend),
     ];
-    if result {
-        let _ = writeln!(reporter, "rsa ACCEPT");
-    } else {
-        let _ = writeln!(reporter, "rsa REJECT");
+    // SAFETY: riscv-rt owns the single stack described by its linker symbols.
+    unsafe {
+        krabi_caliper::risc_v::run_footprint::<256, _>(
+            uart_reporter,
+            FootprintConfig::new("rsa-footprint", &fields),
+            testable,
+        )
     }
-    let _ = write!(
-        reporter,
-        "METRIC stack:{} cycles:{} target:riscv32 backend:",
-        stack.high_water_bytes, elapsed
-    );
-    let _ = reporter.write_str(backend);
-    let _ = reporter.write_str("\n");
-    krabi_caliper::report_completed!(
-        &mut reporter,
-        benchmark: "rsa-footprint",
-        passed: result,
-        fields: &fields,
-        stack: stack,
-        measurements: [
-            ("minstret", instruction_measurement),
-            ("mcycle", measurement),
-        ]
-    )
     .unwrap();
-
-    // sifive_e has no exit mechanism — loop forever, wrapper kills QEMU
-    loop {
-        core::hint::spin_loop()
-    }
+    krabi_caliper::risc_v::park()
 }
 
 #[inline(never)]
