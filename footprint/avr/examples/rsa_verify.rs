@@ -24,16 +24,13 @@ const _: () = {
 #[cfg(all(feature = "hash_sha1", not(feature = "key_512")))]
 compile_error!("hash_sha1 only paired with key_512 (no fixture exists for other key sizes)");
 
-use krabi_caliper::avr::timer_measurement;
-use krabi_caliper::report::{
-    Field, MeasurementRecord, StackRecord, write_measurement_ufmt, write_stack_ufmt,
-};
 use fixed_bigint::FixedUInt;
+use krabi_caliper::avr::timer_measurement;
+use krabi_caliper::report::{Field, UfmtReporter};
 use rsa::modmath_support::public_key_from_be_bytes;
 use rsa::pkcs1v15::{GenericSignature, GenericVerifyingKey};
 use rsa::signature::Verifier;
 use rsa_footprint_avr as _;
-use rsa_footprint_avr::stack_measurement::*;
 
 #[cfg(feature = "hash_sha1")]
 type Hash = sha1::Sha1;
@@ -81,9 +78,11 @@ type Key = FixedUInt<u8, 192>;
 fn main() -> ! {
     let dp = arduino_hal::Peripherals::take().unwrap();
     let pins = arduino_hal::pins!(dp);
-    let mut serial = arduino_hal::default_serial!(dp, pins, 57600);
+    let serial = arduino_hal::default_serial!(dp, pins, 57600);
 
-    let stack_probe = fill_stack_with_watermark();
+    // SAFETY: ATmega2560 SRAM above `_end` is reserved for this single stack.
+    let stack_probe =
+        unsafe { krabi_caliper::stack::paint_avr_runtime::<64>(0x2200, 0xce) }.unwrap();
     let counter = rsa_footprint_avr::cyclecount::CycleCounter::start(&dp.TC1);
     let result = {
         let key =
@@ -94,31 +93,22 @@ fn main() -> ! {
     };
     let ticks = counter.elapsed_ticks(&dp.TC1);
     let ms = counter.elapsed_ms(&dp.TC1);
-    let stack = measure_stack(&stack_probe);
-    write_stack_ufmt(
-        &mut serial,
-        &StackRecord {
-            benchmark: "rsa-footprint",
-            measurement: stack,
-            fields: &[
-                Field::token("target", "atmega2560"),
-                Field::token("operation", "verify"),
-            ],
-        },
+    let stack = stack_probe.measure();
+    let fields = [
+        Field::token("target", "atmega2560"),
+        Field::token("operation", "verify"),
+    ];
+    let mut reporter = UfmtReporter::new(serial);
+    krabi_caliper::report_completed!(
+        &mut reporter,
+        benchmark: "rsa-footprint",
+        passed: result,
+        fields: &fields,
+        stack: stack,
+        measurements: [("timer1", timer_measurement(ticks as u64, 15_625, false))]
     )
     .unwrap();
-    write_measurement_ufmt(
-        &mut serial,
-        &MeasurementRecord {
-            benchmark: "rsa-footprint",
-            measurement: timer_measurement(ticks as u64, 15_625, false),
-            fields: &[
-                Field::token("target", "atmega2560"),
-                Field::token("operation", "verify"),
-            ],
-        },
-    )
-    .unwrap();
+    let mut serial = reporter.into_inner();
 
     if result {
         ufmt::uwriteln!(&mut serial, "rsa ACCEPT").ok();

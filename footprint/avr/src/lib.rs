@@ -5,7 +5,6 @@
 use core::hint::black_box;
 
 pub mod cyclecount;
-pub mod stack_measurement;
 
 #[inline(never)]
 pub fn fake_verify(modulus: [u8; 64], msg: &[u8], signature: [u8; 64]) -> bool {
