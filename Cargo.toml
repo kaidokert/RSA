@@ -38,14 +38,12 @@ serde = { version = "1.0.184", optional = true, default-features = false, featur
 
 # Big integer backend
 crypto-bigint = { version = "0.7.1", optional = true, default-features = false, features = ["zeroize","rand_core"] }
-# EXPERIMENT (bigint-heapless-runtime-len). const-num-traits (0.2.1),
-# fixed-bigint (0.6.0), and modmath-cios (0.1.2) all resolve from
-# crates.io — modmath itself pins modmath-cios by crates.io version, so
-# our direct dep matches it there (a git pin would fork a second copy and
-# split CiosRowOps/CtParity). Only modmath is unpublished, held by tag.
-# The runtime-length HeaplessBigInt carrier is unconditional in
-# fixed-bigint 0.6.0 (the old `heapless-runtime-len` feature was folded in).
-modmath = { git = "https://github.com/kaidokert/modmath-rs.git", tag = "v0.6.0-alpha.cios.36", optional = true, default-features = false, features = ["zeroize"] }
+# Modmath backend, fully on crates.io: modmath 0.6.0 depends on
+# modmath-cios by crates.io version, so our direct modmath-cios dep
+# matches it there (one copy of CiosRowOps/CtParity). The runtime-length
+# HeaplessBigInt carrier is unconditional in fixed-bigint 0.6.0 (the old
+# `heapless-runtime-len` feature was folded in).
+modmath = { version = "0.6.0", optional = true, default-features = false, features = ["zeroize"] }
 modmath-cios = { version = "0.1.2", optional = true, default-features = false }
 fixed-bigint = { version = "0.6.0", default-features = false, features = ["use-unsafe", "zeroize", "cios"] }
 subtle = { version = "2.6", default-features = false }
