@@ -23,7 +23,6 @@
 //!   5. self-test: assert the negative controls still trip the tables
 //!   6. emit JSON report; exit non-zero on any of the above
 
-mod mnemonics;
 mod parse;
 mod report;
 mod target;

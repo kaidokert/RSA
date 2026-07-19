@@ -23,10 +23,10 @@ fn main() -> ! {
     // SAFETY: ATmega2560 SRAM above `_end` is reserved for this single stack.
     let stack_probe =
         unsafe { krabi_caliper::stack::paint_avr_runtime::<64>(0x2200, 0xce) }.unwrap();
-    let counter = rsa_footprint_avr::cyclecount::CycleCounter::start(&dp.TC1);
+    let counter = krabi_caliper::avr::Atmega2560Timer1Counter::start(&dp.TC1);
     let result = fake_verify(fixture::MODULUS, fixture::MESSAGE, fixture::SIGNATURE);
-    let ticks = counter.elapsed_ticks(&dp.TC1);
-    let ms = counter.elapsed_ms(&dp.TC1);
+    let ticks = counter.elapsed_ticks();
+    let ms = counter.elapsed_ms();
     let stack = stack_probe.measure();
     let fields = [
         Field::token("target", "atmega2560"),

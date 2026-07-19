@@ -2,13 +2,14 @@
 
 use core::fmt::Write;
 use core::hint::black_box;
+use krabi_caliper::cortex_m::{
+    CycleCounters as CycleCounter, CycleMeasurements as CycleMeasurement,
+};
 use krabi_caliper::report::Field;
 use krabi_caliper::stack::StackMeasurement;
 use krabi_caliper::{Measurement, Unit};
 
-pub mod cyclecount;
-
-use cyclecount::{CycleCounter, CycleMeasurement};
+krabi_caliper::cortex_m_systick_overflow_handler!();
 
 fn report(result: bool, stack: StackMeasurement, measurement: CycleMeasurement, backend: &str) {
     let elapsed = measurement.systick / 1000;

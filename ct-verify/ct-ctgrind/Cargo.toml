@@ -16,12 +16,4 @@ path = "src/main.rs"
 # own `#[panic_handler]` — this binary is std, and std provides one.
 ct-fixtures = { path = "../ct-fixtures", default-features = false }
 
-# Distributed-slice collection for the fixture registry.
-inventory = "0.3"
-
-# Identifier concatenation in macros (for `run_<fixture_name>`).
-paste = "1.0"
-
-# Valgrind client requests; Linux-only — see `src/valgrind.rs`.
-[target.'cfg(target_os = "linux")'.dependencies]
-crabgrind = "0.1"
+krabi-caliper = { version = "0.1", features = ["ctgrind"] }
