@@ -15,6 +15,8 @@
 
 use core::hint::black_box;
 use krabi_caliper::ctgrind_fixture;
+
+krabi_caliper::ctgrind_standard_controls!();
 use krabi_caliper::host::ctgrind::{taint_val, untaint_val};
 
 // Positive: the whole blinded PKCS#1 v1.5 sign at 512-bit, driven by

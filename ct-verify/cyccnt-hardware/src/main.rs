@@ -2,17 +2,17 @@
 #![no_std]
 
 use const_num_traits::Ct;
-use core::{convert::Infallible, hint::black_box};
+use core::hint::black_box;
 use cortex_m_rt::entry;
+use fixed_bigint::FixedUInt;
 use krabi_caliper::cortex_m::DwtCycleCounter;
+use krabi_caliper::deterministic::FixtureRng;
 #[cfg(not(feature = "etm-single-trial"))]
 use krabi_caliper::report::Field;
 #[cfg(not(feature = "etm-single-trial"))]
 use krabi_caliper::stack::{CortexM, LinkerStack, StackConfig, StackProbe};
 #[cfg(not(feature = "etm-single-trial"))]
 use krabi_caliper::suite::{PairedSuite, PairedSuiteConfig, PairedSuiteFields};
-use fixed_bigint::FixedUInt;
-use rand_core::{TryCryptoRng, TryRng};
 use rsa::GenericRsaPrivateKey;
 use rsa::modmath_support::{ModMathParams, public_key_ct_from_be_bytes};
 use rsa::pkcs1v15::GenericSigningKey;
@@ -23,7 +23,10 @@ include!("../../../tests/fixtures/test_keys.rs");
 
 #[cfg(all(not(feature = "etm-single-trial"), feature = "statistical-campaign"))]
 const TRIALS: usize = 100;
-#[cfg(all(not(feature = "etm-single-trial"), not(feature = "statistical-campaign")))]
+#[cfg(all(
+    not(feature = "etm-single-trial"),
+    not(feature = "statistical-campaign")
+))]
 const TRIALS: usize = 4;
 #[cfg(not(feature = "etm-single-trial"))]
 const BATCHES: usize = 1;
@@ -177,53 +180,6 @@ const KEY_B: KeyInput = KeyInput {
     private_exponent: &D_1024_B,
 };
 
-struct CountingRng {
-    state: u64,
-    words: u32,
-}
-
-impl CountingRng {
-    fn new(seed: u64) -> Self {
-        Self {
-            state: seed,
-            words: 0,
-        }
-    }
-
-    fn next_word(&mut self) -> u64 {
-        self.words += 1;
-        self.state = self.state.wrapping_add(0x9e37_79b9_7f4a_7c15);
-        let mut z = self.state;
-        z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
-        z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
-        z ^ (z >> 31)
-    }
-}
-
-impl TryRng for CountingRng {
-    type Error = Infallible;
-
-    fn try_next_u32(&mut self) -> Result<u32, Self::Error> {
-        Ok(self.next_word() as u32)
-    }
-
-    fn try_next_u64(&mut self) -> Result<u64, Self::Error> {
-        Ok(self.next_word())
-    }
-
-    fn try_fill_bytes(&mut self, dst: &mut [u8]) -> Result<(), Self::Error> {
-        for chunk in dst.chunks_mut(8) {
-            let bytes = self.next_word().to_le_bytes();
-            for (destination, source) in chunk.iter_mut().zip(bytes.iter()) {
-                *destination = *source;
-            }
-        }
-        Ok(())
-    }
-}
-
-impl TryCryptoRng for CountingRng {}
-
 #[derive(Clone, Copy)]
 struct SignOutcome {
     ok: bool,
@@ -245,7 +201,7 @@ fn prepare_key(input: &KeyInput) -> Option<SigningKey> {
 
 #[inline(never)]
 fn sign_once(signing_key: &SigningKey) -> SignOutcome {
-    let mut rng = CountingRng::new(RNG_SEED);
+    let mut rng = FixtureRng::new(RNG_SEED);
     let mut encoded_message = [0u8; KEY_BYTES];
     let mut signature = [0u8; KEY_BYTES];
     let ok = signing_key
@@ -259,7 +215,7 @@ fn sign_once(signing_key: &SigningKey) -> SignOutcome {
     let _ = black_box((encoded_message, signature));
     SignOutcome {
         ok,
-        rng_words: rng.words,
+        rng_words: rng.draws() as u32,
     }
 }
 

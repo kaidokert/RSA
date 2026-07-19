@@ -51,33 +51,7 @@ include!("../../../tests/fixtures/test_keys.rs");
 
 /// Deterministic infallible RNG for the salt/blinding draw — its stream
 /// only needs to be stable, not cryptographic, for a DCE audit.
-struct FixedRng(u64);
-impl rand_core::TryRng for FixedRng {
-    type Error = core::convert::Infallible;
-    fn try_next_u32(&mut self) -> Result<u32, Self::Error> {
-        Ok(self.try_next_u64()? as u32)
-    }
-    fn try_next_u64(&mut self) -> Result<u64, Self::Error> {
-        self.0 = self.0.wrapping_add(0x9e37_79b9_7f4a_7c15);
-        let mut z = self.0;
-        z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
-        z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
-        Ok(z ^ (z >> 31))
-    }
-    fn try_fill_bytes(&mut self, dst: &mut [u8]) -> Result<(), Self::Error> {
-        // Byte-loop fill instead of `copy_from_slice` so the audit
-        // harness's own RNG contributes no `len_mismatch_fail` machinery
-        // to the archive being measured.
-        for chunk in dst.chunks_mut(8) {
-            let bytes = self.try_next_u64()?.to_le_bytes();
-            for (d, s) in chunk.iter_mut().zip(bytes.iter()) {
-                *d = *s;
-            }
-        }
-        Ok(())
-    }
-}
-impl rand_core::TryCryptoRng for FixedRng {}
+use krabi_caliper::deterministic::FixtureRng as FixedRng;
 
 /// Whole heapless PKCS#1 v1.5 blinded sign, panic-audited: no `unwrap`
 /// on the fallible setup, sign `Result` observed not extracted.
@@ -93,7 +67,7 @@ pub unsafe extern "C" fn panic_audit__pkcs1v15_blinded_sign__fb8__N64(out_ptr: *
             let signing_key = GenericSigningKey::<Sha256, _, _>::new(
                 GenericRsaPrivateKey::from_public_and_d(pubkey, d),
             );
-            let mut rng = FixedRng(0);
+            let mut rng = FixedRng::new(0);
             let mut em = [0u8; 64];
             let mut sig = [0u8; 64];
             let ok = signing_key
@@ -127,7 +101,7 @@ pub unsafe extern "C" fn panic_audit__pkcs1v15_blinded_sign__fb32__N64(out_ptr: 
             let signing_key = GenericSigningKey::<Sha256, _, _>::new(
                 GenericRsaPrivateKey::from_public_and_d(pubkey, d),
             );
-            let mut rng = FixedRng(0);
+            let mut rng = FixedRng::new(0);
             let mut em = [0u8; 256];
             let mut sig = [0u8; 256];
             let ok = signing_key
@@ -160,7 +134,7 @@ pub unsafe extern "C" fn panic_audit__pkcs1v15_blinded_sign__fb8__N256(out_ptr: 
             let signing_key = GenericSigningKey::<Sha256, _, _>::new(
                 GenericRsaPrivateKey::from_public_and_d(pubkey, d),
             );
-            let mut rng = FixedRng(0);
+            let mut rng = FixedRng::new(0);
             let mut em = [0u8; 256];
             let mut sig = [0u8; 256];
             let ok = signing_key
@@ -191,7 +165,7 @@ pub unsafe extern "C" fn panic_audit__pkcs1v15_blinded_sign__fb64__N32(out_ptr: 
             let signing_key = GenericSigningKey::<Sha256, _, _>::new(
                 GenericRsaPrivateKey::from_public_and_d(pubkey, d),
             );
-            let mut rng = FixedRng(0);
+            let mut rng = FixedRng::new(0);
             let mut em = [0u8; 256];
             let mut sig = [0u8; 256];
             let ok = signing_key

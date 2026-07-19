@@ -74,8 +74,8 @@ vartime compare — must trip, proving the harness has teeth.
 # On x86_64, build with the same CPU baseline CI attests:
 #   export RUSTFLAGS="-C target-feature=+lzcnt,+bmi1"
 cargo build --release -p ct-ctgrind
-valgrind --tool=memcheck --error-limit=no --error-exitcode=0 \
-  --suppressions=ct-ctgrind/ct-ctgrind.supp -q target/release/ct-ctgrind
+cargo krabi-caliper ctgrind target/release/ct-ctgrind \
+  --valgrind-arg=--suppressions=ct-ctgrind/ct-ctgrind.supp
 ```
 
 Suppressions ([`ct-ctgrind.supp`](ct-ctgrind/ct-ctgrind.supp)) are
