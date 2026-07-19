@@ -61,7 +61,7 @@ type CarrierW64 = FixedUInt<u64, 32, Ct>;
 // mark that buffer undefined: Valgrind taint is metadata, the real
 // bytes must be present for the happy path to run while their V-bits
 // carry the "secret" mark.
-include!("../../test_keys.rs");
+include!("../../../tests/fixtures/test_keys.rs");
 
 /// Deterministic infallible RNG. The blinded sign path draws the
 /// blinding factor `r` from it; a fixed stream keeps taint attribution

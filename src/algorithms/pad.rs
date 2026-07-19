@@ -68,10 +68,17 @@ pub fn uint_to_be_pad_into<T>(input: T, padded_len: usize, storage: &mut [u8]) -
 where
     T: UnsignedModularInt,
 {
-    let leading_zeros = input.leading_zeros() as usize / 8;
+    // Trim to the value's own bytes via its bit length — value-defined,
+    // so it holds for runtime-length carriers where a "leading zeros of
+    // the container" notion would be ambiguous.
+    let used_bytes = (input.bits() as usize).div_ceil(8);
     let bytes = input.to_be_bytes();
     let borrow: &[u8] = bytes.borrow();
-    let trimmed = borrow.get(leading_zeros..).ok_or(Error::Internal)?;
+    let start = borrow
+        .len()
+        .checked_sub(used_bytes)
+        .ok_or(Error::Internal)?;
+    let trimmed = borrow.get(start..).ok_or(Error::Internal)?;
     left_pad_into(trimmed, padded_len, storage)
 }
 
@@ -96,11 +103,14 @@ where
     T: UnsignedModularInt,
     T::Bytes: zeroize::Zeroize,
 {
-    let leading_zeros = input.leading_zeros() as usize / 8;
+    // Same value-defined trim as `uint_to_be_pad_into`; computed before
+    // `input` moves into the `Zeroizing` wrapper.
+    let used_bytes = (input.bits() as usize).div_ceil(8);
     let m = Zeroizing::new(input);
     let m = Zeroizing::new(m.to_be_bytes());
     let bytes: &[u8] = m.as_ref();
-    let trimmed = bytes.get(leading_zeros..).ok_or(Error::Internal)?;
+    let start = bytes.len().checked_sub(used_bytes).ok_or(Error::Internal)?;
+    let trimmed = bytes.get(start..).ok_or(Error::Internal)?;
     left_pad_into(trimmed, padded_len, storage)
 }
 
