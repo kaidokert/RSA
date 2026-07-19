@@ -44,7 +44,7 @@ type CarrierW64 = FixedUInt<u64, 32, Ct>;
 
 // Real RSA keypairs (`e = 65537`) shared with `ct-fixtures` via a
 // textual include — see the fragment's module docs.
-include!("../../test_keys.rs");
+include!("../../../tests/fixtures/test_keys.rs");
 
 /// Deterministic infallible RNG for the salt/blinding draw — its stream
 /// only needs to be stable, not cryptographic, for a DCE audit.

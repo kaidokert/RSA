@@ -10,6 +10,8 @@ use core::ops::{Shr, ShrAssign};
 
 use const_num_traits::ops::overflowing::OverflowingAdd;
 use const_num_traits::ops::wrapping::{WrappingAdd, WrappingMul, WrappingSub};
+use const_num_traits::FromByteSlice;
+use const_num_traits::WithPrecision;
 use const_num_traits::{Ct, HasPersonality, Nct, Personality};
 use const_num_traits::{One, Zero};
 use modmath::{CiosMontMul, CiosMontMulCt, Field as ModmathField, Parity, WideMul};
@@ -123,6 +125,39 @@ fn wrap_value<T>(value: T) -> ModMathValue<T> {
     value
 }
 
+/// Cross-config constructor for [`ModMathValue`]. Under `alloc` it is
+/// the newtype constructor; under no-alloc `ModMathValue<T>` is a
+/// transparent alias for `T`, so it is the identity.
+///
+/// Prefer this over writing `ModMathValue(x)` directly: the tuple form
+/// only compiles on the `alloc` build and breaks the no-alloc one
+/// (`expected function / tuple struct, found type alias`).
+#[cfg(feature = "alloc")]
+pub fn wrap<T>(value: T) -> ModMathValue<T> {
+    ModMathValue(value)
+}
+
+/// See [`wrap`] — the no-alloc identity form.
+#[cfg(not(feature = "alloc"))]
+pub fn wrap<T>(value: T) -> ModMathValue<T> {
+    value
+}
+
+/// Cross-config unwrap for [`ModMathValue`]: `.0` under `alloc`, the
+/// identity under no-alloc. Prefer this over `.0` in code that must
+/// compile under both feature configurations. By-value (does not
+/// require `T: Copy`).
+#[cfg(feature = "alloc")]
+pub fn into_inner<T>(value: ModMathValue<T>) -> T {
+    value.0
+}
+
+/// See [`into_inner`] — the no-alloc identity form.
+#[cfg(not(feature = "alloc"))]
+pub fn into_inner<T>(value: ModMathValue<T>) -> T {
+    value
+}
+
 #[cfg(feature = "alloc")]
 fn unwrap_value<T: Copy>(value: &ModMathValue<T>) -> T {
     value.0
@@ -186,19 +221,28 @@ where
 {
     type Output = Self;
 
-    fn resize_unchecked(self, _at_least_bits_precision: u32) -> Self::Output {
-        self
+    fn resize_unchecked(self, at_least_bits_precision: u32) -> Self::Output {
+        // `T` is our fixed-bigint carrier (it satisfies `FixedWidthUnsignedInt`,
+        // hence `WithPrecision`), so establish the operating width on the
+        // wrapped value — a real widen on a runtime-length carrier, the
+        // identity on a fixed-width one. Matches the no-alloc `T` impl in
+        // `traits::modular`; this is not the upstream `BoxedUint` path
+        // (that has its own `IntegerResize` via `crypto_bigint::Resize`).
+        Self(WithPrecision::widen_to_precision(
+            self.0,
+            at_least_bits_precision,
+        ))
     }
 
     fn try_resize(self, at_least_bits_precision: u32) -> Option<Self::Output> {
-        // Mirrors `crypto_bigint::Resize::try_resize`: returns `Some` iff
-        // the actual value fits in `at_least_bits_precision` bits. Our
-        // type is fixed-width and `resize_unchecked` is a no-op, but the
-        // check still needs to reject values that wouldn't survive a
-        // narrower precision.
-        let value_bits = self.bits_precision() - self.leading_zeros();
+        // Mirrors `crypto_bigint::Resize::try_resize`: `Some` iff the value
+        // fits in `at_least_bits_precision` bits, resized to that width.
+        let value_bits = self.0.bit_length();
         if value_bits <= at_least_bits_precision {
-            Some(self)
+            Some(Self(WithPrecision::widen_to_precision(
+                self.0,
+                at_least_bits_precision,
+            )))
         } else {
             None
         }
@@ -211,10 +255,6 @@ where
     T: FixedWidthUnsignedInt + PartialOrd,
 {
     type Bytes = <T as FixedWidthUnsignedInt>::Bytes;
-
-    fn leading_zeros(&self) -> u32 {
-        FixedWidthUnsignedInt::leading_zeros(&self.0)
-    }
 
     fn to_be_bytes(&self) -> Self::Bytes {
         FixedWidthUnsignedInt::to_be_bytes(&self.0)
@@ -236,7 +276,7 @@ where
     }
 
     fn bits(&self) -> u32 {
-        self.bits_precision() - self.leading_zeros()
+        FixedWidthUnsignedInt::bit_length(&self.0)
     }
 
     fn bits_precision(&self) -> u32 {
@@ -286,6 +326,7 @@ pub type ModMathValue<T> = T;
 #[cfg(feature = "modmath")]
 fn try_random_mod_masked<R, T, W, F>(
     rng: &mut R,
+    modulus_bits: u32,
     leading_zero_bits: u32,
     modulus: &W,
     wrap: F,
@@ -301,22 +342,38 @@ where
 
     const MAX_TRIES: u32 = 128;
     let mut bytes = <T as FixedWidthUnsignedInt>::Bytes::default();
+    // The `Bytes` holder is capacity-width, but the modulus operates at
+    // `modulus_bits` (its `bits_precision`, always a whole number of
+    // limbs). Sample only the trailing `window_bytes` (big-endian: the
+    // low-order bytes) so the mask (`leading_zero_bits` = the modulus's
+    // own headroom) is relative to the modulus width — acceptance is
+    // >= 50% even when the modulus is far narrower than the capacity.
+    let window_bytes = (modulus_bits as usize).div_ceil(8);
+    let lo = bytes.as_ref().len().saturating_sub(window_bytes);
     for _ in 0..MAX_TRIES {
         rng.try_fill_bytes(bytes.as_mut()).map_err(|_| Error::Rng)?;
-        // Big-endian: top bytes are the leading bytes.
+        // Big-endian within the window: mask the leading bytes of the
+        // window. `skip(lo)` / `get_mut(lo + …)` keep the accesses
+        // bounds-check-free (folded into the iterator / `Some` arm), same
+        // discipline as the panic-free audit requires elsewhere.
         let buf = bytes.as_mut();
-        for byte in buf.iter_mut().take(zero_bytes) {
+        for byte in buf.iter_mut().skip(lo).take(zero_bytes) {
             *byte = 0;
         }
         if zero_bits_in_next > 0 {
-            // `get_mut` rather than `buf[zero_bytes]` so no
-            // `panic_bounds_check` is synthesized — the index guard is
-            // folded into the `Some` arm.
-            if let Some(b) = buf.get_mut(zero_bytes) {
+            if let Some(b) = buf.get_mut(lo + zero_bytes) {
                 *b &= 0xFFu8 >> zero_bits_in_next;
             }
         }
-        let candidate = <T as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(bytes.as_ref())?;
+        let window = bytes.as_ref().get(lo..).ok_or(Error::Internal)?;
+        // `from_be_slice`, not the `Bytes`-holder `try_from_be_bytes_vartime`:
+        // its output width is the window length — the (public) modulus
+        // width — so on the runtime-length carrier `r` lands at the field
+        // width the blinded arithmetic needs, rather than padded to
+        // capacity. `window.len()` is derived from `modulus_bits`, never
+        // from `r`'s bytes, so `r`'s width leaks nothing. On a fixed-width
+        // carrier it's the same value zero-extended to capacity (a no-op).
+        let candidate = <T as FromByteSlice>::from_be_slice(window).map_err(|_| Error::Internal)?;
         let wrapped = wrap(candidate);
         if wrapped < *modulus {
             return Ok(wrapped);
@@ -339,7 +396,13 @@ where
         if leading_zero_bits >= container_bits {
             return Err(Error::InvalidModulus);
         }
-        try_random_mod_masked::<R, T, _, _>(rng, leading_zero_bits, modulus, wrap_value::<T>)
+        try_random_mod_masked::<R, T, _, _>(
+            rng,
+            container_bits,
+            leading_zero_bits,
+            modulus,
+            wrap_value::<T>,
+        )
     }
 }
 
@@ -357,7 +420,7 @@ where
         if leading_zero_bits >= container_bits {
             return Err(Error::InvalidModulus);
         }
-        try_random_mod_masked::<R, T, T, _>(rng, leading_zero_bits, modulus, |x| x)
+        try_random_mod_masked::<R, T, T, _>(rng, container_bits, leading_zero_bits, modulus, |x| x)
     }
 }
 
@@ -918,10 +981,50 @@ mod private_op_tests {
 
     type SmallUCt = FixedUInt<u8, 64, Ct>;
 
+    // ── Carrier toy tests ──────────────────────────────────────────
+    //
+    // Most tests are written as a `fn inner<T>()` and instantiated for
+    // both carriers: `SmallUCt` is the fixed-width reference, `HeaplessCt`
+    // the runtime-length carrier. The sub-capacity tests further down are
+    // `HeaplessCt`-specific — only a runtime-length carrier can hold a
+    // modulus narrower than its capacity.
+    type HeaplessCt = fixed_bigint::HeaplessBigInt<u8, 64, Ct>;
+
+    // The full carrier bound for the CT sign+blind path: enough for
+    // `ModMathParams<T, Ct>` and its `MontgomeryForm` to satisfy
+    // `Pow + PowBoundedExp + InvertCt + MulCt`, and for `T` /
+    // `ModMathValue<T>` to satisfy `TryRandomMod`.
+    trait TestCt:
+        super::ModMathIntCt
+        + HasPersonality<P = Ct>
+        + modmath_cios::CiosRowOps
+        + core::ops::BitOr<Output = Self>
+        + core::fmt::Debug
+    where
+        <Self as modmath_cios::CiosRowOps>::Word: const_num_traits::CtParity,
+    {
+    }
+    impl<T> TestCt for T
+    where
+        T: super::ModMathIntCt
+            + HasPersonality<P = Ct>
+            + modmath_cios::CiosRowOps
+            + core::ops::BitOr<Output = T>
+            + core::fmt::Debug,
+        <T as modmath_cios::CiosRowOps>::Word: const_num_traits::CtParity,
+    {
+    }
+
     // n = 35 = 5 · 7, φ(n) = 24. e = 5, d = 29 (since 5·29 = 145 ≡ 1 mod 24).
     // m = 2 → c = 2^5 mod 35 = 32 → m_recovered = 32^29 mod 35 = 2.
-    fn toy_params() -> ModMathParams<SmallUCt, Ct> {
-        ModMathParams::<SmallUCt, Ct>::new(SmallUCt::from(35u8)).unwrap()
+    fn toy_params<T: TestCt>() -> ModMathParams<T, Ct>
+    where
+        <T as modmath_cios::CiosRowOps>::Word: const_num_traits::CtParity,
+    {
+        ModMathParams::<T, Ct>::new(
+            <T as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(&[35]).unwrap(),
+        )
+        .unwrap()
     }
 
     // A 512-bit odd modulus used by the `sign_into` defensive-error
@@ -929,7 +1032,8 @@ mod private_op_tests {
     // `sign_into` checks) to match `SMALL_K * 8`
     // so `k` passes the up-front width check and the specific error
     // path (small buffer, wrong hash length, etc.) is what fires.
-    // Value is `2^511 + 1`: MSB set, LSB=1 (odd).
+    // Value is `2^511 + 1`: MSB set, LSB=1 (odd). (`FixedUInt<u8, 64>`
+    // only — this shape drives the fixed-width defensive checks.)
     fn toy_params_wide() -> ModMathParams<SmallUCt, Ct> {
         let mut bytes = [0u8; 64];
         bytes[0] = 0x80;
@@ -939,13 +1043,20 @@ mod private_op_tests {
     }
 
     #[test]
-    fn rsa_private_op_round_trip_heapless_ct() {
-        let n_params = toy_params();
-        let c = wrap_value(SmallUCt::from(32u8));
-        let d = wrap_value(SmallUCt::from(29u8));
-        let expected = wrap_value(SmallUCt::from(2u8));
-        let recovered = crate::algorithms::rsa::rsa_private_op(&c, &d, &n_params);
-        assert_eq!(recovered, expected);
+    fn rsa_private_op_round_trip() {
+        fn inner<T: TestCt>()
+        where
+            <T as modmath_cios::CiosRowOps>::Word: const_num_traits::CtParity,
+        {
+            let n_params = toy_params::<T>();
+            let c = wrap_value(T::from(32u8));
+            let d = wrap_value(T::from(29u8));
+            let expected = wrap_value(T::from(2u8));
+            let recovered = crate::algorithms::rsa::rsa_private_op(&c, &d, &n_params);
+            assert_eq!(recovered, expected);
+        }
+        inner::<SmallUCt>();
+        inner::<HeaplessCt>();
     }
 
     // Blinded RSA private op must produce the same plaintext as the
@@ -953,32 +1064,49 @@ mod private_op_tests {
     // n = 35, e = 5, d = 29, c = 32; expected m = 2. r = 6 (coprime
     // with 35). The blinded body should recover m = 2 the same way
     // rsa_private_op does.
-    #[test]
-    fn rsa_private_op_blinded_matches_unblinded_heapless_ct() {
-        let n_params = toy_params();
-        let c = wrap_value(SmallUCt::from(32u8));
-        let d = wrap_value(SmallUCt::from(29u8));
-        let e = wrap_value(SmallUCt::from(5u8));
-        let r = wrap_value(SmallUCt::from(6u8));
-        let expected = wrap_value(SmallUCt::from(2u8));
+    fn blinded_matches_unblinded_inner<T: TestCt>()
+    where
+        <T as modmath_cios::CiosRowOps>::Word: const_num_traits::CtParity,
+    {
+        let n_params = toy_params::<T>();
+        let c = wrap_value(T::from(32u8));
+        let d = wrap_value(T::from(29u8));
+        let e = wrap_value(T::from(5u8));
+        let r = wrap_value(T::from(6u8));
+        let expected = wrap_value(T::from(2u8));
         let recovered =
             crate::algorithms::rsa::rsa_private_op_blinded(&r, &c, &d, &e, &n_params).unwrap();
         assert_eq!(recovered, expected);
     }
+    #[test]
+    fn rsa_private_op_blinded_matches_unblinded() {
+        blinded_matches_unblinded_inner::<SmallUCt>();
+        blinded_matches_unblinded_inner::<HeaplessCt>();
+    }
 
-    // Blinded op must fail if `r` shares a factor with `n` — inverse
-    // doesn't exist, `invert_ct` returns None, primitive returns Err.
-    // Toy: n = 35 = 5·7, r = 5 (shares factor with n). No retry at
-    // the primitive level — caller policy.
+    // Blinded op must fail if `r` shares a factor with `n` — the inverse
+    // doesn't exist, `invert_ct` returns None, and the primitive returns
+    // Err. Toy: n = 35 = 5·7, r = 5 (shares factor with n). No retry at
+    // the primitive level — caller policy. Runs on both carriers: 5 is
+    // genuinely non-invertible mod 35 on each, so `invert_ct` returns
+    // None for the *right* reason (not vacuously).
     #[test]
     fn rsa_private_op_blinded_rejects_non_coprime_r() {
-        let n_params = toy_params();
-        let c = wrap_value(SmallUCt::from(32u8));
-        let d = wrap_value(SmallUCt::from(29u8));
-        let e = wrap_value(SmallUCt::from(5u8));
-        let r_bad = wrap_value(SmallUCt::from(5u8));
-        let result = crate::algorithms::rsa::rsa_private_op_blinded(&r_bad, &c, &d, &e, &n_params);
-        assert!(result.is_err());
+        fn inner<T: TestCt>()
+        where
+            <T as modmath_cios::CiosRowOps>::Word: const_num_traits::CtParity,
+        {
+            let n_params = toy_params::<T>();
+            let c = wrap_value(T::from(32u8));
+            let d = wrap_value(T::from(29u8));
+            let e = wrap_value(T::from(5u8));
+            let r_bad = wrap_value(T::from(5u8)); // shares factor 5 with n = 35
+            let result =
+                crate::algorithms::rsa::rsa_private_op_blinded(&r_bad, &c, &d, &e, &n_params);
+            assert!(result.is_err());
+        }
+        inner::<SmallUCt>();
+        inner::<HeaplessCt>();
     }
 
     // Full-stack blinded op with RNG-driven `r` sampling. Same toy
@@ -987,16 +1115,18 @@ mod private_op_tests {
     // before returning. For toy n=35, non-coprime probability per
     // draw is ~31% — the 10-retry cap gives failure prob ~8e-6, so
     // the test is reliable.
-    #[test]
-    fn rsa_private_op_and_check_blinded_round_trip_heapless_ct() {
+    fn and_check_blinded_round_trip_inner<T: TestCt>()
+    where
+        <T as modmath_cios::CiosRowOps>::Word: const_num_traits::CtParity,
+    {
         use rand::rngs::ChaCha8Rng;
         use rand_core::SeedableRng;
 
-        let n_params = toy_params();
-        let c = wrap_value(SmallUCt::from(32u8));
-        let d = wrap_value(SmallUCt::from(29u8));
-        let e = wrap_value(SmallUCt::from(5u8));
-        let expected = wrap_value(SmallUCt::from(2u8));
+        let n_params = toy_params::<T>();
+        let c = wrap_value(T::from(32u8));
+        let d = wrap_value(T::from(29u8));
+        let e = wrap_value(T::from(5u8));
+        let expected = wrap_value(T::from(2u8));
         let mut rng = ChaCha8Rng::from_seed([42; 32]);
         let recovered = crate::algorithms::rsa::rsa_private_op_and_check_blinded(
             &mut rng, &c, &d, &e, &n_params,
@@ -1004,110 +1134,240 @@ mod private_op_tests {
         .unwrap();
         assert_eq!(recovered, expected);
     }
-
-    // Uses toy_params_wide's 512-bit modulus (`2^511 + 1`) so the
-    // acceptance rate is essentially 50% (top bit set) and 128-tries
-    // doesn't get exhausted.
     #[test]
-    fn try_random_mod_modmath_stays_below_modulus() {
+    fn rsa_private_op_and_check_blinded_round_trip() {
+        and_check_blinded_round_trip_inner::<SmallUCt>();
+        and_check_blinded_round_trip_inner::<HeaplessCt>();
+    }
+
+    // A 512-bit modulus (`2^511 + 1`, top bit set) so acceptance is
+    // essentially 50% and the 128-try cap isn't exhausted. Sampler-only
+    // path — no inverse — so it runs on both carriers.
+    fn try_random_mod_below_modulus_inner<T: TestCt>(n: ModMathValue<T>)
+    where
+        <T as modmath_cios::CiosRowOps>::Word: const_num_traits::CtParity,
+    {
         use crate::traits::modular::TryRandomMod;
         use rand::rngs::ChaCha8Rng;
         use rand_core::SeedableRng;
 
-        let n_params = toy_params_wide();
-        let n = *n_params.modulus().as_ref();
         let mut rng = ChaCha8Rng::from_seed([42; 32]);
-
-        // Stack-only sample buffer so this test compiles under
-        // `--no-default-features --features modmath` (no `alloc`).
-        let mut samples = [ModMathValue::<SmallUCt>::from(0u8); 16];
+        let mut samples = [ModMathValue::<T>::from(0u8); 16];
         for slot in samples.iter_mut() {
-            let r = ModMathValue::<SmallUCt>::try_random_mod(&mut rng, &n).unwrap();
+            let r = ModMathValue::<T>::try_random_mod(&mut rng, &n).unwrap();
             assert!(r < n, "sample must be < modulus");
             *slot = r;
         }
-        // Uniformity smoke test — 16 samples on a ~512-bit range
-        // should be all distinct with overwhelming probability.
         let first = samples[0];
         assert!(
             samples.iter().any(|s| *s != first),
             "samples are trivially all equal — RNG or sampler broken"
         );
     }
+    #[test]
+    fn try_random_mod_modmath_stays_below_modulus() {
+        // 2^511 + 1 in each carrier.
+        let mut bytes = [0u8; 64];
+        bytes[0] = 0x80;
+        bytes[63] = 0x01;
+        let nf = <SmallUCt as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(&bytes).unwrap();
+        try_random_mod_below_modulus_inner::<SmallUCt>(wrap_value(nf));
+        let nh = <HeaplessCt as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(&bytes).unwrap();
+        try_random_mod_below_modulus_inner::<HeaplessCt>(wrap_value(nh));
+    }
 
-    // An unmasked sampler's acceptance rate against a modulus `lz`
-    // bits narrower than `T` is ~2⁻ˡᶻ, blowing the 128-tries cap.
-    // Masking must let sampling succeed even when the modulus
-    // occupies only ~6 bits of a 512-bit `SmallUCt` — this is
-    // `toy_params()` (n = 35).
+    // An unmasked sampler's acceptance rate against a modulus whose
+    // value is many bits narrower than its width is ~2⁻ˡᶻ, blowing the
+    // 128-tries cap. Masking must let sampling succeed even when the
+    // value occupies only ~6 bits of a full-width modulus — this is
+    // `toy_params()` (n = 35, built at full carrier width `len == CAP`),
+    // so here `bits_precision` equals the sample-buffer width and the
+    // ~6-bit *value* is the narrow quantity the mask brings the candidate
+    // down to. The complementary case — a modulus narrow in *width*
+    // (`len < CAP`), where the window is a strict sub-slice of the buffer
+    // — is `try_random_mod_accepts_narrow_modulus`.
     #[test]
     fn try_random_mod_modmath_succeeds_on_narrow_modulus_wide_carrier() {
-        use crate::traits::modular::TryRandomMod;
-        use rand::rngs::ChaCha8Rng;
-        use rand_core::SeedableRng;
+        fn inner<T: TestCt>()
+        where
+            <T as modmath_cios::CiosRowOps>::Word: const_num_traits::CtParity,
+        {
+            use crate::traits::modular::TryRandomMod;
+            use rand::rngs::ChaCha8Rng;
+            use rand_core::SeedableRng;
 
-        let n_params = toy_params(); // n = 35, ~6 bits, in 512-bit SmallUCt
-        let n = *n_params.modulus().as_ref();
-        let mut rng = ChaCha8Rng::from_seed([42; 32]);
-
-        for _ in 0..64 {
-            let r = ModMathValue::<SmallUCt>::try_random_mod(&mut rng, &n).unwrap();
-            assert!(r < n);
+            let n_params = toy_params::<T>();
+            let n = *n_params.modulus().as_ref();
+            let mut rng = ChaCha8Rng::from_seed([42; 32]);
+            for _ in 0..64 {
+                let r = ModMathValue::<T>::try_random_mod(&mut rng, &n).unwrap();
+                assert!(r < n);
+            }
         }
+        inner::<SmallUCt>();
+        inner::<HeaplessCt>();
     }
 
     #[test]
-    fn rsa_private_op_and_check_round_trip_heapless_ct() {
-        let n_params = toy_params();
-        let c = wrap_value(SmallUCt::from(32u8));
-        let d = wrap_value(SmallUCt::from(29u8));
-        let e = wrap_value(SmallUCt::from(5u8));
-        let expected = wrap_value(SmallUCt::from(2u8));
-        let recovered =
-            crate::algorithms::rsa::rsa_private_op_and_check(&c, &d, &e, &n_params).unwrap();
-        assert_eq!(recovered, expected);
+    fn rsa_private_op_and_check_round_trip() {
+        fn inner<T: TestCt>()
+        where
+            <T as modmath_cios::CiosRowOps>::Word: const_num_traits::CtParity,
+        {
+            let n_params = toy_params::<T>();
+            let c = wrap_value(T::from(32u8));
+            let d = wrap_value(T::from(29u8));
+            let e = wrap_value(T::from(5u8));
+            let expected = wrap_value(T::from(2u8));
+            let recovered =
+                crate::algorithms::rsa::rsa_private_op_and_check(&c, &d, &e, &n_params).unwrap();
+            assert_eq!(recovered, expected);
+        }
+        inner::<SmallUCt>();
+        inner::<HeaplessCt>();
     }
 
     // Verify the `InvertCt` primitive on the modmath backend against
     // a known-answer inverse. n = 35, 3⁻¹ mod 35 = 12 (since 3·12 = 36 ≡ 1).
     // Exercises the modmath `Field::inv_safegcd_ct` bridge.
+    fn invert_ct_known_answer_inner<T: TestCt>()
+    where
+        <T as modmath_cios::CiosRowOps>::Word: const_num_traits::CtParity,
+    {
+        use crate::traits::modular::{IntoMontyForm, InvertCt, PowBoundedExp};
+        let n_params = toy_params::<T>();
+        let three = wrap_value(T::from(3u8));
+        let mont_three = ModMathForm::<T, Ct>::from_reduced(three, &n_params);
+        let mont_inv = mont_three.invert_ct().expect("3 is coprime to 35");
+        let recovered = PowBoundedExp::<ModMathParams<T, Ct>>::retrieve(&mont_inv);
+        assert_eq!(recovered, wrap_value(T::from(12u8)));
+    }
+    // `invert_ct` works on both carriers at every width — the toy `n = 35`
+    // here, and the 2048-bit full-CAP deployment modulus end-to-end in the
+    // `heapless_bigint_smoke` blinded-sign test.
     #[test]
     fn invert_ct_modmath_known_answer() {
-        use crate::traits::modular::{IntoMontyForm, InvertCt, PowBoundedExp};
-        let n_params = toy_params();
-        let three = wrap_value(SmallUCt::from(3u8));
-        let mont_three = ModMathForm::<SmallUCt, Ct>::from_reduced(three, &n_params);
-        let mont_inv = mont_three.invert_ct().expect("3 is coprime to 35");
-        let recovered = PowBoundedExp::<ModMathParams<SmallUCt, Ct>>::retrieve(&mont_inv);
-        assert_eq!(recovered, wrap_value(SmallUCt::from(12u8)));
+        invert_ct_known_answer_inner::<SmallUCt>();
+        invert_ct_known_answer_inner::<HeaplessCt>();
     }
 
     // Verify the `MulCt` primitive on the modmath backend against a
     // known-answer product. n = 35, 3·12 = 36 ≡ 1 (mod 35). Exercises
     // the modmath `Field::mul` bridge; also completes the round-trip
     // with `InvertCt` — inverting 3 and multiplying back gives 1.
-    #[test]
-    fn mul_ct_modmath_inverse_round_trip() {
+    fn mul_ct_inverse_round_trip_inner<T: TestCt>()
+    where
+        <T as modmath_cios::CiosRowOps>::Word: const_num_traits::CtParity,
+    {
         use crate::traits::modular::{IntoMontyForm, InvertCt, MulCt, PowBoundedExp};
-        let n_params = toy_params();
-        let three = wrap_value(SmallUCt::from(3u8));
-        let mont_three = ModMathForm::<SmallUCt, Ct>::from_reduced(three, &n_params);
+        let n_params = toy_params::<T>();
+        let three = wrap_value(T::from(3u8));
+        let mont_three = ModMathForm::<T, Ct>::from_reduced(three, &n_params);
         let mont_inv = mont_three.invert_ct().expect("3 is coprime to 35");
         let product = mont_three.mul_ct(&mont_inv);
-        let recovered = PowBoundedExp::<ModMathParams<SmallUCt, Ct>>::retrieve(&product);
-        assert_eq!(recovered, wrap_value(SmallUCt::from(1u8)));
+        let recovered = PowBoundedExp::<ModMathParams<T, Ct>>::retrieve(&product);
+        assert_eq!(recovered, wrap_value(T::from(1u8)));
+    }
+    #[test]
+    fn mul_ct_modmath_inverse_round_trip() {
+        mul_ct_inverse_round_trip_inner::<SmallUCt>();
+        mul_ct_inverse_round_trip_inner::<HeaplessCt>();
+    }
+
+    // ── Sub-capacity operation: a runtime-length modulus narrower than
+    // the carrier capacity (`len < CAP`). This is the deployment target
+    // for one binary serving multiple key sizes — e.g. a 4096-bit-CAP
+    // `HeaplessBigInt` operating on 1024/2048-bit keys at their own width
+    // rather than padded to capacity. `HeaplessCt` is `u8 × 64` (512-bit
+    // CAP); a natural-width `n = 35` (built with the inherent slice
+    // constructor) has `bits_precision = 8`, so `len = 1` (of 64 limbs).
+
+    // The rejection sampler must accept on a narrow modulus. Its buffer is
+    // capacity-width, so the mask/window has to be taken relative to the
+    // modulus width — otherwise `leading_zeros(modulus)` (headroom within
+    // the modulus width, here 0) masks nothing of a 512-bit buffer and the
+    // candidate is ~2^512 ≫ 35, rejected every try.
+    #[test]
+    fn try_random_mod_accepts_narrow_modulus() {
+        use crate::traits::modular::TryRandomMod;
+        use rand::rngs::ChaCha8Rng;
+        use rand_core::SeedableRng;
+        let n_nat = HeaplessCt::from_be_bytes(&[35]); // inherent -> len 1
+        assert_eq!(
+            const_num_traits::BitsPrecision::bits_precision(&n_nat),
+            8,
+            "modulus must be at its natural width, not padded to CAP"
+        );
+        let n = wrap_value(n_nat);
+        let mut rng = ChaCha8Rng::from_seed([7; 32]);
+        for _ in 0..16 {
+            let r = <ModMathValue<HeaplessCt> as TryRandomMod>::try_random_mod(&mut rng, &n)
+                .expect("sampler must accept on a narrow modulus");
+            assert!(r < n, "sampled r must be < modulus");
+        }
+    }
+
+    // The field itself operates correctly at a narrow width: plain op and
+    // blinded op both recover m = 2 when every operand shares the modulus
+    // width. (c = 32, d = 29, e = 5, r = 6, all len 1.)
+    #[test]
+    fn narrow_modulus_private_ops_round_trip() {
+        let n_params =
+            ModMathParams::<HeaplessCt, Ct>::new(HeaplessCt::from_be_bytes(&[35])).unwrap();
+        let c = wrap_value(HeaplessCt::from(32u8));
+        let d = wrap_value(HeaplessCt::from(29u8));
+        let e = wrap_value(HeaplessCt::from(5u8));
+        let two = HeaplessCt::from(2u8);
+
+        let m = crate::algorithms::rsa::rsa_private_op(&c, &d, &n_params);
+        assert_eq!(into_inner(m), two);
+
+        let r_nat = wrap_value(HeaplessCt::from(6u8)); // coprime with 35, len 1
+        let blinded =
+            crate::algorithms::rsa::rsa_private_op_blinded(&r_nat, &c, &d, &e, &n_params).unwrap();
+        assert_eq!(into_inner(blinded), two);
+    }
+
+    // Full sampled blinded op on a narrow modulus: the sampler parses
+    // its modulus-width window with `FromByteSlice::from_be_slice`, so the
+    // sampled `r` lands at the field width and the blinded arithmetic (and
+    // verify-after-sign) closes. This is the end-to-end sub-capacity proof
+    // — the randomized sign path a `len < CAP` deployment actually runs.
+    #[test]
+    fn narrow_modulus_sampled_blinded_op() {
+        use rand::rngs::ChaCha8Rng;
+        use rand_core::SeedableRng;
+        let n_params =
+            ModMathParams::<HeaplessCt, Ct>::new(HeaplessCt::from_be_bytes(&[35])).unwrap();
+        let c = wrap_value(HeaplessCt::from(32u8));
+        let d = wrap_value(HeaplessCt::from(29u8));
+        let e = wrap_value(HeaplessCt::from(5u8));
+        let mut rng = ChaCha8Rng::from_seed([9; 32]);
+        let recovered = crate::algorithms::rsa::rsa_private_op_and_check_blinded(
+            &mut rng, &c, &d, &e, &n_params,
+        )
+        .unwrap();
+        assert_eq!(into_inner(recovered), HeaplessCt::from(2u8));
     }
 
     #[test]
     fn rsa_private_op_and_check_rejects_wrong_exponent() {
-        // Same modulus + e, but a wrong `d` (11 instead of 29). The recovered
-        // `m` won't re-encrypt back to `c`, so the integrity check should fail.
-        let n_params = toy_params();
-        let c = wrap_value(SmallUCt::from(32u8));
-        let bad_d = wrap_value(SmallUCt::from(11u8));
-        let e = wrap_value(SmallUCt::from(5u8));
-        let result = crate::algorithms::rsa::rsa_private_op_and_check(&c, &bad_d, &e, &n_params);
-        assert!(result.is_err());
+        fn inner<T: TestCt>()
+        where
+            <T as modmath_cios::CiosRowOps>::Word: const_num_traits::CtParity,
+        {
+            // Same modulus + e, wrong `d` (11 vs 29). The recovered `m`
+            // won't re-encrypt back to `c`, so the check should fail.
+            let n_params = toy_params::<T>();
+            let c = wrap_value(T::from(32u8));
+            let bad_d = wrap_value(T::from(11u8));
+            let e = wrap_value(T::from(5u8));
+            let result =
+                crate::algorithms::rsa::rsa_private_op_and_check(&c, &bad_d, &e, &n_params);
+            assert!(result.is_err());
+        }
+        inner::<SmallUCt>();
+        inner::<HeaplessCt>();
     }
 
     // 2048-bit RSA keypair fixture — same `(n, e=65537, d)` used in
