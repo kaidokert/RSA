@@ -30,7 +30,7 @@ every shipped carrier flavor at the width we actually deploy:
 | `fb64__N32`    |    2048 | `u64` | 64-bit hosts |
 
 Keys are real generated keypairs (`e = 65537`), shared between the
-fixture crates via [`test_keys.rs`](test_keys.rs), so the happy path
+fixture crates via [`test_keys.rs`](../tests/fixtures/test_keys.rs), so the happy path
 (including verify-after-sign) is the code under inspection rather than
 a retry-then-fail path.
 

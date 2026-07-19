@@ -19,7 +19,7 @@ use rsa::pkcs1v15::GenericSigningKey;
 use rsa::traits::FixedWidthUnsignedInt;
 use sha2::Sha256;
 
-include!("../../test_keys.rs");
+include!("../../../tests/fixtures/test_keys.rs");
 
 #[cfg(all(not(feature = "etm-single-trial"), feature = "statistical-campaign"))]
 const TRIALS: usize = 100;
