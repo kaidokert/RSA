@@ -131,9 +131,7 @@ fn wrap_value<T>(value: T) -> ModMathValue<T> {
 ///
 /// Prefer this over writing `ModMathValue(x)` directly: the tuple form
 /// only compiles on the `alloc` build and breaks the no-alloc one
-/// (`expected function / tuple struct, found type alias`). This is the
-/// only way to wrap a raw carrier value that compiles under both
-/// feature configurations.
+/// (`expected function / tuple struct, found type alias`).
 #[cfg(feature = "alloc")]
 pub fn wrap<T>(value: T) -> ModMathValue<T> {
     ModMathValue(value)
@@ -347,14 +345,9 @@ where
     // The `Bytes` holder is capacity-width, but the modulus operates at
     // `modulus_bits` (its `bits_precision`, always a whole number of
     // limbs). Sample only the trailing `window_bytes` (big-endian: the
-    // low-order bytes): the mask (`leading_zero_bits` = the modulus's own
-    // headroom) is then relative to the modulus width, so acceptance is
-    // >= 50% even when the modulus is much narrower than the capacity,
-    // and parsing just that window yields a candidate at `len ==
-    // modulus.len` — width-consistent with the field it feeds rather than
-    // a capacity-width operand. For a full-width modulus (`modulus_bits ==
-    // capacity`) the window is the whole buffer, so the deployment path is
-    // unchanged.
+    // low-order bytes) so the mask (`leading_zero_bits` = the modulus's
+    // own headroom) is relative to the modulus width — acceptance is
+    // >= 50% even when the modulus is far narrower than the capacity.
     let window_bytes = (modulus_bits as usize).div_ceil(8);
     let lo = bytes.as_ref().len().saturating_sub(window_bytes);
     for _ in 0..MAX_TRIES {
@@ -988,16 +981,13 @@ mod private_op_tests {
 
     type SmallUCt = FixedUInt<u8, 64, Ct>;
 
-    // ── Carrier-generic toy tests ──────────────────────────────────
+    // ── Carrier toy tests ──────────────────────────────────────────
     //
-    // Every test below is written as a `fn inner<T>()` over the integer
-    // carrier and then instantiated for each backend, mirroring the
-    // per-carrier pattern used in fixed-bigint. `SmallUCt` is the
-    // fixed-width reference; `HeaplessCt` is the runtime-length carrier
-    // the `bigint-heapless-runtime-len` experiment adopts. Tests that
-    // pass on both call `both::<…>()`; tests that currently fail on the
-    // heapless carrier for a known upstream reason run the reference
-    // inline and gate the heapless instantiation behind `#[ignore]`.
+    // Most tests are written as a `fn inner<T>()` and instantiated for
+    // both carriers: `SmallUCt` is the fixed-width reference, `HeaplessCt`
+    // the runtime-length carrier. The sub-capacity tests further down are
+    // `HeaplessCt`-specific — only a runtime-length carrier can hold a
+    // modulus narrower than its capacity.
     type HeaplessCt = fixed_bigint::HeaplessBigInt<u8, 64, Ct>;
 
     // The full carrier bound for the CT sign+blind path: enough for
@@ -1150,10 +1140,9 @@ mod private_op_tests {
         and_check_blinded_round_trip_inner::<HeaplessCt>();
     }
 
-    // Uses toy_params_wide's 512-bit modulus (`2^511 + 1`) so the
-    // acceptance rate is essentially 50% (top bit set) and 128-tries
-    // doesn't get exhausted. Sampler-only path — no inverse — so it
-    // runs on both carriers.
+    // A 512-bit modulus (`2^511 + 1`, top bit set) so acceptance is
+    // essentially 50% and the 128-try cap isn't exhausted. Sampler-only
+    // path — no inverse — so it runs on both carriers.
     fn try_random_mod_below_modulus_inner<T: TestCt>(n: ModMathValue<T>)
     where
         <T as modmath_cios::CiosRowOps>::Word: const_num_traits::CtParity,
@@ -1254,10 +1243,8 @@ mod private_op_tests {
         assert_eq!(recovered, wrap_value(T::from(12u8)));
     }
     // `invert_ct` works on both carriers at every width — the toy `n = 35`
-    // here and the 2048-bit full-CAP deployment modulus exercised
-    // end-to-end by the `heapless_bigint_smoke` blinded-sign test (which
-    // passes; the earlier `inv_safegcd_ct` None-at-u32x64 bug was fixed
-    // upstream in the alpha.21 / cios.8 chain).
+    // here, and the 2048-bit full-CAP deployment modulus end-to-end in the
+    // `heapless_bigint_smoke` blinded-sign test.
     #[test]
     fn invert_ct_modmath_known_answer() {
         invert_ct_known_answer_inner::<SmallUCt>();
@@ -1293,7 +1280,7 @@ mod private_op_tests {
     // `HeaplessBigInt` operating on 1024/2048-bit keys at their own width
     // rather than padded to capacity. `HeaplessCt` is `u8 × 64` (512-bit
     // CAP); a natural-width `n = 35` (built with the inherent slice
-    // constructor) has `bits_precision = 8`, so `len = 1 << 64`.
+    // constructor) has `bits_precision = 8`, so `len = 1` (of 64 limbs).
 
     // The rejection sampler must accept on a narrow modulus. Its buffer is
     // capacity-width, so the mask/window has to be taken relative to the
@@ -1341,7 +1328,7 @@ mod private_op_tests {
         assert_eq!(into_inner(blinded), two);
     }
 
-    // Full sampled blinded op on a narrow modulus: the sampler now parses
+    // Full sampled blinded op on a narrow modulus: the sampler parses
     // its modulus-width window with `FromByteSlice::from_be_slice`, so the
     // sampled `r` lands at the field width and the blinded arithmetic (and
     // verify-after-sign) closes. This is the end-to-end sub-capacity proof

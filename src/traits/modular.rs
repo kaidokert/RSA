@@ -45,9 +45,8 @@ pub trait IntegerResize: Sized {
 // own `BitsPrecision`) needs them visible through the bound.
 // `WithPrecision` (construct-at-width) joins them: modmath's
 // width-establishing call graph (`zero_with_precision_of`,
-// `widen_to_precision`) now requires it on the carrier — the "state a
-// width" contract entering the type system. Identity on fixed-width
-// carriers; real on the runtime-length one.
+// `widen_to_precision`) requires it on the carrier. Identity on
+// fixed-width carriers; real on the runtime-length one.
 // `FromByteSlice` is the *slice*-taking constructor, distinct from the
 // `Bytes`-holder `try_from_be_bytes_vartime` below: its output width is
 // the slice length, not the capacity-sized holder. The blinding sampler
@@ -190,9 +189,7 @@ where
     fn resize_unchecked(self, at_least_bits_precision: u32) -> Self::Output {
         // `WithPrecision::widen_to_precision` establishes the operating
         // width on a runtime-length carrier (never shrinks, value-
-        // preserving) and is the identity on a fixed-width one — so this
-        // genuinely resizes for `HeaplessBigInt` instead of no-opping and
-        // leaning on the field's `reduce` to normalize downstream.
+        // preserving) and is the identity on a fixed-width one.
         WithPrecision::widen_to_precision(self, at_least_bits_precision)
     }
 

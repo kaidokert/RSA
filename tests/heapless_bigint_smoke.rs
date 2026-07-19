@@ -1,18 +1,16 @@
-//! EXPERIMENT (bigint-heapless-runtime-len): the runtime-length carrier
-//! against this crate's actual sign/verify surface.
-//!
-//! `fixed_bigint::HeaplessBigInt` is the fixed-capacity / runtime-length
-//! bignum this experiment adopts. With the `FixedWidthUnsignedInt`
-//! blanket rebound onto the vocabulary pair (`BitsPrecision` = the
-//! constructed operating width, `BitWidth` = the value-defined
-//! bit-length), the carrier reaches the whole modmath backend. Host-only.
+//! Smoke tests for `fixed_bigint::HeaplessBigInt` (the fixed-capacity /
+//! runtime-length bignum) against this crate's sign/verify surface. With
+//! the `FixedWidthUnsignedInt` blanket rebound onto the vocabulary pair
+//! (`BitsPrecision` = the constructed operating width, `BitWidth` = the
+//! value-defined bit-length), the carrier reaches the whole modmath
+//! backend. Host-only.
 //!
 //! Width semantics through this trait surface: the `ToBytes`/`FromBytes`
 //! holder is capacity-width by design, so values built via
-//! `try_from_be_bytes_vartime` operate at `CAP` — exactly the RSA
-//! deployment shape (a modulus constructed at `len == CAP`). Sub-capacity
-//! runtime widths come from the carrier's inherent constructors and the
-//! future runtime-len modmath kernels, not from this byte path.
+//! `try_from_be_bytes_vartime` operate at `CAP` — the RSA deployment
+//! shape (a modulus constructed at `len == CAP`). Sub-capacity runtime
+//! widths come from the carrier's inherent slice constructors, not from
+//! this byte path.
 
 // The whole file exercises the `modmath` backend (`rsa::modmath_support`,
 // which is `#[cfg(feature = "modmath")]`), so it compiles to nothing when
@@ -23,12 +21,11 @@
 use const_num_traits::{BitWidth, BitsPrecision, Ct, Nct};
 use fixed_bigint::HeaplessBigInt;
 
-/// 2048-bit capacity carrier (`u32` limbs × 64) — the deployment shape
-/// the experiment targets.
+/// 2048-bit capacity carrier (`u32` limbs × 64) — the RSA deployment shape.
 type H = HeaplessBigInt<u32, 64>;
 type HCt = HeaplessBigInt<u32, 64, Ct>;
 
-// Real 2048-bit RSA keypair shared with the CT-verification harness.
+// Real 2048-bit RSA keypair fixture.
 include!("fixtures/test_keys.rs");
 
 #[test]
@@ -125,16 +122,11 @@ impl rand_core::TryRng for FixedRng {
 }
 impl rand_core::TryCryptoRng for FixedRng {}
 
-/// The prize: a whole 2048-bit blinded PKCS#1 v1.5 sign with the
-/// runtime-length carrier at full capacity — now passing end to end.
-/// The sign path runs verify-after-sign internally
+/// A full 2048-bit blinded PKCS#1 v1.5 sign on the runtime-length carrier
+/// at capacity. The sign path runs verify-after-sign internally
 /// (`rsa_private_op_and_check_blinded` recomputes with the public
-/// exponent and compares), so a successful sign also proves the verify
-/// math on this carrier. RSA's code is fully carrier-generic; the last
-/// upstream blocker (`Field::inv_safegcd_ct` returning `None` for
-/// coprime inputs on HeaplessBigInt at u32×64 width) was fixed by the
-/// width-preserving Shl / div_rem rework in fixed-bigint 0.6.0-alpha.21
-/// + modmath 0.6.0-alpha.cios.8.
+/// exponent and compares), so a passing sign also exercises the verify
+/// math on this carrier.
 #[test]
 fn pkcs1v15_blinded_sign_2048() {
     use rsa::modmath_support::public_key_ct_from_be_bytes;
