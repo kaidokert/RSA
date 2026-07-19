@@ -1,0 +1,68 @@
+[profiles.avr]
+preset = "simavr-atmega2560"
+toolchain = "nightly-2025-11-01"
+timeout-seconds = 600
+
+[[case-sets.rsa-avr-full]]
+name = "baseline"
+example = "baseline"
+features = ["baseline"]
+expected-benchmark = "rsa-footprint"
+
+[[case-sets.rsa-avr-full]]
+name = "rsa512-sha1"
+example = "rsa_verify"
+features = ["key_512", "hash_sha1"]
+expected-benchmark = "rsa-footprint"
+
+[[case-sets.rsa-avr-full]]
+name = "rsa512-sha256"
+example = "rsa_verify"
+features = ["key_512", "hash_sha256"]
+expected-benchmark = "rsa-footprint"
+
+[[case-sets.rsa-avr-full]]
+name = "rsa768-sha256"
+example = "rsa_verify"
+features = ["key_768", "hash_sha256"]
+expected-benchmark = "rsa-footprint"
+
+[[case-sets.rsa-avr-full]]
+name = "rsa1024-sha256"
+example = "rsa_verify"
+features = ["key_1024", "hash_sha256"]
+expected-benchmark = "rsa-footprint"
+
+[[case-sets.rsa-avr-full]]
+name = "rsa1536-sha256"
+example = "rsa_verify"
+features = ["key_1536", "hash_sha256"]
+expected-benchmark = "rsa-footprint"
+
+[[case-sets.rsa-avr-fast]]
+name = "baseline"
+example = "baseline"
+features = ["baseline"]
+expected-benchmark = "rsa-footprint"
+
+[[case-sets.rsa-avr-fast]]
+name = "rsa512-sha1"
+example = "rsa_verify"
+features = ["key_512", "hash_sha1"]
+expected-benchmark = "rsa-footprint"
+
+[[case-sets.rsa-avr-fast]]
+name = "rsa512-sha256"
+example = "rsa_verify"
+features = ["key_512", "hash_sha256"]
+expected-benchmark = "rsa-footprint"
+
+[campaigns.rsa-avr]
+profile = "avr"
+case-set = "rsa-avr-full"
+baseline-case = "baseline"
+
+[campaigns.rsa-avr-fast]
+profile = "avr"
+case-set = "rsa-avr-fast"
+baseline-case = "baseline"

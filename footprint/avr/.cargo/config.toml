@@ -8,5 +8,5 @@ rustflags = ["-C", "target-cpu=atmega2560", "--cfg", 'sha2_backend_soft="compact
 build-std = ["core"]
 
 [target.avr-none]
-# Run simavr through wrapper so WSL can be used on Windows
-runner = "python3 simavr_wrapper.py -t 300 -m atmega2560 -f 16000000"
+# Installed by `cargo install krabi-caliper --features cli`.
+runner = "krabi-caliper-simavr -t 300 --completion-marker status:PASS -- -m atmega2560 -f 16000000"
