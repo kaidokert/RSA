@@ -4,13 +4,13 @@
 use const_num_traits::Ct;
 use core::{convert::Infallible, hint::black_box};
 use cortex_m_rt::entry;
-use embedded_measure::cortex_m::DwtCycleCounter;
+use krabi_caliper::cortex_m::DwtCycleCounter;
 #[cfg(not(feature = "etm-single-trial"))]
-use embedded_measure::report::Field;
+use krabi_caliper::report::Field;
 #[cfg(not(feature = "etm-single-trial"))]
-use embedded_measure::stack::{CortexM, LinkerStack, StackConfig, StackProbe};
+use krabi_caliper::stack::{CortexM, LinkerStack, StackConfig, StackProbe};
 #[cfg(not(feature = "etm-single-trial"))]
-use embedded_measure::suite::{PairedSuite, PairedSuiteConfig, PairedSuiteFields};
+use krabi_caliper::suite::{PairedSuite, PairedSuiteConfig, PairedSuiteFields};
 use fixed_bigint::FixedUInt;
 use rand_core::{TryCryptoRng, TryRng};
 use rsa::GenericRsaPrivateKey;
@@ -332,7 +332,7 @@ fn run_etm_single_trial(signing_key: &SigningKey, key_index: u32, hclk_hz: u32) 
             outcome.rng_words,
         );
     };
-    embedded_measure::rtt::print(format_args!(
+    krabi_caliper::rtt::print(format_args!(
         "ETM_TRIAL fixture:pkcs1v15_blinded_sign key:{} ticks:{} frequency_hz:{} warmup_ok:{} output_ok:{} rng_words:{}\n",
         key_index, ticks, hclk_hz, warmup.ok as u8, outcome.ok as u8, outcome.rng_words,
     ));
@@ -375,7 +375,7 @@ fn main() -> ! {
     .unwrap();
     #[cfg(feature = "etm-single-trial")]
     {
-        let _reporter = embedded_measure::rtt::init_ct_compatible();
+        let _reporter = krabi_caliper::rtt::init_ct_compatible();
         let _ = counter;
         // SAFETY: the host writes this selector while the core is halted at
         // reset, before main executes.
@@ -386,12 +386,12 @@ fn main() -> ! {
             0 => &KEY_A,
             1 => &KEY_B,
             _ => {
-                embedded_measure::rtt::print(format_args!("SETUP_FAIL key:{}\n", key_index));
+                krabi_caliper::rtt::print(format_args!("SETUP_FAIL key:{}\n", key_index));
                 stop();
             }
         };
         let Some(key) = prepare_key(key_input) else {
-            embedded_measure::rtt::print(format_args!("SETUP_FAIL key:{}\n", key_index));
+            krabi_caliper::rtt::print(format_args!("SETUP_FAIL key:{}\n", key_index));
             stop();
         };
         run_etm_single_trial(&key, key_index, hclk_hz);
@@ -400,7 +400,7 @@ fn main() -> ! {
     #[cfg(not(feature = "etm-single-trial"))]
     {
         let Some(key_a) = prepare_key(&KEY_A) else {
-            embedded_measure::rtt::print(format_args!("SETUP_FAIL key:A\n"));
+            krabi_caliper::rtt::print(format_args!("SETUP_FAIL key:A\n"));
             stop();
         };
         run_campaign(key_a, counter, hclk_hz)
@@ -409,10 +409,10 @@ fn main() -> ! {
 
 #[cfg(not(feature = "etm-single-trial"))]
 fn run_campaign(key_a: SigningKey, mut counter: DwtCycleCounter, hclk_hz: u32) -> ! {
-    let mut reporter = embedded_measure::rtt::init_ct_compatible();
+    let mut reporter = krabi_caliper::rtt::init_ct_compatible();
     let stack_probe = paint_stack();
     let Some(key_b) = prepare_key(&KEY_B) else {
-        embedded_measure::rtt::print(format_args!("SETUP_FAIL key:B\n"));
+        krabi_caliper::rtt::print(format_args!("SETUP_FAIL key:B\n"));
         stop();
     };
     let preflight_a = sign_once(&key_a);
@@ -438,7 +438,7 @@ fn run_campaign(key_a: SigningKey, mut counter: DwtCycleCounter, hclk_hz: u32) -
             suite: SUITE,
             target: "thumbv7em-none-eabihf",
             board: Some("stm32f407vg"),
-            unit: embedded_measure::Unit::CoreCycles,
+            unit: krabi_caliper::Unit::CoreCycles,
             frequency_hz: Some(hclk_hz as u64),
             warmup_blocks: 2,
             batches: BATCHES,
@@ -488,7 +488,7 @@ fn run_campaign(key_a: SigningKey, mut counter: DwtCycleCounter, hclk_hz: u32) -
 
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo) -> ! {
-    embedded_measure::rtt::print(format_args!("PANIC: {}\n", info));
+    krabi_caliper::rtt::print(format_args!("PANIC: {}\n", info));
     loop {
         cortex_m::asm::nop();
     }

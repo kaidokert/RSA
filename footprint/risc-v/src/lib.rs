@@ -2,9 +2,9 @@
 
 use core::fmt::Write;
 use core::hint::black_box;
-use embedded_measure::Counter;
-use embedded_measure::report::{Field, MeasurementRecord, OutcomeRecord, Reporter, StackRecord};
-use embedded_measure::risc_v::{McycleCounter, MinstretCounter};
+use krabi_caliper::Counter;
+use krabi_caliper::report::{Field, MeasurementRecord, OutcomeRecord, Reporter, StackRecord};
+use krabi_caliper::risc_v::{McycleCounter, MinstretCounter};
 
 pub mod stack;
 pub mod uart;

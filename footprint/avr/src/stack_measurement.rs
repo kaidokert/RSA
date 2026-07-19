@@ -1,4 +1,4 @@
-use embedded_measure::stack::{Avr, LinkerStack, StackConfig, StackMeasurement, StackProbe};
+use krabi_caliper::stack::{Avr, LinkerStack, StackConfig, StackMeasurement, StackProbe};
 
 const RAMEND_EXCLUSIVE: usize = 0x2200;
 

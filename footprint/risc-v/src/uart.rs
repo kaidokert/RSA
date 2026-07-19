@@ -1,4 +1,4 @@
-use embedded_measure::uart::{UartReporter, WriteByte, reporter};
+use krabi_caliper::uart::{UartReporter, WriteByte, reporter};
 
 const UART0_BASE: usize = 0x10013000;
 const TXDATA_OFFSET: usize = 0x00;

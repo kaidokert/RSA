@@ -3,7 +3,7 @@
 Run the complete SiFive-E QEMU matrix with:
 
 ```sh
-cargo embedded-measure run rsa-riscv32
+cargo krabi-caliper run rsa-riscv32
 ```
 
 The firmware emits the shared `EM_*` protocol over UART. The Rust runner stops

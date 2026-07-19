@@ -131,13 +131,13 @@ cargo build --manifest-path ct-verify/Cargo.toml \
   --features rsa512,carrier-u32x16,clock-168mhz,etm-single-trial
 ```
 
-Run the hardware gate from the `embedded-measure` checkout:
+Run the hardware gate from the `krabi-caliper` checkout:
 
 ```sh
-cargo run --features cli --bin cargo-embedded-measure -- \
+cargo run --features cli --bin cargo-krabi-caliper -- \
   jtrace-ct-gate \
   ../rsa/ct-verify/target/thumbv7em-none-eabihf/release/rsa-cyccnt-hardware \
-  --output-dir ../rsa/ct-verify/target/embedded-measure/rsa512-etm-ct-gate \
+  --output-dir ../rsa/ct-verify/target/krabi-caliper/rsa512-etm-ct-gate \
   --probe-serial 001224000224 \
   --keys 2 --repetitions 3 \
   --max-dwt-spread 128 --max-profile-delta 128 \

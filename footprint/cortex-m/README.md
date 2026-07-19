@@ -2,14 +2,14 @@
 
 The shared Rust runner owns the QEMU M0/M3/M4 matrix, semihosting capture,
 ELF accounting, deadlines, baseline deltas, and reports. Run
-`cargo embedded-measure run rsa-cortex-m0` (or the `m3`/`m4` campaign) in this
-directory; configuration lives in `embedded-measure.toml`.
+`cargo krabi-caliper run rsa-cortex-m0` (or the `m3`/`m4` campaign) in this
+directory; configuration lives in `krabi-caliper.toml`.
 
 The same case set runs on the J-Trace reference board through the declarative
 `probe-rs` profile. For a focused RSA-512 run:
 
 ```sh
-cargo embedded-measure run rsa-jtrace-f407 \
+cargo krabi-caliper run rsa-jtrace-f407 \
   --case baseline --case rsa512-sha1-u32
 ```
 
@@ -28,6 +28,6 @@ Hardware metrics include the stack high-water mark, raw DWT `CYCCNT` as
 `dwt_cycles`, and raw `systick_cycles`. The legacy `cycles` field remains
 SysTick cycles divided by 1,000 for QEMU compatibility. DWT measurements must
 be shorter than 2^32 core cycles. Stack painting and scanning use the shared
-`embedded-measure` probe also used by the RISC-V and AVR harnesses.
+`krabi-caliper` probe also used by the RISC-V and AVR harnesses.
 Stack results are emitted as versioned `EM_STACK` records; the legacy
 `METRIC stack:` field remains during parser migration.

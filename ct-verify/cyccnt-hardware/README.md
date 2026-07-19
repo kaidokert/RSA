@@ -14,7 +14,7 @@ uses matched streams rather than merely matched initial state. Trials use RTT,
 interrupt-free DWT `CYCCNT`, two exact-path balanced warm-up blocks, and
 balanced ABBA/BAAB recorded order.
 
-The carrier uses `embedded-measure::PairedSuite` for DWT sampling, exact-path
+The carrier uses `krabi-caliper::PairedSuite` for DWT sampling, exact-path
 warmups, matched-input comparison, safe counter-region enforcement, versioned
 reporting, diagnostics, and totals. It emits lossless `EM_*` schema 1 records
 plus legacy `CT_*` records during host tooling migration.
@@ -27,7 +27,7 @@ configured HCLK over RTT.
 Run the complete 168 MHz declarative campaign:
 
 ```sh
-cargo embedded-measure run rsa-signing-ct-jtrace-f407
+cargo krabi-caliper run rsa-signing-ct-jtrace-f407
 ```
 
 Use repeatable `--case` options to select `rsa512-u32x16`, `rsa512-u8x64`,
@@ -36,7 +36,7 @@ feature set, downloads and resets the target, releases the probe for the
 width-qualified delay, and then attaches only to drain the blocking RTT
 channel. It retains the ELF, exact download/reset/attach commands, preparation
 and RTT logs, parsed result, report, and reproducibility metadata below
-`target/embedded-measure/rsa-signing-ct-jtrace-f407/`.
+`target/krabi-caliper/rsa-signing-ct-jtrace-f407/`.
 
 Direct development runs remain available, for example:
 
@@ -80,7 +80,7 @@ The detailed verdict and address-family classification are recorded in
 
 The `etm-single-trial` feature turns this same signing boundary into a
 host-selected, one-operation ETM fixture. Both keys remain in one identical
-ELF. While the reset core is halted, `cargo embedded-measure
+ELF. While the reset core is halted, `cargo krabi-caliper
 jtrace-ct-gate` writes the key index into the exported uninitialized selector,
 arms DWT comparators as ETM start/stop events, and runs until a terminal
 `BKPT` outside the measured region. The target then exposes the observed key,
@@ -109,7 +109,7 @@ leak: SEGGER's compact counters have observable repeat-run attribution jitter,
 and they do not expose data-memory addresses. The retained symbolized diff is
 the starting point for reviewing the key-dependent profile in fixed-bigint,
 modular exponentiation, and signing code. Generated evidence lives under
-`target/embedded-measure/rsa512-etm-ct-gate-final/` and is intentionally not
+`target/krabi-caliper/rsa512-etm-ct-gate-final/` and is intentionally not
 committed.
 
 Initial 16 MHz STM32F407/J-Trace calibration passed both fixtures on both

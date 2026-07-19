@@ -1,4 +1,4 @@
-use embedded_measure::stack::{CortexM, LinkerStack, StackConfig, StackProbe};
+use krabi_caliper::stack::{CortexM, LinkerStack, StackConfig, StackProbe};
 
 pub fn paint_stack<const SAFE: usize>() -> StackProbe {
     // SAFETY: cortex-m-rt defines the writable descending-stack allocation.

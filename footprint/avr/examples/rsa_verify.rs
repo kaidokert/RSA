@@ -24,8 +24,8 @@ const _: () = {
 #[cfg(all(feature = "hash_sha1", not(feature = "key_512")))]
 compile_error!("hash_sha1 only paired with key_512 (no fixture exists for other key sizes)");
 
-use embedded_measure::avr::timer_measurement;
-use embedded_measure::report::{
+use krabi_caliper::avr::timer_measurement;
+use krabi_caliper::report::{
     Field, MeasurementRecord, StackRecord, write_measurement_ufmt, write_stack_ufmt,
 };
 use fixed_bigint::FixedUInt;

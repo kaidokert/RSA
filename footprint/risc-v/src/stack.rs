@@ -1,4 +1,4 @@
-use embedded_measure::stack::{LinkerStack, RiscV, StackConfig, StackProbe};
+use krabi_caliper::stack::{LinkerStack, RiscV, StackConfig, StackProbe};
 
 pub fn paint_stack<const SAFE: usize>() -> StackProbe {
     // SAFETY: riscv-rt defines _sheap as the floor and _stack_start as the top.
