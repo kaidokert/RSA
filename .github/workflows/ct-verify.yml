@@ -72,6 +72,18 @@ jobs:
           toolchain: 1.87.0
           targets: ${{ matrix.target }}
           components: llvm-tools-preview
+      - name: Install krabi-caliper
+        run: cargo install krabi-caliper --features cli
       - name: Panic-free sign-path audit
-        working-directory: ct-verify
-        run: sh panic-free-audit/check.sh ${{ matrix.target }}
+        run: |
+          cargo krabi-caliper panic-audit \
+            --workspace ct-verify \
+            --package panic-free-audit \
+            --target ${{ matrix.target }} \
+            --features panic-handler \
+            --negative-features neg-controls \
+            --owned-symbol '.*' \
+            --expect-negative panic_audit__neg__bounds_check \
+            --expect-negative panic_audit__neg__unwrap \
+            --expect-negative panic_audit__neg__expect \
+            --json target/panic-audit/${{ matrix.target }}.json

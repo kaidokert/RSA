@@ -13,8 +13,9 @@ crate-type = ["staticlib"]
 
 [features]
 default = []
-# See lib.rs — enabled by check.sh for the cross-built staticlib.
+# See lib.rs — enabled by the shared panic-audit command.
 panic-handler = []
+neg-controls = []
 
 [dependencies]
 rsa = { path = "../..", package = "rsa_heapless", default-features = false, features = ["modmath"] }

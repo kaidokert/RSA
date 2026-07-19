@@ -95,7 +95,12 @@ prehash sign variant keeps `sha2` compression out of the archive,
 scoping the audit to this crate's composition.
 
 ```sh
-sh panic-free-audit/check.sh thumbv7m-none-eabi
+cargo krabi-caliper panic-audit --workspace . --package panic-free-audit \
+  --target thumbv7m-none-eabi --features panic-handler \
+  --negative-features neg-controls --owned-symbol '.*' \
+  --expect-negative panic_audit__neg__bounds_check \
+  --expect-negative panic_audit__neg__unwrap \
+  --expect-negative panic_audit__neg__expect
 ```
 
 This layer has caught real bugs at real deployment widths twice

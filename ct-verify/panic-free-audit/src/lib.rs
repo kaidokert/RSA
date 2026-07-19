@@ -5,7 +5,7 @@
 //! key construction handled with `if let Ok` (a `match`, never a
 //! panicking `unwrap`), and the sign `Result` observed through
 //! `black_box` rather than extracted. After cross-building with the
-//! workspace release profile, `check.sh` asserts the archive contains
+//! workspace release profile, krabi-caliper asserts the archive contains
 //! no `core::panicking` machinery — for a signer a reachable panic is
 //! both a DoS edge and a timing oracle (the panic-formatting path's cost
 //! depends on the values being formatted).
@@ -16,9 +16,12 @@
 //! op, verify-after-sign, and serialization.
 
 // no_std + the local #[panic_handler] only under the `panic-handler`
-// feature (the cross-built audit shape, enabled by check.sh). Host-side
+// feature (the cross-built audit shape, enabled by krabi-caliper). Host-side
 // workspace builds (clippy) link std, which supplies its own.
 #![cfg_attr(feature = "panic-handler", no_std)]
+
+#[cfg(feature = "neg-controls")]
+mod neg_controls;
 
 use const_num_traits::Ct;
 use core::hint::black_box;
