@@ -23,16 +23,15 @@
 //!   5. self-test: assert the negative controls still trip the tables
 //!   6. emit JSON report; exit non-zero on any of the above
 
-mod parse;
-mod report;
 mod target;
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitCode};
 
-use crate::parse::{Patterns, Violation};
-use crate::report::{Report, ViolationOut};
 use crate::target::{lookup, TargetSpec, TARGETS};
+use krabi_caliper::host::ct_asm::{
+    self as parse, LadderReport as Report, Patterns, Violation, ViolationOut,
+};
 
 /// Default match for the secret-exponent ladder symbol. modmath's CT
 /// exponentiation is `Field::<T, Ct>::exp`; the mangled form ends
@@ -179,7 +178,7 @@ fn main() -> ExitCode {
 
     // 4. Parse + scan.
     let blocks = parse::split_blocks(&objdump_text);
-    let pat = Patterns::build(spec);
+    let pat = Patterns::new(spec.forbidden, spec.allowed_cmov, &[], &[], &[]);
     let ladder_re = match regex::Regex::new(args.ladder.as_deref().unwrap_or(DEFAULT_LADDER)) {
         Ok(r) => r,
         Err(e) => {
@@ -201,7 +200,7 @@ fn main() -> ExitCode {
         // instantiation gets its own count rather than sharing one pool.
         if ladder_re.is_match(&block.symbol) {
             ladder_symbols_matched += 1;
-            let mut branches = parse::scan_block(block, &pat);
+            let mut branches = parse::scan_block(block, &pat, spec.triple.starts_with("thumb"));
             ladder_branches_seen += branches.len();
             if branches.len() > spec.ladder_allowed_branches {
                 ladder_violations.extend(branches.split_off(spec.ladder_allowed_branches));
@@ -213,7 +212,9 @@ fn main() -> ExitCode {
         }
         // Negative controls: the mnemonic-table self-test. At least one
         // must trip, proving the tables detect branches on this ISA.
-        if parse::is_negative_control(&block.symbol) && !parse::scan_block(block, &pat).is_empty() {
+        if parse::is_negative_control(&block.symbol)
+            && !parse::scan_block(block, &pat, spec.triple.starts_with("thumb")).is_empty()
+        {
             negative_controls_tripped += 1;
         }
     }
