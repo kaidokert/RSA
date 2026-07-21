@@ -97,7 +97,8 @@ fn arithmetic_smoke() {
 
 /// Deterministic infallible RNG for the salt/blinding draw — the
 /// stream only needs to be stable, not cryptographic, for a smoke test.
-use krabi_caliper::deterministic::FixtureRng as FixedRng;
+use rand::rngs::ChaCha12Rng;
+use rand_core::SeedableRng;
 
 /// A full 2048-bit blinded PKCS#1 v1.5 sign on the runtime-length carrier
 /// at capacity. The sign path runs verify-after-sign internally
@@ -119,7 +120,7 @@ fn pkcs1v15_blinded_sign_2048() {
     let signing_key =
         GenericSigningKey::<Sha256, _, _>::new(GenericRsaPrivateKey::from_public_and_d(pubkey, d));
 
-    let mut rng = FixedRng::new(0);
+    let mut rng = ChaCha12Rng::from_seed([0; 32]);
     let prehash = [0x42u8; 32];
     let mut em = [0u8; 256];
     let mut sig = [0u8; 256];

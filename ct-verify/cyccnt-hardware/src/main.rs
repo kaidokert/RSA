@@ -6,7 +6,9 @@ use core::hint::black_box;
 use cortex_m_rt::entry;
 use fixed_bigint::FixedUInt;
 use krabi_caliper::cortex_m::DwtCycleCounter;
-use krabi_caliper::deterministic::FixtureRng;
+use krabi_caliper::protocol::rtt;
+use rand_chacha::ChaCha12Rng;
+use rand_core::{SeedableRng, TryCryptoRng, TryRng};
 #[cfg(not(feature = "etm-single-trial"))]
 use krabi_caliper::report::Field;
 #[cfg(not(feature = "etm-single-trial"))]
@@ -186,6 +188,45 @@ struct SignOutcome {
     rng_words: u32,
 }
 
+struct CountingCryptoRng {
+    inner: ChaCha12Rng,
+    words: u32,
+}
+
+impl CountingCryptoRng {
+    fn new(seed: u64) -> Self {
+        let mut bytes = [0; 32];
+        bytes[..8].copy_from_slice(&seed.to_le_bytes());
+        Self {
+            inner: ChaCha12Rng::from_seed(bytes),
+            words: 0,
+        }
+    }
+}
+
+impl TryRng for CountingCryptoRng {
+    type Error = core::convert::Infallible;
+
+    fn try_next_u32(&mut self) -> Result<u32, Self::Error> {
+        self.words = self.words.wrapping_add(1);
+        self.inner.try_next_u32()
+    }
+
+    fn try_next_u64(&mut self) -> Result<u64, Self::Error> {
+        self.words = self.words.wrapping_add(1);
+        self.inner.try_next_u64()
+    }
+
+    fn try_fill_bytes(&mut self, destination: &mut [u8]) -> Result<(), Self::Error> {
+        self.words = self
+            .words
+            .wrapping_add(destination.len().div_ceil(8) as u32);
+        self.inner.try_fill_bytes(destination)
+    }
+}
+
+impl TryCryptoRng for CountingCryptoRng {}
+
 fn prepare_key(input: &KeyInput) -> Option<SigningKey> {
     let Ok(public_key) = public_key_ct_from_be_bytes::<Carrier>(black_box(input.modulus), 65537)
     else {
@@ -201,7 +242,7 @@ fn prepare_key(input: &KeyInput) -> Option<SigningKey> {
 
 #[inline(never)]
 fn sign_once(signing_key: &SigningKey) -> SignOutcome {
-    let mut rng = FixtureRng::new(RNG_SEED);
+    let mut rng = CountingCryptoRng::new(RNG_SEED);
     let mut encoded_message = [0u8; KEY_BYTES];
     let mut signature = [0u8; KEY_BYTES];
     let ok = signing_key
@@ -215,7 +256,7 @@ fn sign_once(signing_key: &SigningKey) -> SignOutcome {
     let _ = black_box((encoded_message, signature));
     SignOutcome {
         ok,
-        rng_words: rng.draws() as u32,
+        rng_words: rng.words,
     }
 }
 
@@ -290,7 +331,7 @@ fn run_etm_single_trial(signing_key: &SigningKey, key_index: u32, hclk_hz: u32) 
             outcome.rng_words,
         );
     };
-    krabi_caliper::rtt::print(format_args!(
+    rtt::print(format_args!(
         "ETM_TRIAL fixture:pkcs1v15_blinded_sign key:{} ticks:{} frequency_hz:{} warmup_ok:{} output_ok:{} rng_words:{}\n",
         key_index, ticks, hclk_hz, warmup.ok as u8, outcome.ok as u8, outcome.rng_words,
     ));
@@ -333,7 +374,7 @@ fn main() -> ! {
     .unwrap();
     #[cfg(feature = "etm-single-trial")]
     {
-        let _reporter = krabi_caliper::rtt::init_ct_compatible();
+        let _reporter = rtt::init_ct_compatible();
         let _ = counter;
         // SAFETY: the host writes this selector while the core is halted at
         // reset, before main executes.
@@ -344,12 +385,12 @@ fn main() -> ! {
             0 => &KEY_A,
             1 => &KEY_B,
             _ => {
-                krabi_caliper::rtt::print(format_args!("SETUP_FAIL key:{}\n", key_index));
+                rtt::print(format_args!("SETUP_FAIL key:{}\n", key_index));
                 stop();
             }
         };
         let Some(key) = prepare_key(key_input) else {
-            krabi_caliper::rtt::print(format_args!("SETUP_FAIL key:{}\n", key_index));
+            rtt::print(format_args!("SETUP_FAIL key:{}\n", key_index));
             stop();
         };
         run_etm_single_trial(&key, key_index, hclk_hz);
@@ -358,7 +399,7 @@ fn main() -> ! {
     #[cfg(not(feature = "etm-single-trial"))]
     {
         let Some(key_a) = prepare_key(&KEY_A) else {
-            krabi_caliper::rtt::print(format_args!("SETUP_FAIL key:A\n"));
+            rtt::print(format_args!("SETUP_FAIL key:A\n"));
             stop();
         };
         run_campaign(key_a, counter, hclk_hz)
@@ -367,10 +408,10 @@ fn main() -> ! {
 
 #[cfg(not(feature = "etm-single-trial"))]
 fn run_campaign(key_a: SigningKey, mut counter: DwtCycleCounter, hclk_hz: u32) -> ! {
-    let mut reporter = krabi_caliper::rtt::init_ct_compatible();
+    let mut reporter = rtt::init_ct_compatible();
     let stack_probe = paint_stack();
     let Some(key_b) = prepare_key(&KEY_B) else {
-        krabi_caliper::rtt::print(format_args!("SETUP_FAIL key:B\n"));
+        rtt::print(format_args!("SETUP_FAIL key:B\n"));
         stop();
     };
     let preflight_a = sign_once(&key_a);
@@ -446,7 +487,7 @@ fn run_campaign(key_a: SigningKey, mut counter: DwtCycleCounter, hclk_hz: u32) -
 
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo) -> ! {
-    krabi_caliper::rtt::print(format_args!("PANIC: {}\n", info));
+    rtt::print(format_args!("PANIC: {}\n", info));
     loop {
         cortex_m::asm::nop();
     }

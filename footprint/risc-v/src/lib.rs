@@ -4,7 +4,7 @@ use core::fmt::Write;
 use core::hint::black_box;
 use krabi_caliper::report::Field;
 use krabi_caliper::risc_v::{FootprintConfig, MmioTxFifo32, write_mmio32};
-use krabi_caliper::uart::{UartReporter, reporter};
+use krabi_caliper::protocol::uart::{UartReporter, reporter};
 
 pub const MODULUS: [u8; 64] = [
     0x96, 0x9d, 0x03, 0xff, 0xa9, 0x8d, 0x88, 0x8f, 0x3a, 0xa4, 0xf2, 0xfe, 0xd2, 0x32, 0xe6, 0x1c,

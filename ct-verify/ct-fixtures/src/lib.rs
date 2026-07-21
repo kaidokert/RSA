@@ -67,7 +67,8 @@ include!("../../../tests/fixtures/test_keys.rs");
 /// blinding factor `r` from it; a fixed stream keeps taint attribution
 /// deterministic (the driver decides pass/fail per symbol, so the
 /// stream just needs to be stable, not cryptographic).
-use krabi_caliper::deterministic::FixtureRng as FixedRng;
+use rand_chacha::ChaCha12Rng as FixedRng;
+use rand_core::SeedableRng;
 
 /// Positive: the whole blinded PKCS#1 v1.5 sign pipeline at 512-bit,
 /// driven by the secret private exponent `d`. Exercises padding,
@@ -90,7 +91,7 @@ pub unsafe extern "C" fn ct_fix__pkcs1v15_blinded_sign__fb8__N64(
     let signing_key =
         GenericSigningKey::<Sha256, _, _>::new(GenericRsaPrivateKey::from_public_and_d(pubkey, d));
 
-    let mut rng = FixedRng::new(0);
+    let mut rng = FixedRng::from_seed([0; 32]);
     let mut em = [0u8; 64];
     let mut sig = [0u8; 64];
     let _ = signing_key.try_sign_with_rng_into(&mut rng, b"ct fixture message", &mut em, &mut sig);
@@ -117,7 +118,7 @@ pub unsafe extern "C" fn ct_fix__pkcs1v15_blinded_sign__fb32__N64(
     let signing_key =
         GenericSigningKey::<Sha256, _, _>::new(GenericRsaPrivateKey::from_public_and_d(pubkey, d));
 
-    let mut rng = FixedRng::new(0);
+    let mut rng = FixedRng::from_seed([0; 32]);
     let mut em = [0u8; 256];
     let mut sig = [0u8; 256];
     let _ = signing_key.try_sign_with_rng_into(&mut rng, b"ct fixture message", &mut em, &mut sig);
@@ -142,7 +143,7 @@ pub unsafe extern "C" fn ct_fix__pkcs1v15_blinded_sign__fb8__N256(
     let signing_key =
         GenericSigningKey::<Sha256, _, _>::new(GenericRsaPrivateKey::from_public_and_d(pubkey, d));
 
-    let mut rng = FixedRng::new(0);
+    let mut rng = FixedRng::from_seed([0; 32]);
     let mut em = [0u8; 256];
     let mut sig = [0u8; 256];
     let _ = signing_key.try_sign_with_rng_into(&mut rng, b"ct fixture message", &mut em, &mut sig);
@@ -166,7 +167,7 @@ pub unsafe extern "C" fn ct_fix__pkcs1v15_blinded_sign__fb64__N32(
     let signing_key =
         GenericSigningKey::<Sha256, _, _>::new(GenericRsaPrivateKey::from_public_and_d(pubkey, d));
 
-    let mut rng = FixedRng::new(0);
+    let mut rng = FixedRng::from_seed([0; 32]);
     let mut em = [0u8; 256];
     let mut sig = [0u8; 256];
     let _ = signing_key.try_sign_with_rng_into(&mut rng, b"ct fixture message", &mut em, &mut sig);

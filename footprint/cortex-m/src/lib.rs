@@ -3,6 +3,8 @@
 use core::hint::black_box;
 use krabi_caliper::cortex_m::FootprintConfig;
 use krabi_caliper::report::Field;
+#[cfg(feature = "jtrace-f407")]
+use krabi_caliper::protocol::rtt;
 
 krabi_caliper::cortex_m_systick_overflow_handler!();
 
@@ -49,7 +51,7 @@ use panic_semihosting as _;
 #[cfg(feature = "jtrace-f407")]
 #[panic_handler]
 fn panic(info: &core::panic::PanicInfo) -> ! {
-    krabi_caliper::rtt::print(format_args!("PANIC: {}\n", info));
+    rtt::print(format_args!("PANIC: {}\n", info));
     loop {
         cortex_m::asm::nop();
     }
