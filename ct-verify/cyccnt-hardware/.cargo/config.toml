@@ -1,0 +1,6 @@
+[build]
+target = "thumbv7em-none-eabihf"
+
+[target.thumbv7em-none-eabihf]
+runner = "probe-rs run --chip STM32F407VGTx --protocol swd --probe 1366:1020:001224000224"
+rustflags = ['--cfg', 'sha2_backend_soft="compact"']
