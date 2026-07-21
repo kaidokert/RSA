@@ -5,16 +5,16 @@ use const_num_traits::Ct;
 use core::hint::black_box;
 use cortex_m_rt::entry;
 use fixed_bigint::FixedUInt;
-use krabi_caliper::cortex_m::DwtCycleCounter;
+use krabi_caliper::cortex_m::DwtMeasurementPlatform;
 use krabi_caliper::protocol::rtt;
-use rand_chacha::ChaCha12Rng;
-use rand_core::{SeedableRng, TryCryptoRng, TryRng};
 #[cfg(not(feature = "etm-single-trial"))]
 use krabi_caliper::report::Field;
 #[cfg(not(feature = "etm-single-trial"))]
-use krabi_caliper::stack::{CortexM, LinkerStack, StackConfig, StackProbe};
+use krabi_caliper::stack::{StackProbe, paint_cortex_m_runtime};
 #[cfg(not(feature = "etm-single-trial"))]
 use krabi_caliper::suite::{PairedSuite, PairedSuiteConfig, PairedSuiteFields};
+use rand_chacha::ChaCha12Rng;
+use rand_core::{SeedableRng, TryCryptoRng, TryRng};
 use rsa::GenericRsaPrivateKey;
 use rsa::modmath_support::{ModMathParams, public_key_ct_from_be_bytes};
 use rsa::pkcs1v15::GenericSigningKey;
@@ -138,9 +138,9 @@ fn configure_clock() -> u32 {
 }
 
 #[cfg(not(feature = "etm-single-trial"))]
-fn paint_stack() -> StackProbe {
-    let stack = unsafe { LinkerStack::<CortexM>::cortex_m_runtime() };
-    StackProbe::paint(&stack, StackConfig::new(STACK_SAFE_ZONE)).unwrap()
+fn paint_stack() -> StackProbe<'static> {
+    // SAFETY: cortex-m-rt owns the single stack described by its linker symbols.
+    unsafe { paint_cortex_m_runtime::<STACK_SAFE_ZONE>() }.unwrap()
 }
 
 #[derive(Clone, Copy)]
@@ -366,7 +366,7 @@ fn stop() -> ! {
 fn main() -> ! {
     let hclk_hz = configure_clock();
     let mut peripherals = cortex_m::Peripherals::take().unwrap();
-    let counter = DwtCycleCounter::enable(
+    let platform = DwtMeasurementPlatform::enable(
         &mut peripherals.DCB,
         &mut peripherals.DWT,
         Some(hclk_hz as u64),
@@ -375,7 +375,7 @@ fn main() -> ! {
     #[cfg(feature = "etm-single-trial")]
     {
         let _reporter = rtt::init_ct_compatible();
-        let _ = counter;
+        let _ = platform;
         // SAFETY: the host writes this selector while the core is halted at
         // reset, before main executes.
         let key_index = unsafe {
@@ -402,12 +402,12 @@ fn main() -> ! {
             rtt::print(format_args!("SETUP_FAIL key:A\n"));
             stop();
         };
-        run_campaign(key_a, counter, hclk_hz)
+        run_campaign(key_a, platform, hclk_hz)
     }
 }
 
 #[cfg(not(feature = "etm-single-trial"))]
-fn run_campaign(key_a: SigningKey, mut counter: DwtCycleCounter, hclk_hz: u32) -> ! {
+fn run_campaign(key_a: SigningKey, mut platform: DwtMeasurementPlatform<'_>, hclk_hz: u32) -> ! {
     let mut reporter = rtt::init_ct_compatible();
     let stack_probe = paint_stack();
     let Some(key_b) = prepare_key(&KEY_B) else {
@@ -431,7 +431,7 @@ fn run_campaign(key_a: SigningKey, mut counter: DwtCycleCounter, hclk_hz: u32) -
     let fixture_fields = [Field::token("carrier", CARRIER)];
     let summary_fields = [Field::token("carrier", CARRIER)];
     let mut suite = PairedSuite::<_, _, TRIALS>::start(
-        &mut counter,
+        &mut platform,
         &mut reporter,
         PairedSuiteConfig {
             suite: SUITE,
@@ -476,7 +476,8 @@ fn run_campaign(key_a: SigningKey, mut counter: DwtCycleCounter, hclk_hz: u32) -
             negative_early_exit,
         )
         .unwrap();
-    let stack = stack_probe.measure();
+    // SAFETY: this single-threaded firmware exclusively owns its runtime stack.
+    let stack = unsafe { stack_probe.measure() };
     suite
         .stack_measurement(stack, &[Field::token("carrier", CARRIER)])
         .unwrap();
