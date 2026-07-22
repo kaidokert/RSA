@@ -2,15 +2,18 @@
 
 use core::hint::black_box;
 use krabi_caliper::cortex_m::FootprintConfig;
-use krabi_caliper::report::Field;
 #[cfg(feature = "jtrace-f407")]
 use krabi_caliper::protocol::rtt;
+use krabi_caliper::report::Field;
 
 krabi_caliper::cortex_m_systick_overflow_handler!();
 
 fn run<const SAFE_ZONE_BYTES: usize>(testable: fn() -> bool, backend: &str) -> bool {
     let fields = [
-        Field::token("target", krabi_caliper::stack::cortex_m_architecture_name()),
+        Field::token(
+            "architecture",
+            krabi_caliper::stack::cortex_m_architecture_name(),
+        ),
         Field::token("backend", backend),
     ];
     let config =
