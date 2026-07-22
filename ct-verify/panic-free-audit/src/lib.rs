@@ -49,10 +49,7 @@ type CarrierW64 = FixedUInt<u64, 32, Ct>;
 // textual include — see the fragment's module docs.
 include!("../../../tests/fixtures/test_keys.rs");
 
-/// Deterministic infallible RNG for the salt/blinding draw — its stream
-/// only needs to be stable, not cryptographic, for a DCE audit.
-use rand_chacha::ChaCha12Rng as FixedRng;
-use rand_core::SeedableRng;
+include!("../../fixture_rng.rs");
 
 /// Whole heapless PKCS#1 v1.5 blinded sign, panic-audited: no `unwrap`
 /// on the fallible setup, sign `Result` observed not extracted.
@@ -68,7 +65,7 @@ pub unsafe extern "C" fn panic_audit__pkcs1v15_blinded_sign__fb8__N64(out_ptr: *
             let signing_key = GenericSigningKey::<Sha256, _, _>::new(
                 GenericRsaPrivateKey::from_public_and_d(pubkey, d),
             );
-            let mut rng = FixedRng::from_seed([0; 32]);
+            let mut rng = FixedRng(0);
             let mut em = [0u8; 64];
             let mut sig = [0u8; 64];
             let ok = signing_key
@@ -102,7 +99,7 @@ pub unsafe extern "C" fn panic_audit__pkcs1v15_blinded_sign__fb32__N64(out_ptr: 
             let signing_key = GenericSigningKey::<Sha256, _, _>::new(
                 GenericRsaPrivateKey::from_public_and_d(pubkey, d),
             );
-            let mut rng = FixedRng::from_seed([0; 32]);
+            let mut rng = FixedRng(0);
             let mut em = [0u8; 256];
             let mut sig = [0u8; 256];
             let ok = signing_key
@@ -135,7 +132,7 @@ pub unsafe extern "C" fn panic_audit__pkcs1v15_blinded_sign__fb8__N256(out_ptr: 
             let signing_key = GenericSigningKey::<Sha256, _, _>::new(
                 GenericRsaPrivateKey::from_public_and_d(pubkey, d),
             );
-            let mut rng = FixedRng::from_seed([0; 32]);
+            let mut rng = FixedRng(0);
             let mut em = [0u8; 256];
             let mut sig = [0u8; 256];
             let ok = signing_key
@@ -166,7 +163,7 @@ pub unsafe extern "C" fn panic_audit__pkcs1v15_blinded_sign__fb64__N32(out_ptr: 
             let signing_key = GenericSigningKey::<Sha256, _, _>::new(
                 GenericRsaPrivateKey::from_public_and_d(pubkey, d),
             );
-            let mut rng = FixedRng::from_seed([0; 32]);
+            let mut rng = FixedRng(0);
             let mut em = [0u8; 256];
             let mut sig = [0u8; 256];
             let ok = signing_key
