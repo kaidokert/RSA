@@ -3,7 +3,10 @@
 #![no_main]
 #![no_std]
 
-include!(concat!(env!("CARGO_MANIFEST_DIR"), "/../verify_workload.rs"));
+include!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../verify_workload.rs"
+));
 define_rsa_verify_workload!(full);
 define_rsa_verify_fixtures!(full);
 define_rsa_verify_operation!();

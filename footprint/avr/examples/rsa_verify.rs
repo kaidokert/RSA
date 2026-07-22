@@ -8,7 +8,10 @@ use krabi_caliper::avr::FootprintConfig;
 use krabi_caliper::report::{Field, UfmtReporter};
 use rsa_footprint_avr as _;
 
-include!(concat!(env!("CARGO_MANIFEST_DIR"), "/../verify_workload.rs"));
+include!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../verify_workload.rs"
+));
 define_rsa_verify_workload!(avr);
 define_rsa_verify_fixtures!(avr);
 define_rsa_verify_operation!();
@@ -19,7 +22,7 @@ fn main() -> ! {
     let pins = arduino_hal::pins!(dp);
     let serial = arduino_hal::default_serial!(dp, pins, 57600);
     let fields = [
-        Field::token("target", "atmega2560"),
+        Field::token("architecture", "atmega2560"),
         Field::token("operation", "verify"),
     ];
     let mut reporter = UfmtReporter::new(serial);

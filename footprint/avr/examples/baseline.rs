@@ -21,7 +21,7 @@ fn main() -> ! {
     let serial = arduino_hal::default_serial!(dp, pins, 57600);
 
     let fields = [
-        Field::token("target", "atmega2560"),
+        Field::token("architecture", "atmega2560"),
         Field::token("operation", "baseline"),
     ];
     let mut reporter = UfmtReporter::new(serial);

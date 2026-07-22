@@ -72,7 +72,6 @@ macro_rules! define_rsa_verify_workload {
         type Key = fixed_bigint::FixedUInt<u8, 128>;
         #[cfg(feature = "key_1536")]
         type Key = fixed_bigint::FixedUInt<u8, 192>;
-
     };
 }
 
@@ -80,35 +79,74 @@ macro_rules! define_rsa_verify_fixtures {
     (full) => {
         mod fixture {
             #[cfg(all(feature = "key_512", feature = "hash_sha1"))]
-            include!(concat!(env!("CARGO_MANIFEST_DIR"), "/../fixtures/rsa512_sha1.rs"));
+            include!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../fixtures/rsa512_sha1.rs"
+            ));
             #[cfg(all(feature = "key_512", feature = "hash_sha256"))]
-            include!(concat!(env!("CARGO_MANIFEST_DIR"), "/../fixtures/rsa512_sha256.rs"));
+            include!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../fixtures/rsa512_sha256.rs"
+            ));
             #[cfg(feature = "key_768")]
-            include!(concat!(env!("CARGO_MANIFEST_DIR"), "/../fixtures/rsa768_sha256.rs"));
+            include!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../fixtures/rsa768_sha256.rs"
+            ));
             #[cfg(feature = "key_1024")]
-            include!(concat!(env!("CARGO_MANIFEST_DIR"), "/../fixtures/rsa1024_sha256.rs"));
+            include!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../fixtures/rsa1024_sha256.rs"
+            ));
             #[cfg(feature = "key_1536")]
-            include!(concat!(env!("CARGO_MANIFEST_DIR"), "/../fixtures/rsa1536_sha256.rs"));
+            include!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../fixtures/rsa1536_sha256.rs"
+            ));
             #[cfg(feature = "key_2048")]
-            include!(concat!(env!("CARGO_MANIFEST_DIR"), "/../fixtures/rsa2048_sha256.rs"));
+            include!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../fixtures/rsa2048_sha256.rs"
+            ));
             #[cfg(feature = "key_3072")]
-            include!(concat!(env!("CARGO_MANIFEST_DIR"), "/../fixtures/rsa3072_sha256.rs"));
+            include!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../fixtures/rsa3072_sha256.rs"
+            ));
             #[cfg(feature = "key_4096")]
-            include!(concat!(env!("CARGO_MANIFEST_DIR"), "/../fixtures/rsa4096_sha256.rs"));
+            include!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../fixtures/rsa4096_sha256.rs"
+            ));
         }
     };
     (avr) => {
         mod fixture {
             #[cfg(all(feature = "key_512", feature = "hash_sha1"))]
-            include!(concat!(env!("CARGO_MANIFEST_DIR"), "/../fixtures/rsa512_sha1.rs"));
+            include!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../fixtures/rsa512_sha1.rs"
+            ));
             #[cfg(all(feature = "key_512", feature = "hash_sha256"))]
-            include!(concat!(env!("CARGO_MANIFEST_DIR"), "/../fixtures/rsa512_sha256.rs"));
+            include!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../fixtures/rsa512_sha256.rs"
+            ));
             #[cfg(feature = "key_768")]
-            include!(concat!(env!("CARGO_MANIFEST_DIR"), "/../fixtures/rsa768_sha256.rs"));
+            include!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../fixtures/rsa768_sha256.rs"
+            ));
             #[cfg(feature = "key_1024")]
-            include!(concat!(env!("CARGO_MANIFEST_DIR"), "/../fixtures/rsa1024_sha256.rs"));
+            include!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../fixtures/rsa1024_sha256.rs"
+            ));
             #[cfg(feature = "key_1536")]
-            include!(concat!(env!("CARGO_MANIFEST_DIR"), "/../fixtures/rsa1536_sha256.rs"));
+            include!(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../fixtures/rsa1536_sha256.rs"
+            ));
         }
     };
 }
@@ -116,12 +154,14 @@ macro_rules! define_rsa_verify_fixtures {
 macro_rules! define_rsa_verify_operation {
     () => {
         const _: () = {
-            const N: usize = cfg!(feature = "hash_sha1") as usize
-                + cfg!(feature = "hash_sha256") as usize;
+            const N: usize =
+                cfg!(feature = "hash_sha1") as usize + cfg!(feature = "hash_sha256") as usize;
             assert!(N == 1, "exactly one `hash_*` feature must be enabled");
         };
         #[cfg(all(feature = "hash_sha1", not(feature = "key_512")))]
-        compile_error!("hash_sha1 only paired with key_512 (no fixture exists for other key sizes)");
+        compile_error!(
+            "hash_sha1 only paired with key_512 (no fixture exists for other key sizes)"
+        );
 
         #[cfg(feature = "hash_sha1")]
         type Hash = sha1::Sha1;
