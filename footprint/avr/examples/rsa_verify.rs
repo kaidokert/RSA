@@ -26,6 +26,15 @@ fn main() -> ! {
         Field::token("operation", "verify"),
     ];
     let mut reporter = UfmtReporter::new(serial);
+    // The Timer1 overflow ISR (installed by `atmega2560_timer1_overflow_handler!`
+    // in the fixture crate) extends the 16-bit counter across wraps, but caliper's
+    // adapter deliberately never touches global interrupt state — the caller must
+    // enable interrupts, or the ISR never fires and any case longer than one Timer1
+    // period (~4.19 s at 16 MHz / 1024) reports a wrapped tick count.
+    // SAFETY: no critical section is active; the only installed ISR is the Timer1
+    // overflow handler, whose source stays masked until `run_atmega2560_footprint`
+    // enables it.
+    unsafe { avr_device::interrupt::enable() };
     // SAFETY: ATmega2560 SRAM above `_end` is reserved for this single stack.
     unsafe {
         krabi_caliper::avr::run_atmega2560_footprint::<64, _>(
