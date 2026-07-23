@@ -6,7 +6,7 @@ git tag (the same revision the workspace `[patch.crates-io]` points at):
 
 ```sh
 cargo install --git https://github.com/kaidokert/krabi-caliper-rs \
-  --tag v0.1.0-alpha.2 krabi-caliper --features cli
+  --tag v0.1.0-alpha.4 krabi-caliper --features cli
 cargo krabi-caliper run rsa-avr
 cargo krabi-caliper run rsa-avr-fast
 ```
