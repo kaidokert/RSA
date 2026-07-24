@@ -1,12 +1,9 @@
 # AVR footprint campaign
 
-Install the shared host tool, then run either the full or CI-sized campaign.
-`krabi-caliper` isn't published on crates.io yet, so install it from the pinned
-git tag (the same revision the workspace `[patch.crates-io]` points at):
+Install the shared host tool, then run either the full or CI-sized campaign:
 
 ```sh
-cargo install --git https://github.com/kaidokert/krabi-caliper-rs \
-  --tag v0.1.0-alpha.4 krabi-caliper --features cli
+cargo install krabi-caliper --version 0.1.0 --features cli,campaign
 cargo krabi-caliper run rsa-avr
 cargo krabi-caliper run rsa-avr-fast
 ```

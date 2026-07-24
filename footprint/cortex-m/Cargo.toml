@@ -48,6 +48,3 @@ unexpected_cfgs = { level = "warn", check-cfg = [
     'cfg(thumbv7m)',
     'cfg(thumbv7em)',
 ] }
-
-[patch.crates-io]
-krabi-caliper = { git = "https://github.com/kaidokert/krabi-caliper-rs", tag = "v0.1.0-alpha.4" }
