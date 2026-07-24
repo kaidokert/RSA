@@ -21,6 +21,7 @@ const-oid = { version = "0.10", default-features = false }
 crypto-primes = { version = "0.7", optional = true, default-features = false }
 digest = { version = "0.11", default-features = false, features = ["oid"] }
 rand_core = { version = "0.10", default-features = false }
+rand_chacha = { version = "0.10", default-features = false }
 signature = { version = "3", default-features = false, features = ["digest", "rand_core"] }
 zeroize = { version = "1.8", default-features = false }
 ctutils = { version = "0.4", default-features = false }
@@ -59,6 +60,7 @@ serde_json = "1.0.138"
 serde = { version = "1.0.184", features = ["derive"] }
 rstest = "0.26.1"
 static_assertions = "1.1"
+krabi-caliper = { version = "0.1", features = ["deterministic-rng"] }
 crypto-bigint = { version = "0.7", default-features = false, features = ["zeroize", "alloc"] }
 
 [[bench]]

@@ -27,17 +27,8 @@ jobs:
     - name: Install simavr and AVR toolchain
       run: sudo apt-get update && sudo apt-get install -y simavr gcc-avr avr-libc
 
-    - name: Cache cargo binaries
-      uses: actions/cache@v4
-      with:
-        path: ~/.cargo/bin/cargo-bloat
-        key: ${{ runner.os }}-cargo-bloat-v1
-
-    - name: Install cargo-bloat
-      run: |
-        if ! command -v cargo-bloat &> /dev/null; then
-          cargo install cargo-bloat --locked
-        fi
+    - name: Install krabi-caliper host tooling
+      run: cargo install krabi-caliper --version 0.1.0 --features cli,campaign
 
     - uses: actions/cache@v4
       with:
@@ -49,9 +40,9 @@ jobs:
         restore-keys: avr-
 
     - name: Run AVR suite (CI fast subset — 512-bit only)
-      # Full sweep up to 1536-bit is available locally via `python3 run_suite.py`
-      # without --fast; simavr is too slow on GitHub runners for the larger cells.
+      # The `rsa-avr` campaign adds the 768/1024/1536-bit cells locally;
+      # simavr is too slow on GitHub runners for that full sweep.
       run: |
         set -o pipefail
-        python3 run_suite.py --fast | tee -a "$GITHUB_STEP_SUMMARY"
+        cargo krabi-caliper run rsa-avr-fast | tee -a "$GITHUB_STEP_SUMMARY"
       working-directory: footprint/avr

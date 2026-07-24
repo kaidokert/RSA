@@ -1,79 +1,44 @@
 #![no_std]
 
 use core::hint::black_box;
-use cortex_m_semihosting::{debug, hprintln};
+use krabi_caliper::cortex_m::FootprintConfig;
+#[cfg(feature = "jtrace-f407")]
+use krabi_caliper::protocol::rtt;
+use krabi_caliper::report::Field;
 
-pub mod cyclecount;
-pub mod stack;
+krabi_caliper::cortex_m_systick_overflow_handler!();
 
-use cyclecount::CycleCounter;
-use stack::{
-    check_stack_high_water_mark, check_stack_high_water_mark_inner, paint_stack, paint_stack_inner,
-};
-
-pub fn target_arch_name() -> &'static str {
-    #[cfg(thumbv6m)]
-    {
-        "thumbv6m"
+fn run<const SAFE_ZONE_BYTES: usize>(testable: fn() -> bool, backend: &str) -> bool {
+    let fields = [
+        Field::token(
+            "architecture",
+            krabi_caliper::stack::cortex_m_architecture_name(),
+        ),
+        Field::token("backend", backend),
+    ];
+    let config =
+        FootprintConfig::new("rsa-footprint", &fields).enable_dwt(cfg!(feature = "jtrace-f407"));
+    #[cfg(feature = "jtrace-f407")]
+    let config = config.frequency_hz(16_000_000);
+    // SAFETY: cortex-m-rt owns the single stack described by its linker symbols.
+    unsafe {
+        krabi_caliper::cortex_m::run_footprint::<SAFE_ZONE_BYTES, _>(
+            || krabi_caliper::cortex_m_reporter!("jtrace-f407"),
+            config,
+            testable,
+        )
     }
-    #[cfg(thumbv7m)]
-    {
-        "thumbv7m"
-    }
-    #[cfg(thumbv7em)]
-    {
-        "thumbv7em"
-    }
+    .unwrap()
 }
 
 pub fn test_fixture(testable: fn() -> bool, backend: &str) {
-    paint_stack();
-    let counter = CycleCounter::new();
-    let result = testable();
-    let elapsed = counter.elapsed() / 1000;
-    let stack = check_stack_high_water_mark();
-    if result {
-        hprintln!("rsa ACCEPT");
-    } else {
-        hprintln!("rsa REJECT");
-    }
-    hprintln!(
-        "METRIC stack:{} cycles:{} target:{} backend:{}",
-        stack,
-        elapsed,
-        target_arch_name(),
-        backend
-    );
-    if result {
-        debug::exit(debug::EXIT_SUCCESS);
-    } else {
-        debug::exit(debug::EXIT_FAILURE);
-    }
+    let result = run::<256>(testable, backend);
+    krabi_caliper::finish_cortex_m_report!(result, "jtrace-f407");
 }
 
 pub fn test_fixture_arg<const SAFE_ZONE_BYTES: usize>(testable: fn() -> bool, backend: &str) {
-    paint_stack_inner::<SAFE_ZONE_BYTES>();
-    let counter = CycleCounter::new();
-    let result = testable();
-    let elapsed = counter.elapsed() / 1000;
-    let stack = check_stack_high_water_mark_inner::<SAFE_ZONE_BYTES>();
-    if result {
-        hprintln!("rsa ACCEPT");
-    } else {
-        hprintln!("rsa REJECT");
-    }
-    hprintln!(
-        "METRIC stack:{} cycles:{} target:{} backend:{}",
-        stack,
-        elapsed,
-        target_arch_name(),
-        backend
-    );
-    if result {
-        debug::exit(debug::EXIT_SUCCESS);
-    } else {
-        debug::exit(debug::EXIT_FAILURE);
-    }
+    let result = run::<SAFE_ZONE_BYTES>(testable, backend);
+    krabi_caliper::finish_cortex_m_report!(result, "jtrace-f407");
 }
 
 #[inline(never)]
@@ -83,4 +48,14 @@ pub fn fake_verify(modulus: [u8; 64], msg: &[u8], signature: [u8; 64]) -> bool {
     true
 }
 
+#[cfg(not(feature = "jtrace-f407"))]
 use panic_semihosting as _;
+
+#[cfg(feature = "jtrace-f407")]
+#[panic_handler]
+fn panic(info: &core::panic::PanicInfo) -> ! {
+    rtt::print(format_args!("PANIC: {}\n", info));
+    loop {
+        cortex_m::asm::nop();
+    }
+}

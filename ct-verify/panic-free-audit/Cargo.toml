@@ -13,8 +13,9 @@ crate-type = ["staticlib"]
 
 [features]
 default = []
-# See lib.rs — enabled by check.sh for the cross-built staticlib.
+# See lib.rs — enabled by the shared panic-audit command.
 panic-handler = []
+neg-controls = []
 
 [dependencies]
 rsa = { path = "../..", package = "rsa_heapless", default-features = false, features = ["modmath"] }
@@ -22,6 +23,7 @@ fixed-bigint = { version = "0.6.0", default-features = false, features = ["zeroi
 const-num-traits = { version = "0.2.1", default-features = false, features = ["ct"] }
 sha2 = { version = "0.11", default-features = false, features = ["oid"] }
 rand_core = { version = "0.10", default-features = false }
+krabi-caliper = { version = "0.1", features = ["deterministic-rng"] }
 
 # Workspace [profile.release] (lto=fat, codegen-units=1, opt-level=z,
 # panic=abort) is what makes DCE worth measuring; do not override here.

@@ -5,7 +5,7 @@
 //! key construction handled with `if let Ok` (a `match`, never a
 //! panicking `unwrap`), and the sign `Result` observed through
 //! `black_box` rather than extracted. After cross-building with the
-//! workspace release profile, `check.sh` asserts the archive contains
+//! workspace release profile, krabi-caliper asserts the archive contains
 //! no `core::panicking` machinery — for a signer a reachable panic is
 //! both a DoS edge and a timing oracle (the panic-formatting path's cost
 //! depends on the values being formatted).
@@ -16,9 +16,12 @@
 //! op, verify-after-sign, and serialization.
 
 // no_std + the local #[panic_handler] only under the `panic-handler`
-// feature (the cross-built audit shape, enabled by check.sh). Host-side
+// feature (the cross-built audit shape, enabled by krabi-caliper). Host-side
 // workspace builds (clippy) link std, which supplies its own.
 #![cfg_attr(feature = "panic-handler", no_std)]
+
+#[cfg(feature = "neg-controls")]
+mod neg_controls;
 
 use const_num_traits::Ct;
 use core::hint::black_box;
@@ -46,35 +49,7 @@ type CarrierW64 = FixedUInt<u64, 32, Ct>;
 // textual include — see the fragment's module docs.
 include!("../../../tests/fixtures/test_keys.rs");
 
-/// Deterministic infallible RNG for the salt/blinding draw — its stream
-/// only needs to be stable, not cryptographic, for a DCE audit.
-struct FixedRng(u64);
-impl rand_core::TryRng for FixedRng {
-    type Error = core::convert::Infallible;
-    fn try_next_u32(&mut self) -> Result<u32, Self::Error> {
-        Ok(self.try_next_u64()? as u32)
-    }
-    fn try_next_u64(&mut self) -> Result<u64, Self::Error> {
-        self.0 = self.0.wrapping_add(0x9e37_79b9_7f4a_7c15);
-        let mut z = self.0;
-        z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
-        z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
-        Ok(z ^ (z >> 31))
-    }
-    fn try_fill_bytes(&mut self, dst: &mut [u8]) -> Result<(), Self::Error> {
-        // Byte-loop fill instead of `copy_from_slice` so the audit
-        // harness's own RNG contributes no `len_mismatch_fail` machinery
-        // to the archive being measured.
-        for chunk in dst.chunks_mut(8) {
-            let bytes = self.try_next_u64()?.to_le_bytes();
-            for (d, s) in chunk.iter_mut().zip(bytes.iter()) {
-                *d = *s;
-            }
-        }
-        Ok(())
-    }
-}
-impl rand_core::TryCryptoRng for FixedRng {}
+include!("../../fixture_rng.rs");
 
 /// Whole heapless PKCS#1 v1.5 blinded sign, panic-audited: no `unwrap`
 /// on the fallible setup, sign `Result` observed not extracted.

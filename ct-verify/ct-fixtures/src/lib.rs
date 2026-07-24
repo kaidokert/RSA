@@ -63,34 +63,7 @@ type CarrierW64 = FixedUInt<u64, 32, Ct>;
 // carry the "secret" mark.
 include!("../../../tests/fixtures/test_keys.rs");
 
-/// Deterministic infallible RNG. The blinded sign path draws the
-/// blinding factor `r` from it; a fixed stream keeps taint attribution
-/// deterministic (the driver decides pass/fail per symbol, so the
-/// stream just needs to be stable, not cryptographic).
-struct FixedRng(u64);
-
-impl rand_core::TryRng for FixedRng {
-    type Error = core::convert::Infallible;
-    fn try_next_u32(&mut self) -> Result<u32, Self::Error> {
-        Ok(self.try_next_u64()? as u32)
-    }
-    fn try_next_u64(&mut self) -> Result<u64, Self::Error> {
-        // SplitMix64 — tiny, deterministic, good enough for a stub.
-        self.0 = self.0.wrapping_add(0x9e37_79b9_7f4a_7c15);
-        let mut z = self.0;
-        z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
-        z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
-        Ok(z ^ (z >> 31))
-    }
-    fn try_fill_bytes(&mut self, dst: &mut [u8]) -> Result<(), Self::Error> {
-        for chunk in dst.chunks_mut(8) {
-            let bytes = self.try_next_u64()?.to_le_bytes();
-            chunk.copy_from_slice(&bytes[..chunk.len()]);
-        }
-        Ok(())
-    }
-}
-impl rand_core::TryCryptoRng for FixedRng {}
+include!("../../fixture_rng.rs");
 
 /// Positive: the whole blinded PKCS#1 v1.5 sign pipeline at 512-bit,
 /// driven by the secret private exponent `d`. Exercises padding,

@@ -2,9 +2,10 @@
 #![no_main]
 #![feature(asm_experimental_arch)]
 
+use krabi_caliper::avr::FootprintConfig;
+use krabi_caliper::report::{Field, UfmtReporter};
 use rsa_footprint_avr as _;
 use rsa_footprint_avr::fake_verify;
-use rsa_footprint_avr::stack_measurement::*;
 
 mod fixture {
     include!(concat!(
@@ -15,26 +16,24 @@ mod fixture {
 
 #[arduino_hal::entry]
 fn main() -> ! {
-    let dp = arduino_hal::Peripherals::take().unwrap();
+    let mut dp = arduino_hal::Peripherals::take().unwrap();
     let pins = arduino_hal::pins!(dp);
-    let mut serial = arduino_hal::default_serial!(dp, pins, 57600);
+    let serial = arduino_hal::default_serial!(dp, pins, 57600);
 
-    unsafe { fill_stack_with_watermark() };
-    let counter = rsa_footprint_avr::cyclecount::CycleCounter::start(&dp.TC1);
-    let result = fake_verify(fixture::MODULUS, fixture::MESSAGE, fixture::SIGNATURE);
-    let ticks = counter.elapsed_ticks(&dp.TC1);
-    let ms = counter.elapsed_ms(&dp.TC1);
-    let stack_used = unsafe { measure_stack_usage() };
-
-    if result {
-        ufmt::uwriteln!(&mut serial, "rsa ACCEPT").ok();
-    } else {
-        ufmt::uwriteln!(&mut serial, "rsa REJECT").ok();
+    let fields = [
+        Field::token("architecture", "atmega2560"),
+        Field::token("operation", "baseline"),
+    ];
+    let mut reporter = UfmtReporter::new(serial);
+    // SAFETY: ATmega2560 SRAM above `_end` is reserved for this single stack.
+    unsafe {
+        krabi_caliper::avr::run_atmega2560_footprint::<64, _>(
+            &mut dp.TC1,
+            &mut reporter,
+            FootprintConfig::new("rsa-footprint", &fields).sentinel(0xce),
+            || fake_verify(fixture::MODULUS, fixture::MESSAGE, fixture::SIGNATURE),
+        )
     }
-    ufmt::uwriteln!(&mut serial, "Time: {} ms ({} ticks)", ms, ticks).ok();
-    ufmt::uwriteln!(&mut serial, "Max stack usage: {} bytes", stack_used).ok();
-
-    loop {
-        unsafe { core::arch::asm!("sleep") }
-    }
+    .unwrap();
+    krabi_caliper::avr::park_simavr(&dp.CPU)
 }

@@ -1,7 +1,7 @@
 # Constant-time verification harness
 
 Machine-checked evidence for the heapless sign path's constant-time and
-panic-free claims. Four layers, each answering a question the others
+panic-free claims. Five layers, each answering a question the others
 can't, all pinned to one toolchain and one release profile so a passing
 run "locks" specific machine code rather than an optimizer's mood.
 
@@ -30,11 +30,11 @@ every shipped carrier flavor at the width we actually deploy:
 | `fb64__N32`    |    2048 | `u64` | 64-bit hosts |
 
 Keys are real generated keypairs (`e = 65537`), shared between the
-fixture crates via [`test_keys.rs`](test_keys.rs), so the happy path
+fixture crates via [`test_keys.rs`](../tests/fixtures/test_keys.rs), so the happy path
 (including verify-after-sign) is the code under inspection rather than
 a retry-then-fail path.
 
-## The four layers
+## The five layers
 
 All run commands below assume this directory (`ct-verify/`) as the
 working directory.
@@ -74,8 +74,8 @@ vartime compare — must trip, proving the harness has teeth.
 # On x86_64, build with the same CPU baseline CI attests:
 #   export RUSTFLAGS="-C target-feature=+lzcnt,+bmi1"
 cargo build --release -p ct-ctgrind
-valgrind --tool=memcheck --error-limit=no --error-exitcode=0 \
-  --suppressions=ct-ctgrind/ct-ctgrind.supp -q target/release/ct-ctgrind
+cargo krabi-caliper ctgrind target/release/ct-ctgrind \
+  --valgrind-arg=--suppressions=ct-ctgrind/ct-ctgrind.supp
 ```
 
 Suppressions ([`ct-ctgrind.supp`](ct-ctgrind/ct-ctgrind.supp)) are
@@ -95,7 +95,12 @@ prehash sign variant keeps `sha2` compression out of the archive,
 scoping the audit to this crate's composition.
 
 ```sh
-sh panic-free-audit/check.sh thumbv7m-none-eabi
+cargo krabi-caliper panic-audit --workspace . --package panic-free-audit \
+  --target thumbv7m-none-eabi --features panic-handler \
+  --negative-features neg-controls --owned-symbol '.*' \
+  --expect-negative panic_audit__neg__bounds_check \
+  --expect-negative panic_audit__neg__unwrap \
+  --expect-negative panic_audit__neg__expect
 ```
 
 This layer has caught real bugs at real deployment widths twice

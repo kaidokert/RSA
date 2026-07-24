@@ -13,8 +13,11 @@
 //! signature is secret-*derived* but public-by-design (it is what the
 //! caller publishes), so reads of it downstream are not leaks.
 
-use crate::macros::{ctgrind_fixture, taint_val, untaint_val};
 use core::hint::black_box;
+use krabi_caliper::ctgrind_fixture;
+
+krabi_caliper::ctgrind_standard_controls!();
+use krabi_caliper::host::ctgrind::{taint_val, untaint_val};
 
 // Positive: the whole blinded PKCS#1 v1.5 sign at 512-bit, driven by
 // the secret `d`. `ct-fixtures::D_512` is the real private exponent, so

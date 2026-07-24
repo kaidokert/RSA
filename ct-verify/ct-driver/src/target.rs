@@ -1,44 +1,8 @@
 //! Per-target specifications: triple, toolchain pin, and the mnemonic
 //! tables used by the parser.
 
-use crate::mnemonics;
-
-#[allow(dead_code)]
-// `priority` and `toolchain` are documentation-only fields used by
-// `--list-targets`.
-#[derive(Debug, Clone, Copy)]
-pub struct TargetSpec {
-    pub triple: &'static str,
-    pub priority: u8,
-    /// "stable" | "1.86" | "nightly-YYYY-MM-DD". The driver doesn't
-    /// switch toolchains itself — CI sets up the right one and the
-    /// triple drives `cargo build --target=<triple>`. The pin is here
-    /// for documentation and so the driver can warn if the active
-    /// toolchain doesn't match.
-    pub toolchain: &'static str,
-    /// Regexes that, when they match the mnemonic at any insn line of
-    /// any fixture's body, count as a violation.
-    pub forbidden: &'static [&'static str],
-    /// Regexes that, when matched, are explicitly OK even though they
-    /// look conditional. E.g., aarch64 `csel` / x64 `cmovcc` / thumb
-    /// `IT` predicate execution.
-    pub allowed_cmov: &'static [&'static str],
-    /// Conditional branches the secret-exponent ladder is allowed to
-    /// contain on this ISA — the public bit-width loop control, whose
-    /// operands are compile-time immediates (the const-generic carrier
-    /// width and a loop sentinel), never a secret. Per-arch because the
-    /// loop's back-edge lowering differs: Thumb/AArch64/x86 emit an
-    /// unconditional back-edge (1 conditional guard), RISC-V's
-    /// compare-and-branch emits a conditional back-edge too (2). The
-    /// per-bit multiply is a branchless select on every arch; a count
-    /// beyond this is a candidate secret-dependent branch and fails the
-    /// gate. ctgrind is the semantic authority that the allowed branches
-    /// are secret-independent. Verified by disassembly 2026-07-11.
-    pub ladder_allowed_branches: usize,
-    /// Extra cargo args needed for this target (e.g., `-Z build-std=core`
-    /// for AVR).
-    pub extra_cargo_args: &'static [&'static str],
-}
+use krabi_caliper::host::ct_asm::LadderTarget as TargetSpec;
+use krabi_caliper::host::isa as mnemonics;
 
 /// All targets we know how to verify, in priority order.
 pub const TARGETS: &[TargetSpec] = &[
@@ -46,7 +10,7 @@ pub const TARGETS: &[TargetSpec] = &[
     TargetSpec {
         triple: "thumbv7em-none-eabi",
         priority: 1,
-        toolchain: "1.86",
+        toolchain: "1.87.0",
         forbidden: mnemonics::THUMB_FORBIDDEN,
         allowed_cmov: mnemonics::THUMB_ALLOWED,
         ladder_allowed_branches: 1,
@@ -55,7 +19,7 @@ pub const TARGETS: &[TargetSpec] = &[
     TargetSpec {
         triple: "thumbv7m-none-eabi",
         priority: 1,
-        toolchain: "1.86",
+        toolchain: "1.87.0",
         forbidden: mnemonics::THUMB_FORBIDDEN,
         allowed_cmov: mnemonics::THUMB_ALLOWED,
         ladder_allowed_branches: 1,
@@ -65,7 +29,7 @@ pub const TARGETS: &[TargetSpec] = &[
     TargetSpec {
         triple: "thumbv6m-none-eabi",
         priority: 2,
-        toolchain: "1.86",
+        toolchain: "1.87.0",
         forbidden: mnemonics::THUMB_FORBIDDEN,
         allowed_cmov: mnemonics::THUMB_ALLOWED,
         ladder_allowed_branches: 1,
@@ -75,7 +39,7 @@ pub const TARGETS: &[TargetSpec] = &[
     TargetSpec {
         triple: "riscv32imc-unknown-none-elf",
         priority: 3,
-        toolchain: "1.86",
+        toolchain: "1.87.0",
         forbidden: mnemonics::RISCV_FORBIDDEN,
         allowed_cmov: &[],
         ladder_allowed_branches: 2,
@@ -84,7 +48,7 @@ pub const TARGETS: &[TargetSpec] = &[
     TargetSpec {
         triple: "riscv32imac-unknown-none-elf",
         priority: 3,
-        toolchain: "1.86",
+        toolchain: "1.87.0",
         forbidden: mnemonics::RISCV_FORBIDDEN,
         allowed_cmov: &[],
         ladder_allowed_branches: 2,
@@ -107,7 +71,7 @@ pub const TARGETS: &[TargetSpec] = &[
     TargetSpec {
         triple: "aarch64-unknown-linux-gnu",
         priority: 5,
-        toolchain: "1.86",
+        toolchain: "1.87.0",
         forbidden: mnemonics::AARCH64_FORBIDDEN,
         allowed_cmov: mnemonics::AARCH64_ALLOWED,
         ladder_allowed_branches: 1,
@@ -117,7 +81,7 @@ pub const TARGETS: &[TargetSpec] = &[
     TargetSpec {
         triple: "x86_64-unknown-linux-gnu",
         priority: 6,
-        toolchain: "1.86",
+        toolchain: "1.87.0",
         forbidden: mnemonics::X86_64_FORBIDDEN,
         allowed_cmov: mnemonics::X86_64_ALLOWED,
         ladder_allowed_branches: 1,
@@ -136,7 +100,3 @@ pub const TARGETS: &[TargetSpec] = &[
         extra_cargo_args: &[],
     },
 ];
-
-pub fn lookup(triple: &str) -> Option<&'static TargetSpec> {
-    TARGETS.iter().find(|t| t.triple == triple)
-}

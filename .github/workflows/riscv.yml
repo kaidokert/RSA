@@ -25,17 +25,8 @@ jobs:
     - name: Install QEMU
       run: sudo apt-get update && sudo apt-get install -y qemu-system-misc
 
-    - name: Cache cargo binaries
-      uses: actions/cache@v4
-      with:
-        path: ~/.cargo/bin/cargo-bloat
-        key: ${{ runner.os }}-cargo-bloat-v1
-
-    - name: Install cargo-bloat
-      run: |
-        if ! command -v cargo-bloat &> /dev/null; then
-          cargo install cargo-bloat --locked
-        fi
+    - name: Install krabi-caliper host tooling
+      run: cargo install krabi-caliper --version 0.1.0 --features cli,campaign
 
     - uses: actions/cache@v4
       with:
@@ -49,5 +40,5 @@ jobs:
     - name: Run RISC-V suite
       run: |
         set -o pipefail
-        python3 run_suite.py | tee -a "$GITHUB_STEP_SUMMARY"
+        cargo krabi-caliper run rsa-riscv32 | tee -a "$GITHUB_STEP_SUMMARY"
       working-directory: footprint/risc-v

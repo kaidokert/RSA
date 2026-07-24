@@ -17,5 +17,7 @@ fn main() -> ! {
         || fake_verify(fixture::MODULUS, fixture::MESSAGE, fixture::SIGNATURE),
         "baseline",
     );
-    loop {}
+    loop {
+        cortex_m::asm::nop();
+    }
 }

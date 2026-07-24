@@ -4,8 +4,7 @@
 
 use core::hint::black_box;
 
-pub mod cyclecount;
-pub mod stack_measurement;
+krabi_caliper::atmega2560_timer1_overflow_handler!();
 
 #[inline(never)]
 pub fn fake_verify(modulus: [u8; 64], msg: &[u8], signature: [u8; 64]) -> bool {
