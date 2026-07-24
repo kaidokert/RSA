@@ -16,7 +16,7 @@ target = "thumbv7em-none-eabihf"
 board = "jtrace-reference-board"
 mcu = "STM32F407VG"
 transport = "rtt"
-probe = "1366:1020:001224000224"
+probe = "${KRABI_PROBE}"
 clock-frequency-hz = 16000000
 build-features = ["jtrace-f407"]
 executable = "probe-rs"
@@ -24,7 +24,7 @@ args = [
   "run",
   "--chip", "STM32F407VGTx",
   "--protocol", "swd",
-  "--probe", "1366:1020:001224000224",
+  "--probe", "${KRABI_PROBE}",
   "--non-interactive",
   "--disable-progressbars",
   "--no-location",

@@ -58,13 +58,13 @@ RTT polling can starve debug access during long measured regions:
 
 ```sh
 probe-rs download --chip STM32F407VGTx --protocol swd \
-  --probe 1366:1020:001224000224 \
+  --probe "$KRABI_PROBE" \
   ../target/thumbv7em-none-eabihf/release/rsa-cyccnt-hardware
 probe-rs reset --chip STM32F407VGTx --protocol swd \
-  --probe 1366:1020:001224000224
+  --probe "$KRABI_PROBE"
 # Wait for the width/clock-qualified campaign duration, then drain evidence.
 probe-rs attach --chip STM32F407VGTx --protocol swd \
-  --probe 1366:1020:001224000224 \
+  --probe "$KRABI_PROBE" \
   ../target/thumbv7em-none-eabihf/release/rsa-cyccnt-hardware
 ```
 

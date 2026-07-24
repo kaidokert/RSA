@@ -138,10 +138,10 @@ cargo run --features cli --bin cargo-krabi-caliper -- \
   jtrace-ct-gate \
   ../rsa/ct-verify/target/thumbv7em-none-eabihf/release/rsa-cyccnt-hardware \
   --output-dir ../rsa/ct-verify/target/krabi-caliper/rsa512-etm-ct-gate \
-  --probe-serial 001224000224 \
+  --probe-serial "${KRABI_PROBE##*:}" \
   --keys 2 --repetitions 3 \
   --max-dwt-spread 128 --max-profile-delta 128 \
-  --rtt-probe-selector 1366:1020:001224000224 \
+  --rtt-probe-selector "$KRABI_PROBE" \
   --rtt-chip STM32F407VGTx
 ```
 

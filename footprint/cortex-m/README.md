@@ -20,7 +20,7 @@ cargo build --release --target thumbv7em-none-eabihf \
   --example rsa_verify \
   --features jtrace-f407,key_512,limb_u32,hash_sha1
 probe-rs run --chip STM32F407VGTx --protocol swd \
-  --probe 1366:1020:001224000224 \
+  --probe "$KRABI_PROBE" \
   target/thumbv7em-none-eabihf/release/examples/rsa_verify
 ```
 
