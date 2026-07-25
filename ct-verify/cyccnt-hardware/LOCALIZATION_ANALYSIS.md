@@ -124,3 +124,28 @@ included even though it's proven constant above — a non-zero delta there would
 contradict the proof and be a genuine finding; a ~zero delta there confirms it.
 A delta of ~0 across *all* stages would place the difference outside the private
 op (padding / hash / serialization in `try_sign_with_rng_into`).
+
+## Same-session raw-vs-paired comparison (resolves the 28K and the base gap)
+
+Both measurements were run on identical current code in one rig session:
+
+| | raw localizer (whole-sign) | paired-suite (Welch) |
+| --- | --- | --- |
+| A vs B | Δ ≤ 18 cycles across all 10 stages (noise) | `t = 1.000`, threshold 4.50 → BelowThreshold (PASS) |
+| absolute | 142.5M | ~122M |
+
+Controls in the same run: `negative_early_exit` `t=82` (ExceedsThreshold, trips),
+`key_construction` `t=3057` (ExceedsThreshold, different keys) — the harness has
+teeth; only the sign passes.
+
+- **The 28K does not reproduce.** Fresh Welch `t=1.000` and raw Δ≤18 cycles both
+  say A ≈ B. The `STATISTICAL_CT_FINDINGS.md` figure (`t=77998`) was an older
+  artifact; the sign is constant-time between keys on current code.
+- **The ~20M base gap (paired ~122M vs raw 142.5M) is measurement warmth, not
+  the crypto.** The paired suite brackets *more* (it includes serialization) yet
+  measures *fewer* cycles, so the same sign simply runs faster there: it executes
+  fully warmed (`warmup_blocks=2` + interleaved samples) inside a
+  `reset + dsb/isb + critical_section` bracket (krabi-caliper
+  `backends/cortex_m.rs::measure_in_critical_section`), vs the localizer's
+  lightly-warmed back-to-back reads — STM32F407 Flash-ART instruction-cache
+  warmth. It is identical for A and B, so it never affected the CT verdict.

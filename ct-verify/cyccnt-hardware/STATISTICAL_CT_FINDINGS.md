@@ -1,6 +1,15 @@
 # RSA-512 statistical DWT and ETM findings
 
-## Verdict
+> **Superseded — the key-dependent difference below does NOT reproduce on
+> current code.** A same-session rig comparison (see `LOCALIZATION_ANALYSIS.md`)
+> ran both a per-stage raw-DWT localizer and the paired-suite Welch test on
+> identical current code: the sign is A ≈ B within ≤18 cycles across every
+> sub-stage (`pow_d`, `invert_r`, all Montgomery ops Δ0), and the paired-suite
+> Welch is `t=1.000` (BelowThreshold, PASS). The ~28K / `t=77998` recorded here
+> came from an older artifact and is no longer present. Kept as a point-in-time
+> record; the operative result is the localization analysis.
+
+## Verdict (historical — superseded, see banner)
 
 The 100-sample-per-class DWT campaign detects a repeatable key-dependent cycle
 difference in the current RSA-512 blinded-signing fixture. The deliberately
