@@ -149,3 +149,28 @@ teeth; only the sign passes.
   `backends/cortex_m.rs::measure_in_critical_section`), vs the localizer's
   lightly-warmed back-to-back reads — STM32F407 Flash-ART instruction-cache
   warmth. It is identical for A and B, so it never affected the CT verdict.
+
+## Conditioned validation at depth (caliper 0.1.2 per-sample prewarm)
+
+Per-sample lifecycle conditioning (caliper `positive_conditioned`, published
+`krabi-caliper 0.1.2`) prewarms the signing path immediately before — but
+outside — each timed A/B sample. Run on the F407 rig at 100 samples/class,
+accumulated as 5 × 20 short attaches (see `statistical-chunk` / the chunked
+workflow) to sidestep a probe USB fault on a single long attach:
+
+| Fixture | A mean | B mean | Δ | Welch t | Verdict |
+| --- | ---: | ---: | ---: | ---: | --- |
+| `pkcs1v15_blinded_sign` | 143,039,348.4 | 143,039,347.9 | +0.5 | 2.035 | BelowThreshold (PASS) |
+| `negative_early_exit` | 598.8 | 74.8 | +524 | 474.7 | ExceedsThreshold (trips) |
+| `key_construction` | 1,940,661 | 1,901,397 | +39,264 | 39,329 | ExceedsThreshold (public setup) |
+
+Sign spread ≤10, sd ≤1.74; `sign_conditioning:per-sample-prewarm` present in the
+evidence; DWT wraps = 0; absolute 143.0M aligns with the raw localizer's 142.5M.
+
+**Framing.** Conditioning stabilizes the measurement lifecycle and aligns the
+absolute timing with the raw localizer — the sign is A ≈ B (Δ 0.5 cyc,
+`t=2.035`) with the controls tripping. It is **not** claimed to explain the
+obsolete historical 28K result, which no longer reproduces even *without*
+conditioning (current unconditioned 100-sample: `t=1.000`). The three
+data points: historical `t=77998` (superseded, cause not isolable) → current
+unconditioned `t=1.000` → current conditioned `t=2.035`.
