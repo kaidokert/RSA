@@ -29,11 +29,23 @@ use sha2::Sha256;
 
 include!("../../../tests/fixtures/test_keys.rs");
 
-#[cfg(all(not(feature = "etm-single-trial"), feature = "statistical-campaign"))]
+// `statistical-chunk` runs a short 20-sample slice so the rig can accumulate
+// 100 samples across several reliable short attaches (5 x 20) instead of one
+// long attach that the probe faults partway through. Host pools the per-slice
+// `EM_SAMPLE` records and applies the 100-sample policy. Must stay even —
+// `PairedSuite` rejects an odd capacity.
+#[cfg(all(not(feature = "etm-single-trial"), feature = "statistical-chunk"))]
+const TRIALS: usize = 20;
+#[cfg(all(
+    not(feature = "etm-single-trial"),
+    feature = "statistical-campaign",
+    not(feature = "statistical-chunk")
+))]
 const TRIALS: usize = 100;
 #[cfg(all(
     not(feature = "etm-single-trial"),
-    not(feature = "statistical-campaign")
+    not(feature = "statistical-campaign"),
+    not(feature = "statistical-chunk")
 ))]
 const TRIALS: usize = 4;
 #[cfg(not(feature = "etm-single-trial"))]
