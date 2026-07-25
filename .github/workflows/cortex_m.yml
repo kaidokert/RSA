@@ -26,7 +26,7 @@ jobs:
       run: sudo apt-get update && sudo apt-get install -y qemu-system-arm
 
     - name: Install krabi-caliper host tooling
-      run: cargo install krabi-caliper --version 0.1.0 --features cli,campaign
+      run: cargo install krabi-caliper --version 0.1.1 --features cli,campaign
 
     - uses: actions/cache@v4
       with:
@@ -38,6 +38,9 @@ jobs:
         restore-keys: cortex-m-
 
     - name: Run Cortex-M suite
+      env:
+        # Config validation also visits the unused hardware profile.
+        KRABI_PROBE: unused-by-qemu-campaigns
       run: |
         set -o pipefail
         for campaign in rsa-cortex-m0 rsa-cortex-m3 rsa-cortex-m4; do
