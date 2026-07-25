@@ -5,6 +5,35 @@ between signing key A and key B (`t=77998`, disjoint ranges, fails the 32-cycle
 spread policy). This note attributes that delta from the source, then adds an
 on-rig localizer to name the exact operation.
 
+## Hardware result (STM32F407 @ 168 MHz, DWT)
+
+Per-stage A-vs-B deltas from the `localize` fixture on the rig:
+
+| stage | A | B | Δ |
+| --- | ---: | ---: | ---: |
+| sample_r (+ hash/pad/setup) | 33,412 | 33,397 | 15 |
+| r_to_monty | 216,829 | 216,829 | 0 |
+| invert_r (safegcd) | 100,040,792 | 100,040,792 | 0 |
+| r_pow_e | 10,549,870 | 10,549,870 | 0 |
+| c_to_monty | 216,803 | 216,803 | 0 |
+| blind_mul | 12,017 | 12,017 | 0 |
+| pow_d (secret ladder) | 20,434,953 | 20,434,953 | 0 |
+| unblind_mul | 12,017 | 12,017 | 0 |
+| retrieve | 121,334 | 121,334 | 0 |
+| verify | 10,890,300 | 10,890,300 | 0 |
+
+`rng_words` 32/32, both signs valid. **Every internal stage is cycle-identical
+between the two keys** — including `pow_d` and `invert_r` — confirming the static
+attribution on hardware. The only non-zero delta is 15 cycles in the
+RNG-sample/setup bucket (noise; `n`-keyed sampling, not secret).
+
+Crucially, this means the ~28K the statistical DWT campaign reported is **not in
+the sign**. Both the localizer and the campaign call the same `sign_once`;
+bracketed directly it is A = B to within 15 cycles. The 28K is introduced by the
+paired-suite acquisition (its ~128M measured base differs from the ~142M whole
+sign), i.e. the measurement harness — not the cryptographic operation. The
+follow-up, if any, is to audit the paired-suite A/B boundary, not the crypto.
+
 ## Bottom line
 
 **Not a private-exponent (`d`) side-channel.** Every `d`-dependent step in the
