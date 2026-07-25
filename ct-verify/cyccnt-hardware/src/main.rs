@@ -495,13 +495,14 @@ fn run_campaign(key_a: SigningKey, mut platform: DwtMeasurementPlatform<'_>, hcl
             "pkcs1v15_blinded_sign",
             &key_a,
             &key_b,
-            |_, signing_key| {
+            &mut (),
+            |_, _, signing_key| {
                 let outcome = sign_once(black_box(signing_key));
                 assert!(
                     streams_matched && outcome.ok && outcome.rng_words == preflight_a.rng_words
                 );
             },
-            |signing_key| {
+            |_, signing_key| {
                 let outcome = sign_once(signing_key);
                 streams_matched && outcome.ok && outcome.rng_words == preflight_a.rng_words
             },
