@@ -16,6 +16,10 @@ carrier-u32x64 = []
 carrier-u8x64 = []
 etm-single-trial = []
 statistical-campaign = []
+# Per-stage DWT localizer: registers a probe with the crate's `ct-cycle-probe`
+# hook and prints per-stage A-vs-B deltas so a rig run can name which sub-op
+# carries the key-dependent cycle difference. See LOCALIZATION_ANALYSIS.md.
+localize = ["rsa/ct-cycle-probe"]
 
 [dependencies]
 const-num-traits = { version = "0.2", default-features = false, features = ["ct"] }

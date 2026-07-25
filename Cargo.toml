@@ -101,6 +101,10 @@ alloc = ["dep:crypto-bigint", "crypto-bigint/alloc", "pkcs8/alloc", "spki/alloc"
 # constants), not generated on-device.
 keygen = ["alloc", "dep:crypto-primes"]
 modmath = ["dep:modmath", "dep:modmath-cios"]
+# Constant-time *measurement* hook: lets a hardware harness register a per-stage
+# probe (`ct_probe::set_probe`) that the blinded private op calls to localize a
+# timing delta. Off by default; shipped builds carry nothing.
+ct-cycle-probe = []
 
 [package.metadata.docs.rs]
 features = ["std", "serde", "hazmat", "sha2"]

@@ -1,5 +1,11 @@
 #![no_main]
 #![no_std]
+// The `localize` variant reuses the campaign-shaped setup but runs its own
+// per-stage path, so some campaign-only items are unused under that feature.
+#![cfg_attr(
+    feature = "localize",
+    allow(dead_code, unused_imports, unused_variables)
+)]
 
 use const_num_traits::Ct;
 use core::hint::black_box;
@@ -10,15 +16,15 @@ use krabi_caliper::protocol::rtt;
 #[cfg(not(feature = "etm-single-trial"))]
 use krabi_caliper::report::Field;
 #[cfg(not(feature = "etm-single-trial"))]
-use krabi_caliper::stack::{StackProbe, paint_cortex_m_runtime};
+use krabi_caliper::stack::{paint_cortex_m_runtime, StackProbe};
 #[cfg(not(feature = "etm-single-trial"))]
 use krabi_caliper::suite::{PairedSuite, PairedSuiteConfig, PairedSuiteFields};
 use rand_chacha::ChaCha12Rng;
 use rand_core::{SeedableRng, TryCryptoRng, TryRng};
-use rsa::GenericRsaPrivateKey;
-use rsa::modmath_support::{ModMathParams, public_key_ct_from_be_bytes};
+use rsa::modmath_support::{public_key_ct_from_be_bytes, ModMathParams};
 use rsa::pkcs1v15::GenericSigningKey;
 use rsa::traits::FixedWidthUnsignedInt;
+use rsa::GenericRsaPrivateKey;
 use sha2::Sha256;
 
 include!("../../../tests/fixtures/test_keys.rs");
@@ -397,13 +403,22 @@ fn main() -> ! {
         run_etm_single_trial(&key, key_index, hclk_hz);
     }
 
-    #[cfg(not(feature = "etm-single-trial"))]
+    #[cfg(all(not(feature = "etm-single-trial"), not(feature = "localize")))]
     {
         let Some(key_a) = prepare_key(&KEY_A) else {
             rtt::print(format_args!("SETUP_FAIL key:A\n"));
             stop();
         };
         run_campaign(key_a, platform, hclk_hz)
+    }
+
+    #[cfg(all(not(feature = "etm-single-trial"), feature = "localize"))]
+    {
+        let Some(key_a) = prepare_key(&KEY_A) else {
+            rtt::print(format_args!("SETUP_FAIL key:A\n"));
+            stop();
+        };
+        run_localize(key_a, platform, hclk_hz)
     }
 }
 
@@ -485,6 +500,97 @@ fn run_campaign(key_a: SigningKey, mut platform: DwtMeasurementPlatform<'_>, hcl
     assert!(!stack.overflowed);
     suite.finish().unwrap();
     stop();
+}
+
+// ── Per-stage localizer ────────────────────────────────────────────
+// Registers a probe with the crate's `ct-cycle-probe` hook and times each
+// sub-stage of the blinded private op with the DWT, for both keys, then prints
+// the per-stage A-vs-B deltas. Whichever stage carries the ~28K key-dependent
+// difference is the one to attribute; see LOCALIZATION_ANALYSIS.md.
+#[cfg(feature = "localize")]
+mod localize_probe {
+    use core::sync::atomic::{AtomicU32, Ordering};
+
+    pub const N_STAGES: usize = 10;
+    pub const NAMES: [&str; N_STAGES] = [
+        "sample_r",
+        "r_to_monty",
+        "invert_r",
+        "r_pow_e",
+        "c_to_monty",
+        "blind_mul",
+        "pow_d",
+        "unblind_mul",
+        "retrieve",
+        "verify",
+    ];
+    static STAGE_TS: [AtomicU32; N_STAGES] = [const { AtomicU32::new(0) }; N_STAGES];
+    static START: AtomicU32 = AtomicU32::new(0);
+
+    // The probe cost is identical on every call, so it cancels in the per-stage
+    // A-vs-B delta.
+    pub fn record(stage: u32) {
+        let now = cortex_m::peripheral::DWT::cycle_count();
+        if let Some(slot) = STAGE_TS.get(stage as usize) {
+            slot.store(now, Ordering::Relaxed);
+        }
+    }
+
+    pub fn reset(start: u32) {
+        START.store(start, Ordering::Relaxed);
+        for slot in &STAGE_TS {
+            slot.store(start, Ordering::Relaxed);
+        }
+    }
+
+    // Per-stage duration = cycles between consecutive marks (first from START).
+    pub fn durations() -> [u32; N_STAGES] {
+        let mut out = [0u32; N_STAGES];
+        let mut prev = START.load(Ordering::Relaxed);
+        for i in 0..N_STAGES {
+            let ts = STAGE_TS[i].load(Ordering::Relaxed);
+            out[i] = ts.wrapping_sub(prev);
+            prev = ts;
+        }
+        out
+    }
+}
+
+#[cfg(feature = "localize")]
+fn run_localize(key_a: SigningKey, _platform: DwtMeasurementPlatform<'_>, hclk_hz: u32) -> ! {
+    let _reporter = rtt::init_ct_compatible();
+    let Some(key_b) = prepare_key(&KEY_B) else {
+        rtt::print(format_args!("SETUP_FAIL key:B\n"));
+        stop();
+    };
+    rsa::ct_probe::set_probe(localize_probe::record);
+
+    // Warm caches/flash paths so the first-sample setup effect doesn't skew the
+    // timed runs below (the same warm-up the campaign path uses).
+    let _ = sign_once(black_box(&key_a));
+
+    localize_probe::reset(cortex_m::peripheral::DWT::cycle_count());
+    let out_a = sign_once(black_box(&key_a));
+    let da = localize_probe::durations();
+
+    localize_probe::reset(cortex_m::peripheral::DWT::cycle_count());
+    let out_b = sign_once(black_box(&key_b));
+    let db = localize_probe::durations();
+
+    for i in 0..localize_probe::N_STAGES {
+        rtt::print(format_args!(
+            "LOCALIZE_STAGE name:{} a:{} b:{} delta:{}\n",
+            localize_probe::NAMES[i],
+            da[i],
+            db[i],
+            (da[i] as i64) - (db[i] as i64),
+        ));
+    }
+    rtt::print(format_args!(
+        "LOCALIZE_SUMMARY frequency_hz:{} a_ok:{} b_ok:{} rng_words_a:{} rng_words_b:{}\n",
+        hclk_hz, out_a.ok as u8, out_b.ok as u8, out_a.rng_words, out_b.rng_words,
+    ));
+    stop()
 }
 
 #[panic_handler]
