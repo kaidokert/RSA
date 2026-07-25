@@ -443,6 +443,7 @@ fn run_campaign(key_a: SigningKey, mut platform: DwtMeasurementPlatform<'_>, hcl
         Field::u64("rng_words_a", preflight_a.rng_words as u64),
         Field::u64("rng_words_b", preflight_b.rng_words as u64),
         Field::bool("streams_matched", streams_matched),
+        Field::token("sign_conditioning", "per-sample-prewarm"),
     ];
     let fixture_fields = [Field::token("carrier", CARRIER)];
     let summary_fields = [Field::token("carrier", CARRIER)];
@@ -478,10 +479,21 @@ fn run_campaign(key_a: SigningKey, mut platform: DwtMeasurementPlatform<'_>, hcl
         )
         .unwrap();
     suite
-        .positive("pkcs1v15_blinded_sign", &key_a, &key_b, |signing_key| {
-            let outcome = sign_once(signing_key);
-            streams_matched && outcome.ok && outcome.rng_words == preflight_a.rng_words
-        })
+        .positive_conditioned(
+            "pkcs1v15_blinded_sign",
+            &key_a,
+            &key_b,
+            |_, signing_key| {
+                let outcome = sign_once(black_box(signing_key));
+                assert!(
+                    streams_matched && outcome.ok && outcome.rng_words == preflight_a.rng_words
+                );
+            },
+            |signing_key| {
+                let outcome = sign_once(signing_key);
+                streams_matched && outcome.ok && outcome.rng_words == preflight_a.rng_words
+            },
+        )
         .unwrap();
     const ZERO: [u8; KEY_BYTES] = [0; KEY_BYTES];
     suite
