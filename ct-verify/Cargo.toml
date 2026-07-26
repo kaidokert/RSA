@@ -9,6 +9,7 @@ members = [
     "ct-fixtures",
     "ct-driver",
     "ct-ctgrind",
+    "cyccnt-hardware",
     "panic-free-audit",
 ]
 default-members = ["ct-fixtures", "ct-driver", "ct-ctgrind", "panic-free-audit"]

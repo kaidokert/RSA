@@ -380,20 +380,29 @@ where
         .clone()
         .resize_unchecked(n_params.bits_precision());
     let r_mont = M::MontgomeryForm::from_reduced(r_sized, n_params);
+    crate::ct_probe::mark(crate::ct_probe::stage::R_TO_MONTY);
     // `invert_ct` returns `None` iff `gcd(r, n) != 1` — caller
     // retries with a fresh `r`.
     let r_inv_mont = r_mont.invert_ct().ok_or(Error::Internal)?;
+    crate::ct_probe::mark(crate::ct_probe::stage::INVERT_R);
     // r^e (in Montgomery form). Public exponent `e`, so
     // `pow_bounded_exp` (variable-time-in-exponent semantics) is fine.
     let r_e_mont = r_mont.pow_bounded_exp(e, e.bits());
+    crate::ct_probe::mark(crate::ct_probe::stage::R_POW_E);
     // c → Montgomery form via `from_reduced` (same reason as `r`).
     let c_sized = c.clone().resize_unchecked(n_params.bits_precision());
     let c_mont = M::MontgomeryForm::from_reduced(c_sized, n_params);
+    crate::ct_probe::mark(crate::ct_probe::stage::C_TO_MONTY);
     let blinded_mont = c_mont.mul_ct(&r_e_mont);
+    crate::ct_probe::mark(crate::ct_probe::stage::BLIND_MUL);
     // Private op on the blinded value — CT ladder in `d`.
     let s_prime_mont = blinded_mont.pow(d);
+    crate::ct_probe::mark(crate::ct_probe::stage::POW_D);
     let s_mont = s_prime_mont.mul_ct(&r_inv_mont);
-    Ok(<M::MontgomeryForm as PowBoundedExp<M>>::retrieve(&s_mont))
+    crate::ct_probe::mark(crate::ct_probe::stage::UNBLIND_MUL);
+    let out = <M::MontgomeryForm as PowBoundedExp<M>>::retrieve(&s_mont);
+    crate::ct_probe::mark(crate::ct_probe::stage::RETRIEVE);
+    Ok(out)
 }
 
 /// ⚠️ Raw RSA private op with RNG-driven base-blinding + fault-attack
@@ -438,6 +447,7 @@ where
         // `r` is secret — wrap in `Zeroizing` so it's wiped when we
         // drop out of scope on `continue`, verify-fail, or success.
         let r = zeroize::Zeroizing::new(T::try_random_mod(rng, n)?);
+        crate::ct_probe::mark(crate::ct_probe::stage::SAMPLE_R);
         let mut m = match rsa_private_op_blinded(&*r, c, d, e, n_params) {
             Ok(m) => m,
             Err(_) => continue,
@@ -448,6 +458,7 @@ where
         let m_sized = m.clone().resize_unchecked(n_params.bits_precision());
         let m_mont = M::MontgomeryForm::from_reduced(m_sized, n_params);
         let check = m_mont.pow_bounded_exp(e, e.bits()).retrieve();
+        crate::ct_probe::mark(crate::ct_probe::stage::VERIFY);
         if *c != check {
             // `m` is secret material (would-be plaintext or signature).
             // Wipe before returning `Err` — the failure path indicates a

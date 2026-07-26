@@ -1,0 +1,9 @@
+[build]
+target = "thumbv7em-none-eabihf"
+
+[target.thumbv7em-none-eabihf]
+# Auto-detect covers a single-probe development host. On a multi-probe host,
+# select the probe with CARGO_TARGET_THUMBV7EM_NONE_EABIHF_RUNNER; the CI
+# campaign obtains its selector from KRABI_PROBE through krabi-caliper.toml.
+runner = "probe-rs run --chip STM32F407VGTx --protocol swd"
+rustflags = ['--cfg', 'sha2_backend_soft="compact"']

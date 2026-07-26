@@ -5,6 +5,11 @@ ELF accounting, deadlines, baseline deltas, and reports. Run
 `cargo krabi-caliper run rsa-cortex-m0` (or the `m3`/`m4` campaign) in this
 directory; configuration lives in `krabi-caliper.toml`.
 
+Export `KRABI_PROBE` before running any campaign: the J-Trace profile
+interpolates it during config validation, so it must be set even for the
+QEMU-only campaigns. Use the real probe selector (e.g. `1366:1020:<serial>`)
+for hardware runs; any placeholder suffices when no probe is attached.
+
 The same case set runs on the J-Trace reference board through the declarative
 `probe-rs` profile. For a focused RSA-512 run:
 
@@ -20,7 +25,7 @@ cargo build --release --target thumbv7em-none-eabihf \
   --example rsa_verify \
   --features jtrace-f407,key_512,limb_u32,hash_sha1
 probe-rs run --chip STM32F407VGTx --protocol swd \
-  --probe 1366:1020:001224000224 \
+  --probe "$KRABI_PROBE" \
   target/thumbv7em-none-eabihf/release/examples/rsa_verify
 ```
 

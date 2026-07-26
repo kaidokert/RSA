@@ -110,6 +110,19 @@ counts). **Consumers who want the no-panic property must use
 fixed-bigint ≥ 0.5.2**, where the byte serialization is structurally
 panic-free rather than dependent on the optimizer proving bounds.
 
+**Physical CYCCNT regression** ([`cyccnt-hardware`](cyccnt-hardware/)).
+Runs two independent real keypairs through whole blinded signing on the J-Trace
+STM32F407VG; the CI gate uses a 768-bit key at 30 MHz / 0 wait states. The keys
+use matched deterministic RNG streams whose draw counts must agree. Public key
+construction is reported separately; the gated region begins at the signing API
+because RSA's modulus is public.
+
+```sh
+cd cyccnt-hardware
+cargo run --release --features rsa512,carrier-u32x16
+cargo run --release --features rsa512,carrier-u8x64
+```
+
 ## Violation triage policy
 
 When a layer goes red, where the finding lives decides what happens:
