@@ -23,8 +23,8 @@ carrier-u32x64 = []
 carrier-u8x64 = []
 etm-single-trial = []
 # Per-sample lifecycle conditioning (caliper positive_conditioned). Off by
-# default: redundant at 0 wait states, and doubling the sign count blows the
-# 10-min budget. Kept for the caliper conditioning validation.
+# default: redundant at 0 wait states, and doubling the sign count roughly
+# doubles the gate's wall time. Kept for the caliper conditioning validation.
 conditioning = []
 statistical-campaign = []
 # Short 20-sample slice for chunked accumulation on the rig (5 x 20 = 100),

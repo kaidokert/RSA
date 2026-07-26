@@ -597,7 +597,7 @@ fn run_campaign(key_a: SigningKey, mut platform: DwtMeasurementPlatform<'_>, hcl
     // At 0 wait states the measurement is deterministic, so per-sample
     // conditioning is redundant; it stays behind `conditioning` for the caliper
     // lifecycle validation but is off for the (0-WS) gate, which halves the
-    // sign count and keeps the run in budget.
+    // sign count.
     #[cfg(feature = "conditioning")]
     suite
         .positive_conditioned(

@@ -188,7 +188,7 @@ deterministic on its own, per-sample conditioning is belt-and-suspenders in this
 regime rather than load-bearing (it stays behind the off-by-default
 `conditioning` feature).
 
-## Landed gate: two clocks, ≤10 min
+## Landed gate: two clocks (~15 min measured)
 
 The `hw-ct` gate runs two campaigns under one rig lock:
 
@@ -205,3 +205,16 @@ The `hw-ct` gate runs two campaigns under one rig lock:
   (output + RNG-draw checks). It is *not* a CT gate: the CT property is
   width-independent and proven at 768; a 2048 sign at 30 MHz would run minutes,
   so 168 MHz keeps its wall time bounded.
+
+Landed verdict (rig run 30185333163):
+
+| Campaign | Fixture | t | Verdict |
+| --- | --- | ---: | --- |
+| 768@30 (gate) | `pkcs1v15_blinded_sign` | 1.831 | BelowThreshold (PASS) |
+| 768@30 (gate) | `pss_blinded_sign` | 0.249 | BelowThreshold (PASS) |
+| 768@30 (gate) | `negative_early_exit` | — | DeterministicDifference (trips) |
+| 768@30 (gate) | `key_construction` | −68975 | ExceedsThreshold (public setup) |
+| 2048@168 smoke | `pkcs1v15_blinded_sign` | 1.161 | BelowThreshold |
+| 2048@168 smoke | `negative_early_exit` | 1705.8 | ExceedsThreshold (trips) |
+
+Both campaigns PASS; PSS is CT between keys (`t=0.249`) with the controls tripping.

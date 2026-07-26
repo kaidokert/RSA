@@ -33,9 +33,10 @@ jobs:
 
     env:
       RIG: stm32f407-dwt                         # CHANGE 1 again (same value, without "rig-")
-      # CHANGE 2 — campaign keys in this repo's krabi-caliper.toml. Two clocks,
-      # ≤10 min total: the 768-bit CT gate at 30 MHz / 0 wait states (deterministic,
-      # the real gate) plus a 2048-bit functional smoke at 168 MHz (not a CT gate).
+      # CHANGE 2 — campaign keys in this repo's krabi-caliper.toml. Two clocks
+      # (~15 min measured): the 768-bit CT gate at 30 MHz / 0 wait states
+      # (deterministic, the real gate) plus a 2048-bit functional smoke at 168 MHz
+      # (not a CT gate).
       CAMPAIGNS: "rsa768-ct-jtrace-f407-30mhz rsa2048-smoke-jtrace-f407-168mhz"
       KRABI_RIG_DIR: /rigs                       # where the rig .env is mounted (leave as-is)
 

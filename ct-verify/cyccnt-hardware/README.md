@@ -25,7 +25,7 @@ runs the core/HCLK at 168 MHz, with APB1 at 42 MHz and APB2 at 84 MHz. This
 does not depend on a board-specific external crystal. Every run reports the
 configured HCLK over RTT.
 
-## Continuous gate: two clocks, ≤10 min (`hw-ct`)
+## Continuous gate: two clocks (`hw-ct`)
 
 At 168 MHz the F407 runs 5 flash wait states, so the ART prefetch/I-cache adds
 secret-independent fetch jitter that scales with operation length and swamps a
@@ -45,6 +45,10 @@ cycles are deterministic. The CI gate therefore splits across both clocks:
 - **`rsa2048-smoke-jtrace-f407-168mhz`** — a deployment-width functional smoke
   (`gate = false`) confirming a 2048-bit key signs correctly on hardware; 168 MHz
   keeps its wall time bounded (a 2048 sign at 30 MHz would run minutes).
+
+Measured wall time on the reference bench is ~15 min (768 gate ~7.5 min: build +
+two 4-sample positive fixtures at ~13s/sign at 30 MHz; 2048 smoke ~7 min: build +
+one 4-sample fixture at ~50s/sign at 168 MHz), plus rig queue/flash overhead.
 
 Per-sample lifecycle conditioning (`positive_conditioned`) is available behind
 the off-by-default `conditioning` feature; at 0 WS it is belt-and-suspenders, and
