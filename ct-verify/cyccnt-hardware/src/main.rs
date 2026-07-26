@@ -127,14 +127,40 @@ const CARRIER: &str = "u8x64";
 
 type SigningKey = GenericSigningKey<Sha256, Carrier, ModMathParams<Carrier, Ct>>;
 
-#[cfg(feature = "clock-168mhz")]
-#[cfg(not(feature = "etm-single-trial"))]
+#[cfg(all(feature = "clock-30mhz", not(feature = "etm-single-trial")))]
+const CLOCK_PROFILE: &str = "hsi-pll-30mhz-0ws";
+#[cfg(all(
+    feature = "clock-168mhz",
+    not(feature = "clock-30mhz"),
+    not(feature = "etm-single-trial")
+))]
 const CLOCK_PROFILE: &str = "hsi-pll-168mhz";
-#[cfg(not(feature = "clock-168mhz"))]
-#[cfg(not(feature = "etm-single-trial"))]
+#[cfg(all(
+    not(feature = "clock-168mhz"),
+    not(feature = "clock-30mhz"),
+    not(feature = "etm-single-trial")
+))]
 const CLOCK_PROFILE: &str = "reset-hsi-16mhz";
 
-#[cfg(feature = "clock-168mhz")]
+// 30 MHz is the F407's 0-wait-state flash ceiling. At 0 WS the ART
+// prefetch/I-cache is off, so core-cycle counts stay deterministic — none of
+// the secret-independent fetch jitter (which scales with operation length and
+// swamped the tight positive gate at 168 MHz) — while wall time nearly halves
+// vs the 16 MHz HSI reset default. This is the measurement regime the CT gate
+// wants; 168 MHz trades that determinism for wall time and needs the jitter
+// worked around. HSI-sourced PLL so no HSE crystal is assumed.
+#[cfg(feature = "clock-30mhz")]
+fn configure_clock() -> u32 {
+    use stm32f4xx_hal::{pac, prelude::*, rcc::Config};
+
+    let device = pac::Peripherals::take().unwrap();
+    let rcc = device.RCC.freeze(Config::hsi().sysclk(30.MHz()));
+    let hclk_hz = rcc.clocks.hclk().raw();
+    assert_eq!(hclk_hz, 30_000_000);
+    hclk_hz
+}
+
+#[cfg(all(feature = "clock-168mhz", not(feature = "clock-30mhz")))]
 fn configure_clock() -> u32 {
     use stm32f4xx_hal::{pac, prelude::*, rcc::Config};
 
@@ -151,7 +177,7 @@ fn configure_clock() -> u32 {
     hclk_hz
 }
 
-#[cfg(not(feature = "clock-168mhz"))]
+#[cfg(all(not(feature = "clock-168mhz"), not(feature = "clock-30mhz")))]
 fn configure_clock() -> u32 {
     16_000_000
 }

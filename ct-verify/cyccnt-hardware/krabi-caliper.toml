@@ -96,3 +96,71 @@ delay-before-run-seconds = 60
 profile = "jtrace-f407-168mhz"
 case-set = "rsa512-statistical-cyccnt"
 constant-time = { welch-threshold = 4.5, minimum-samples-per-class = 100, protected-classes = ["positive"], control-classes = ["negative"], gate = true }
+
+# ── 30 MHz, 0 wait states ────────────────────────────────────────────
+# The deterministic measurement regime: 0 WS => no ART prefetch/I-cache, so
+# core-cycle counts carry no fetch jitter (unlike the 168 MHz profile above,
+# whose ART jitter scales with operation length and swamps the tight gate).
+[profiles.jtrace-f407-30mhz-0ws]
+runner = "command"
+target = "thumbv7em-none-eabihf"
+build-features = ["clock-30mhz"]
+board = "jtrace-reference-board"
+mcu = "STM32F407VG"
+transport = "rtt"
+probe = "${KRABI_PROBE}"
+clock-frequency-hz = 30000000
+executable = "probe-rs"
+args = [
+  "attach",
+  "--chip", "STM32F407VGTx",
+  "--protocol", "swd",
+  "--probe", "${KRABI_PROBE}",
+  "--non-interactive",
+  "--disable-progressbars",
+  "--no-location",
+  "{artifact}",
+]
+completion-marker = "EM_SUMMARY"
+completion-action = "interrupt"
+timeout-seconds = 900
+target-dir = "target"
+artifact-extension = ""
+
+[[profiles.jtrace-f407-30mhz-0ws.prepare]]
+executable = "probe-rs"
+args = [
+  "download",
+  "--chip", "STM32F407VGTx",
+  "--protocol", "swd",
+  "--probe", "${KRABI_PROBE}",
+  "--non-interactive",
+  "--disable-progressbars",
+  "{artifact}",
+]
+timeout-seconds = 120
+
+[[profiles.jtrace-f407-30mhz-0ws.prepare]]
+executable = "probe-rs"
+args = [
+  "reset",
+  "--chip", "STM32F407VGTx",
+  "--protocol", "swd",
+  "--probe", "${KRABI_PROBE}",
+  "--non-interactive",
+]
+timeout-seconds = 30
+
+# rsa512 only: at 30 MHz the larger widths run long (RSA ops are ~10-2000x
+# ed25519's), so 1024/2048 stay on their own timeouts / a follow-up.
+[[case-sets.rsa512-cyccnt-30mhz]]
+name = "rsa512-u32x16-30mhz"
+binary = "rsa-cyccnt-hardware"
+features = ["rsa512", "carrier-u32x16"]
+expected-suite = "rsa512-cyccnt"
+timeout-seconds = 300
+
+[campaigns.rsa512-ct-jtrace-f407-30mhz]
+profile = "jtrace-f407-30mhz-0ws"
+case-set = "rsa512-cyccnt-30mhz"
+constant-time = { welch-threshold = 4.5, minimum-samples-per-class = 4, protected-classes = ["positive"], control-classes = ["negative"], gate = true }

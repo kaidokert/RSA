@@ -7,6 +7,9 @@ publish = false
 [features]
 default = ["clock-168mhz"]
 clock-168mhz = ["dep:stm32f4xx-hal"]
+# 30 MHz, 0 wait states: deterministic core-cycle measurement (no ART jitter).
+# The regime the CT gate wants; use in place of clock-168mhz for rig runs.
+clock-30mhz = ["dep:stm32f4xx-hal"]
 rsa512 = []
 rsa1024 = []
 rsa2048 = []
