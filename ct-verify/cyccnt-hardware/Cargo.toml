@@ -32,7 +32,7 @@ statistical-campaign = []
 statistical-chunk = []
 # Per-stage DWT localizer: registers a probe with the crate's `ct-cycle-probe`
 # hook and prints per-stage A-vs-B deltas so a rig run can name which sub-op
-# carries the key-dependent cycle difference. See LOCALIZATION_ANALYSIS.md.
+# carries any key-dependent cycle difference.
 localize = ["rsa/ct-cycle-probe"]
 
 [dependencies]
