@@ -667,10 +667,8 @@ fn run_campaign(key_a: SigningKey, mut platform: DwtMeasurementPlatform<'_>, hcl
 }
 
 // ── Per-stage localizer ────────────────────────────────────────────
-// Registers a probe with the crate's `ct-cycle-probe` hook and times each
-// sub-stage of the blinded private op with the DWT, for both keys, then prints
-// the per-stage A-vs-B deltas. Whichever stage carries a key-dependent
-// difference is the one to attribute.
+// Times each sub-stage of the blinded private op for both keys; the stage
+// carrying a key-dependent A-vs-B delta is the one to attribute.
 #[cfg(feature = "localize")]
 mod localize_probe {
     use core::sync::atomic::{AtomicU32, Ordering};
@@ -707,7 +705,7 @@ mod localize_probe {
         }
     }
 
-    // Per-stage duration = cycles between consecutive marks (first from START).
+    // First stage is measured from START; the rest are inter-mark deltas.
     pub fn durations() -> [u32; N_STAGES] {
         let mut out = [0u32; N_STAGES];
         let mut prev = START.load(Ordering::Relaxed);

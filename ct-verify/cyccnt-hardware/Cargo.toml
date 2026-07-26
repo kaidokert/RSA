@@ -28,7 +28,7 @@ etm-single-trial = []
 conditioning = []
 statistical-campaign = []
 # Short 20-sample slice for chunked accumulation on the rig (5 x 20 = 100),
-# avoiding one long fault-prone attach. See hw-statistical-chunked.yml.
+# avoiding one long fault-prone attach.
 statistical-chunk = []
 # Per-stage DWT localizer: registers a probe with the crate's `ct-cycle-probe`
 # hook and prints per-stage A-vs-B deltas so a rig run can name which sub-op

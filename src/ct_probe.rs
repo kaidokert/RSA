@@ -2,7 +2,7 @@
 //!
 //! Off by default and a no-op unless `ct-cycle-probe` is enabled, so shipped
 //! builds carry nothing. When enabled, a consumer registers a `fn(u32)` with
-//! [`set_probe`]; the blinded private op calls [`mark`] at each sub-stage
+//! `set_probe`; the blinded private op calls [`mark`] at each sub-stage
 //! boundary so a hardware harness (e.g. a Cortex-M DWT reader) can localize
 //! which stage a per-key timing delta lands in. The probe cost is identical on
 //! every call, so it cancels when comparing two keys' per-stage deltas.
@@ -23,7 +23,6 @@ pub fn set_probe(probe: fn(u32)) {
 
 /// Emit a stage marker. No-op unless a probe is registered.
 #[cfg(feature = "ct-cycle-probe")]
-#[inline(always)]
 pub fn mark(stage: u32) {
     let raw = PROBE.load(Ordering::Relaxed);
     if raw != 0 {
@@ -36,7 +35,6 @@ pub fn mark(stage: u32) {
 
 /// No-op marker for the default (non-measurement) build.
 #[cfg(not(feature = "ct-cycle-probe"))]
-#[inline(always)]
 pub fn mark(_stage: u32) {}
 
 /// Stage identifiers emitted by the blinded private op, in execution order.
