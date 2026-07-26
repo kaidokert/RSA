@@ -33,7 +33,11 @@ jobs:
 
     env:
       RIG: stm32f407-dwt                         # CHANGE 1 again (same value, without "rig-")
-      CAMPAIGN: rsa-signing-ct-jtrace-f407       # CHANGE 2 — campaign key in this repo's krabi-caliper.toml
+      # CHANGE 2 — campaign keys in this repo's krabi-caliper.toml. Two clocks
+      # (~15 min measured): the 768-bit CT gate at 30 MHz / 0 wait states
+      # (deterministic, the real gate) plus a 2048-bit functional smoke at 168 MHz
+      # (not a CT gate).
+      CAMPAIGNS: "rsa768-ct-jtrace-f407-30mhz rsa2048-smoke-jtrace-f407-168mhz"
       KRABI_RIG_DIR: /rigs                       # where the rig .env is mounted (leave as-is)
 
     steps:
@@ -69,4 +73,9 @@ jobs:
             || { echo "::error::probe $KRABI_PROBE not attached to ${KRABI_BENCH:-this bench}"; exit 1; }
 
           # 4. run — ${KRABI_PROBE} in the campaign args resolves from the live env.
-          cargo krabi-caliper run "$CAMPAIGN"
+          #    Both campaigns run under the single flock so the rig stays serialized.
+          for campaign in $CAMPAIGNS; do
+            echo "::group::campaign $campaign"
+            cargo krabi-caliper run "$campaign"
+            echo "::endgroup::"
+          done

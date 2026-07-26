@@ -23,17 +23,31 @@ use rand_chacha::ChaCha12Rng;
 use rand_core::{SeedableRng, TryCryptoRng, TryRng};
 use rsa::modmath_support::{public_key_ct_from_be_bytes, ModMathParams};
 use rsa::pkcs1v15::GenericSigningKey;
+#[cfg(all(feature = "rsa768", not(feature = "etm-single-trial")))]
+use rsa::pss::GenericSigningKey as PssGenericSigningKey;
 use rsa::traits::FixedWidthUnsignedInt;
 use rsa::GenericRsaPrivateKey;
 use sha2::Sha256;
 
 include!("../../../tests/fixtures/test_keys.rs");
 
-#[cfg(all(not(feature = "etm-single-trial"), feature = "statistical-campaign"))]
+// `statistical-chunk` runs a short 20-sample slice so the rig can accumulate
+// 100 samples across several reliable short attaches (5 x 20) instead of one
+// long attach that the probe faults partway through. Host pools the per-slice
+// `EM_SAMPLE` records and applies the 100-sample policy. Must stay even —
+// `PairedSuite` rejects an odd capacity.
+#[cfg(all(not(feature = "etm-single-trial"), feature = "statistical-chunk"))]
+const TRIALS: usize = 20;
+#[cfg(all(
+    not(feature = "etm-single-trial"),
+    feature = "statistical-campaign",
+    not(feature = "statistical-chunk")
+))]
 const TRIALS: usize = 100;
 #[cfg(all(
     not(feature = "etm-single-trial"),
-    not(feature = "statistical-campaign")
+    not(feature = "statistical-campaign"),
+    not(feature = "statistical-chunk")
 ))]
 const TRIALS: usize = 4;
 #[cfg(not(feature = "etm-single-trial"))]
@@ -43,6 +57,10 @@ const BATCHES: usize = 1;
 const MAX_POSITIVE_SPREAD: u32 = 40;
 #[cfg(not(feature = "etm-single-trial"))]
 const MAX_SAFE_DWT_REGION: u32 = 0xf000_0000;
+#[cfg(all(feature = "conditioning", not(feature = "etm-single-trial")))]
+const SIGN_CONDITIONING: &str = "per-sample-prewarm";
+#[cfg(all(not(feature = "conditioning"), not(feature = "etm-single-trial")))]
+const SIGN_CONDITIONING: &str = "none";
 const RNG_SEED: u64 = 0x4354_5f52_5341_3531;
 const MESSAGE: &[u8] = b"RSA CYCCNT fixture message";
 #[cfg(not(feature = "etm-single-trial"))]
@@ -50,6 +68,7 @@ const STACK_SAFE_ZONE: usize = 512;
 
 const _: () = assert!(
     cfg!(feature = "rsa512") as usize
+        + cfg!(feature = "rsa768") as usize
         + cfg!(feature = "rsa1024") as usize
         + cfg!(feature = "rsa2048") as usize
         == 1,
@@ -57,6 +76,7 @@ const _: () = assert!(
 );
 const _: () = assert!(
     cfg!(feature = "carrier-u32x16") as usize
+        + cfg!(feature = "carrier-u32x24") as usize
         + cfg!(feature = "carrier-u32x32") as usize
         + cfg!(feature = "carrier-u32x64") as usize
         + cfg!(feature = "carrier-u8x64") as usize
@@ -66,6 +86,7 @@ const _: () = assert!(
 const _: () = assert!(
     (cfg!(feature = "rsa512")
         && (cfg!(feature = "carrier-u32x16") || cfg!(feature = "carrier-u8x64")))
+        || (cfg!(feature = "rsa768") && cfg!(feature = "carrier-u32x24"))
         || (cfg!(feature = "rsa1024") && cfg!(feature = "carrier-u32x32"))
         || (cfg!(feature = "rsa2048") && cfg!(feature = "carrier-u32x64")),
     "selected carrier does not match the RSA width",
@@ -76,6 +97,12 @@ const _: () = assert!(
 const SUITE: &str = "rsa512-cyccnt";
 #[cfg(feature = "rsa512")]
 const KEY_BYTES: usize = 64;
+
+#[cfg(feature = "rsa768")]
+#[cfg(not(feature = "etm-single-trial"))]
+const SUITE: &str = "rsa768-cyccnt";
+#[cfg(feature = "rsa768")]
+const KEY_BYTES: usize = 96;
 
 #[cfg(feature = "rsa1024")]
 #[cfg(not(feature = "etm-single-trial"))]
@@ -94,6 +121,12 @@ type Carrier = FixedUInt<u32, 16, Ct>;
 #[cfg(feature = "carrier-u32x16")]
 #[cfg(not(feature = "etm-single-trial"))]
 const CARRIER: &str = "u32x16";
+
+#[cfg(feature = "carrier-u32x24")]
+type Carrier = FixedUInt<u32, 24, Ct>;
+#[cfg(feature = "carrier-u32x24")]
+#[cfg(not(feature = "etm-single-trial"))]
+const CARRIER: &str = "u32x24";
 
 #[cfg(feature = "carrier-u32x32")]
 type Carrier = FixedUInt<u32, 32, Ct>;
@@ -115,14 +148,48 @@ const CARRIER: &str = "u8x64";
 
 type SigningKey = GenericSigningKey<Sha256, Carrier, ModMathParams<Carrier, Ct>>;
 
-#[cfg(feature = "clock-168mhz")]
-#[cfg(not(feature = "etm-single-trial"))]
+// PSS shares the entire secret-dependent core with pkcs1v15 (same blinded
+// private op); the only added path is the EMSA-PSS encoding (MGF1 + salt),
+// which runs on the public hash. Gated to rsa768 because 768 is the smallest
+// width where PSS's emLen (>= hLen + sLen + 2 = 66 bytes) fits — the same
+// constraint that makes 768 the gate width.
+#[cfg(all(feature = "rsa768", not(feature = "etm-single-trial")))]
+type PssSigningKey = PssGenericSigningKey<Sha256, Carrier, ModMathParams<Carrier, Ct>>;
+
+#[cfg(all(feature = "clock-30mhz", not(feature = "etm-single-trial")))]
+const CLOCK_PROFILE: &str = "hsi-pll-30mhz-0ws";
+#[cfg(all(
+    feature = "clock-168mhz",
+    not(feature = "clock-30mhz"),
+    not(feature = "etm-single-trial")
+))]
 const CLOCK_PROFILE: &str = "hsi-pll-168mhz";
-#[cfg(not(feature = "clock-168mhz"))]
-#[cfg(not(feature = "etm-single-trial"))]
+#[cfg(all(
+    not(feature = "clock-168mhz"),
+    not(feature = "clock-30mhz"),
+    not(feature = "etm-single-trial")
+))]
 const CLOCK_PROFILE: &str = "reset-hsi-16mhz";
 
-#[cfg(feature = "clock-168mhz")]
+// 30 MHz is the F407's 0-wait-state flash ceiling. At 0 WS the ART
+// prefetch/I-cache is off, so core-cycle counts stay deterministic — none of
+// the secret-independent fetch jitter (which scales with operation length and
+// swamped the tight positive gate at 168 MHz) — while wall time nearly halves
+// vs the 16 MHz HSI reset default. This is the measurement regime the CT gate
+// wants; 168 MHz trades that determinism for wall time and needs the jitter
+// worked around. HSI-sourced PLL so no HSE crystal is assumed.
+#[cfg(feature = "clock-30mhz")]
+fn configure_clock() -> u32 {
+    use stm32f4xx_hal::{pac, prelude::*, rcc::Config};
+
+    let device = pac::Peripherals::take().unwrap();
+    let rcc = device.RCC.freeze(Config::hsi().sysclk(30.MHz()));
+    let hclk_hz = rcc.clocks.hclk().raw();
+    assert_eq!(hclk_hz, 30_000_000);
+    hclk_hz
+}
+
+#[cfg(all(feature = "clock-168mhz", not(feature = "clock-30mhz")))]
 fn configure_clock() -> u32 {
     use stm32f4xx_hal::{pac, prelude::*, rcc::Config};
 
@@ -139,7 +206,7 @@ fn configure_clock() -> u32 {
     hclk_hz
 }
 
-#[cfg(not(feature = "clock-168mhz"))]
+#[cfg(all(not(feature = "clock-168mhz"), not(feature = "clock-30mhz")))]
 fn configure_clock() -> u32 {
     16_000_000
 }
@@ -165,6 +232,17 @@ const KEY_A: KeyInput = KeyInput {
 const KEY_B: KeyInput = KeyInput {
     modulus: &N_512_B,
     private_exponent: &D_512_B,
+};
+
+#[cfg(feature = "rsa768")]
+const KEY_A: KeyInput = KeyInput {
+    modulus: &N_768,
+    private_exponent: &D_768,
+};
+#[cfg(feature = "rsa768")]
+const KEY_B: KeyInput = KeyInput {
+    modulus: &N_768_B,
+    private_exponent: &D_768_B,
 };
 
 #[cfg(feature = "rsa2048")]
@@ -261,6 +339,44 @@ fn sign_once(signing_key: &SigningKey) -> SignOutcome {
         )
         .is_ok();
     let _ = black_box((encoded_message, signature));
+    SignOutcome {
+        ok,
+        rng_words: rng.words,
+    }
+}
+
+#[cfg(all(feature = "rsa768", not(feature = "etm-single-trial")))]
+fn prepare_pss_key(input: &KeyInput) -> Option<PssSigningKey> {
+    let Ok(public_key) = public_key_ct_from_be_bytes::<Carrier>(black_box(input.modulus), 65537)
+    else {
+        return None;
+    };
+    let Ok(d) = Carrier::try_from_be_bytes_vartime(black_box(input.private_exponent)) else {
+        return None;
+    };
+    Some(PssGenericSigningKey::<Sha256, _, _>::new(
+        GenericRsaPrivateKey::from_public_and_d(public_key, d),
+    ))
+}
+
+#[cfg(all(feature = "rsa768", not(feature = "etm-single-trial")))]
+#[inline(never)]
+fn sign_once_pss(signing_key: &PssSigningKey) -> SignOutcome {
+    let mut rng = CountingCryptoRng::new(RNG_SEED);
+    let mut encoded_message = [0u8; KEY_BYTES];
+    let mut signature = [0u8; KEY_BYTES];
+    // salt_len defaults to D::output_size(); 32 bytes for SHA-256.
+    let mut salt = [0u8; 32];
+    let ok = signing_key
+        .try_sign_with_rng_into(
+            &mut rng,
+            black_box(MESSAGE),
+            &mut encoded_message,
+            &mut signature,
+            &mut salt,
+        )
+        .is_ok();
+    let _ = black_box((encoded_message, signature, salt));
     SignOutcome {
         ok,
         rng_words: rng.words,
@@ -443,6 +559,7 @@ fn run_campaign(key_a: SigningKey, mut platform: DwtMeasurementPlatform<'_>, hcl
         Field::u64("rng_words_a", preflight_a.rng_words as u64),
         Field::u64("rng_words_b", preflight_b.rng_words as u64),
         Field::bool("streams_matched", streams_matched),
+        Field::token("sign_conditioning", SIGN_CONDITIONING),
     ];
     let fixture_fields = [Field::token("carrier", CARRIER)];
     let summary_fields = [Field::token("carrier", CARRIER)];
@@ -477,12 +594,59 @@ fn run_campaign(key_a: SigningKey, mut platform: DwtMeasurementPlatform<'_>, hcl
             |input| prepare_key(input).is_some(),
         )
         .unwrap();
+    // At 0 wait states the measurement is deterministic, so per-sample
+    // conditioning is redundant; it stays behind `conditioning` for the caliper
+    // lifecycle validation but is off for the (0-WS) gate, which halves the
+    // sign count.
+    #[cfg(feature = "conditioning")]
+    suite
+        .positive_conditioned(
+            "pkcs1v15_blinded_sign",
+            &key_a,
+            &key_b,
+            &mut (),
+            |_, _, signing_key| {
+                let outcome = sign_once(black_box(signing_key));
+                assert!(
+                    streams_matched && outcome.ok && outcome.rng_words == preflight_a.rng_words
+                );
+            },
+            |_, signing_key| {
+                let outcome = sign_once(signing_key);
+                streams_matched && outcome.ok && outcome.rng_words == preflight_a.rng_words
+            },
+        )
+        .unwrap();
+    #[cfg(not(feature = "conditioning"))]
     suite
         .positive("pkcs1v15_blinded_sign", &key_a, &key_b, |signing_key| {
             let outcome = sign_once(signing_key);
             streams_matched && outcome.ok && outcome.rng_words == preflight_a.rng_words
         })
         .unwrap();
+    // Second signing scheme on the gate. The measured private op is identical to
+    // pkcs1v15; this covers the distinct EMSA-PSS encoding path. PSS draws a salt
+    // on top of the blinding factor, so it has its own preflight/word count.
+    #[cfg(feature = "rsa768")]
+    {
+        let Some(pss_key_a) = prepare_pss_key(&KEY_A) else {
+            rtt::print(format_args!("SETUP_FAIL pss:A\n"));
+            stop();
+        };
+        let Some(pss_key_b) = prepare_pss_key(&KEY_B) else {
+            rtt::print(format_args!("SETUP_FAIL pss:B\n"));
+            stop();
+        };
+        let pss_a = sign_once_pss(&pss_key_a);
+        let pss_b = sign_once_pss(&pss_key_b);
+        let pss_streams_matched = pss_a.ok && pss_b.ok && pss_a.rng_words == pss_b.rng_words;
+        suite
+            .positive("pss_blinded_sign", &pss_key_a, &pss_key_b, |signing_key| {
+                let outcome = sign_once_pss(signing_key);
+                pss_streams_matched && outcome.ok && outcome.rng_words == pss_a.rng_words
+            })
+            .unwrap();
+    }
     const ZERO: [u8; KEY_BYTES] = [0; KEY_BYTES];
     suite
         .negative(

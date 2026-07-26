@@ -149,3 +149,72 @@ teeth; only the sign passes.
   `backends/cortex_m.rs::measure_in_critical_section`), vs the localizer's
   lightly-warmed back-to-back reads — STM32F407 Flash-ART instruction-cache
   warmth. It is identical for A and B, so it never affected the CT verdict.
+
+## Conditioned validation at depth (caliper 0.1.2 per-sample prewarm)
+
+Per-sample lifecycle conditioning (caliper `positive_conditioned`, published
+`krabi-caliper 0.1.2`) prewarms the signing path immediately before — but
+outside — each timed A/B sample. Run on the F407 rig at 100 samples/class,
+accumulated as 5 × 20 short attaches (see `statistical-chunk` / the chunked
+workflow) to sidestep a probe USB fault on a single long attach:
+
+| Fixture | A mean | B mean | Δ | Welch t | Verdict |
+| --- | ---: | ---: | ---: | ---: | --- |
+| `pkcs1v15_blinded_sign` | 143,039,348.4 | 143,039,347.9 | +0.5 | 2.035 | BelowThreshold (PASS) |
+| `negative_early_exit` | 598.8 | 74.8 | +524 | 474.7 | ExceedsThreshold (trips) |
+| `key_construction` | 1,940,661 | 1,901,397 | +39,264 | 39,329 | ExceedsThreshold (public setup) |
+
+Sign spread ≤10, sd ≤1.74; `sign_conditioning:per-sample-prewarm` present in the
+evidence; DWT wraps = 0; absolute 143.0M aligns with the raw localizer's 142.5M.
+
+**Framing.** Conditioning stabilizes the measurement lifecycle and aligns the
+absolute timing with the raw localizer — the sign is A ≈ B (Δ 0.5 cyc,
+`t=2.035`) with the controls tripping. It is **not** claimed to explain the
+obsolete historical 28K result, which no longer reproduces even *without*
+conditioning (current unconditioned 100-sample: `t=1.000`). The three
+data points: historical `t=77998` (superseded, cause not isolable) → current
+unconditioned `t=1.000` → current conditioned `t=2.035`.
+
+## 30 MHz / 0-wait-state: the root fix
+
+The warmth above is the 168 MHz ART prefetch/I-cache; the direct fix is to
+measure at 0 wait states, where there is no ART and core cycles carry no fetch
+jitter. Rig-validated at 30 MHz (the F407's 0-WS ceiling, `clock-30mhz` /
+`jtrace-f407-30mhz-0ws`) for rsa512-u32x16: sign Welch `t=0.655`
+(BelowThreshold, PASS), the negative control returns a `DeterministicDifference`
+verdict (zero-variance, fixed A/B offset — the 0-WS determinism itself), and
+`key_construction` trips (`t=136061`). Because 0 WS makes the measurement
+deterministic on its own, per-sample conditioning is belt-and-suspenders in this
+regime rather than load-bearing (it stays behind the off-by-default
+`conditioning` feature).
+
+## Landed gate: two clocks (~15 min measured)
+
+The `hw-ct` gate runs two campaigns under one rig lock:
+
+- **`rsa768-ct-jtrace-f407-30mhz`** — the CT gate proper. 768-bit (u32x24, the
+  smallest OAEP-SHA256-compatible width) at 30 MHz / 0 WS, so the verdict rests
+  on deterministic core cycles. At near-zero variance a small sample count is
+  valid (the rsa512@30 MHz precedent above got a genuine `t=0.655` pass at the
+  same count) — validity comes from the determinism, not from N. Two positive
+  fixtures run at this width: `pkcs1v15_blinded_sign` and `pss_blinded_sign`.
+  They share the entire blinded private op (the secret-dependent surface Δ0 in
+  the per-stage table above); PSS adds only the public-input EMSA-PSS encoding.
+- **`rsa2048-smoke-jtrace-f407-168mhz`** — a deployment-width functional smoke
+  (`gate = false`), confirming a 2048-bit key signs correctly on hardware
+  (output + RNG-draw checks). It is *not* a CT gate: the CT property is
+  width-independent and proven at 768; a 2048 sign at 30 MHz would run minutes,
+  so 168 MHz keeps its wall time bounded.
+
+Landed verdict (rig run 30185333163):
+
+| Campaign | Fixture | t | Verdict |
+| --- | --- | ---: | --- |
+| 768@30 (gate) | `pkcs1v15_blinded_sign` | 1.831 | BelowThreshold (PASS) |
+| 768@30 (gate) | `pss_blinded_sign` | 0.249 | BelowThreshold (PASS) |
+| 768@30 (gate) | `negative_early_exit` | — | DeterministicDifference (trips) |
+| 768@30 (gate) | `key_construction` | −68975 | ExceedsThreshold (public setup) |
+| 2048@168 smoke | `pkcs1v15_blinded_sign` | 1.161 | BelowThreshold |
+| 2048@168 smoke | `negative_early_exit` | 1705.8 | ExceedsThreshold (trips) |
+
+Both campaigns PASS; PSS is CT between keys (`t=0.249`) with the controls tripping.

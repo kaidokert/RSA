@@ -7,15 +7,29 @@ publish = false
 [features]
 default = ["clock-168mhz"]
 clock-168mhz = ["dep:stm32f4xx-hal"]
+# 30 MHz, 0 wait states: deterministic core-cycle measurement (no ART jitter).
+# The regime the CT gate wants; use in place of clock-168mhz for rig runs.
+clock-30mhz = ["dep:stm32f4xx-hal"]
 rsa512 = []
+# 768-bit: the smallest OAEP-SHA256-compatible width, so the gate exercises a
+# realistic key rather than toy 512. u32x24 carrier (24 * 4 = 96 bytes).
+rsa768 = []
 rsa1024 = []
 rsa2048 = []
 carrier-u32x16 = []
+carrier-u32x24 = []
 carrier-u32x32 = []
 carrier-u32x64 = []
 carrier-u8x64 = []
 etm-single-trial = []
+# Per-sample lifecycle conditioning (caliper positive_conditioned). Off by
+# default: redundant at 0 wait states, and doubling the sign count roughly
+# doubles the gate's wall time. Kept for the caliper conditioning validation.
+conditioning = []
 statistical-campaign = []
+# Short 20-sample slice for chunked accumulation on the rig (5 x 20 = 100),
+# avoiding one long fault-prone attach. See hw-statistical-chunked.yml.
+statistical-chunk = []
 # Per-stage DWT localizer: registers a probe with the crate's `ct-cycle-probe`
 # hook and prints per-stage A-vs-B deltas so a rig run can name which sub-op
 # carries the key-dependent cycle difference. See LOCALIZATION_ANALYSIS.md.
@@ -25,7 +39,7 @@ localize = ["rsa/ct-cycle-probe"]
 const-num-traits = { version = "0.2", default-features = false, features = ["ct"] }
 cortex-m = { version = "0.7", features = ["critical-section-single-core"] }
 cortex-m-rt = "0.7"
-krabi-caliper = { version = "0.1", features = ["cortex-m", "cortex-m-dwt", "paired", "rtt", "stack"] }
+krabi-caliper = { version = "0.1.2", features = ["cortex-m", "cortex-m-dwt", "paired", "rtt", "stack"] }
 fixed-bigint = { version = "0.6.0", default-features = false, features = ["zeroize", "use-unsafe", "cios"] }
 rand_core = { version = "0.10", default-features = false }
 rand_chacha = { version = "0.10", default-features = false }
