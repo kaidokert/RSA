@@ -185,8 +185,20 @@ jitter. Rig-validated at 30 MHz (the F407's 0-WS ceiling, `clock-30mhz` /
 verdict (zero-variance, fixed A/B offset — the 0-WS determinism itself), and
 `key_construction` trips (`t=136061`). Because 0 WS makes the measurement
 deterministic on its own, per-sample conditioning is belt-and-suspenders in this
-regime rather than load-bearing. This is the measurement regime the CT gate
-wants; 168 MHz stays only as a complementary fast-wall-time profile. Larger RSA
-widths at 30 MHz run long (ops ~10–2000× ed25519's), so 1024/2048 stay a
-follow-up (deterministic samples need far fewer trials, which recovers most of
-the wall-time).
+regime rather than load-bearing (it stays behind the off-by-default
+`conditioning` feature).
+
+## Landed gate: two clocks, ≤10 min
+
+The `hw-ct` gate runs two campaigns under one rig lock:
+
+- **`rsa768-ct-jtrace-f407-30mhz`** — the CT gate proper. 768-bit (u32x24, the
+  smallest OAEP-SHA256-compatible width) at 30 MHz / 0 WS, so the verdict rests
+  on deterministic core cycles. At near-zero variance a small sample count is
+  valid (the rsa512@30 MHz precedent above got a genuine `t=0.655` pass at the
+  same count) — validity comes from the determinism, not from N.
+- **`rsa2048-smoke-jtrace-f407-168mhz`** — a deployment-width functional smoke
+  (`gate = false`), confirming a 2048-bit key signs correctly on hardware
+  (output + RNG-draw checks). It is *not* a CT gate: the CT property is
+  width-independent and proven at 768; a 2048 sign at 30 MHz would run minutes,
+  so 168 MHz keeps its wall time bounded.

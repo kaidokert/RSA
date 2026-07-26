@@ -55,6 +55,10 @@ const BATCHES: usize = 1;
 const MAX_POSITIVE_SPREAD: u32 = 40;
 #[cfg(not(feature = "etm-single-trial"))]
 const MAX_SAFE_DWT_REGION: u32 = 0xf000_0000;
+#[cfg(feature = "conditioning")]
+const SIGN_CONDITIONING: &str = "per-sample-prewarm";
+#[cfg(not(feature = "conditioning"))]
+const SIGN_CONDITIONING: &str = "none";
 const RNG_SEED: u64 = 0x4354_5f52_5341_3531;
 const MESSAGE: &[u8] = b"RSA CYCCNT fixture message";
 #[cfg(not(feature = "etm-single-trial"))]
@@ -62,6 +66,7 @@ const STACK_SAFE_ZONE: usize = 512;
 
 const _: () = assert!(
     cfg!(feature = "rsa512") as usize
+        + cfg!(feature = "rsa768") as usize
         + cfg!(feature = "rsa1024") as usize
         + cfg!(feature = "rsa2048") as usize
         == 1,
@@ -69,6 +74,7 @@ const _: () = assert!(
 );
 const _: () = assert!(
     cfg!(feature = "carrier-u32x16") as usize
+        + cfg!(feature = "carrier-u32x24") as usize
         + cfg!(feature = "carrier-u32x32") as usize
         + cfg!(feature = "carrier-u32x64") as usize
         + cfg!(feature = "carrier-u8x64") as usize
@@ -78,6 +84,7 @@ const _: () = assert!(
 const _: () = assert!(
     (cfg!(feature = "rsa512")
         && (cfg!(feature = "carrier-u32x16") || cfg!(feature = "carrier-u8x64")))
+        || (cfg!(feature = "rsa768") && cfg!(feature = "carrier-u32x24"))
         || (cfg!(feature = "rsa1024") && cfg!(feature = "carrier-u32x32"))
         || (cfg!(feature = "rsa2048") && cfg!(feature = "carrier-u32x64")),
     "selected carrier does not match the RSA width",
@@ -88,6 +95,12 @@ const _: () = assert!(
 const SUITE: &str = "rsa512-cyccnt";
 #[cfg(feature = "rsa512")]
 const KEY_BYTES: usize = 64;
+
+#[cfg(feature = "rsa768")]
+#[cfg(not(feature = "etm-single-trial"))]
+const SUITE: &str = "rsa768-cyccnt";
+#[cfg(feature = "rsa768")]
+const KEY_BYTES: usize = 96;
 
 #[cfg(feature = "rsa1024")]
 #[cfg(not(feature = "etm-single-trial"))]
@@ -106,6 +119,12 @@ type Carrier = FixedUInt<u32, 16, Ct>;
 #[cfg(feature = "carrier-u32x16")]
 #[cfg(not(feature = "etm-single-trial"))]
 const CARRIER: &str = "u32x16";
+
+#[cfg(feature = "carrier-u32x24")]
+type Carrier = FixedUInt<u32, 24, Ct>;
+#[cfg(feature = "carrier-u32x24")]
+#[cfg(not(feature = "etm-single-trial"))]
+const CARRIER: &str = "u32x24";
 
 #[cfg(feature = "carrier-u32x32")]
 type Carrier = FixedUInt<u32, 32, Ct>;
@@ -203,6 +222,17 @@ const KEY_A: KeyInput = KeyInput {
 const KEY_B: KeyInput = KeyInput {
     modulus: &N_512_B,
     private_exponent: &D_512_B,
+};
+
+#[cfg(feature = "rsa768")]
+const KEY_A: KeyInput = KeyInput {
+    modulus: &N_768,
+    private_exponent: &D_768,
+};
+#[cfg(feature = "rsa768")]
+const KEY_B: KeyInput = KeyInput {
+    modulus: &N_768_B,
+    private_exponent: &D_768_B,
 };
 
 #[cfg(feature = "rsa2048")]
@@ -481,7 +511,7 @@ fn run_campaign(key_a: SigningKey, mut platform: DwtMeasurementPlatform<'_>, hcl
         Field::u64("rng_words_a", preflight_a.rng_words as u64),
         Field::u64("rng_words_b", preflight_b.rng_words as u64),
         Field::bool("streams_matched", streams_matched),
-        Field::token("sign_conditioning", "per-sample-prewarm"),
+        Field::token("sign_conditioning", SIGN_CONDITIONING),
     ];
     let fixture_fields = [Field::token("carrier", CARRIER)];
     let summary_fields = [Field::token("carrier", CARRIER)];
@@ -516,6 +546,11 @@ fn run_campaign(key_a: SigningKey, mut platform: DwtMeasurementPlatform<'_>, hcl
             |input| prepare_key(input).is_some(),
         )
         .unwrap();
+    // At 0 wait states the measurement is deterministic, so per-sample
+    // conditioning is redundant; it stays behind `conditioning` for the caliper
+    // lifecycle validation but is off for the (0-WS) gate, which halves the
+    // sign count and keeps the run in budget.
+    #[cfg(feature = "conditioning")]
     suite
         .positive_conditioned(
             "pkcs1v15_blinded_sign",
@@ -533,6 +568,13 @@ fn run_campaign(key_a: SigningKey, mut platform: DwtMeasurementPlatform<'_>, hcl
                 streams_matched && outcome.ok && outcome.rng_words == preflight_a.rng_words
             },
         )
+        .unwrap();
+    #[cfg(not(feature = "conditioning"))]
+    suite
+        .positive("pkcs1v15_blinded_sign", &key_a, &key_b, |signing_key| {
+            let outcome = sign_once(signing_key);
+            streams_matched && outcome.ok && outcome.rng_words == preflight_a.rng_words
+        })
         .unwrap();
     const ZERO: [u8; KEY_BYTES] = [0; KEY_BYTES];
     suite

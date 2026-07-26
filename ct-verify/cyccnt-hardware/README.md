@@ -24,7 +24,29 @@ runs the core/HCLK at 168 MHz, with APB1 at 42 MHz and APB2 at 84 MHz. This
 does not depend on a board-specific external crystal. Every run reports the
 configured HCLK over RTT.
 
-Run the complete 168 MHz declarative campaign:
+## Continuous gate: two clocks, ≤10 min (`hw-ct`)
+
+At 168 MHz the F407 runs 5 flash wait states, so the ART prefetch/I-cache adds
+secret-independent fetch jitter that scales with operation length and swamps a
+tight cycle gate. 30 MHz is the F407's 0-wait-state ceiling: no ART, so DWT core
+cycles are deterministic. The CI gate therefore splits across both clocks:
+
+- **`rsa768-ct-jtrace-f407-30mhz`** — the CT gate proper, at 30 MHz / 0 WS.
+  768-bit (`carrier-u32x24`) is the smallest OAEP-SHA256-compatible width, so the
+  gate exercises a realistic key. The deterministic (near-zero-variance)
+  measurement makes a small sample count valid; the CT property itself is
+  width-independent (fixed-iteration ladder / safegcd), proven at this width.
+- **`rsa2048-smoke-jtrace-f407-168mhz`** — a deployment-width functional smoke
+  (`gate = false`) confirming a 2048-bit key signs correctly on hardware; 168 MHz
+  keeps its wall time bounded (a 2048 sign at 30 MHz would run minutes).
+
+Per-sample lifecycle conditioning (`positive_conditioned`) is available behind
+the off-by-default `conditioning` feature; at 0 WS it is belt-and-suspenders, and
+enabling it doubles the sign count, so the gate builds run without it.
+
+The all-width 168 MHz survey below is a manual diagnostic, not the CI gate.
+
+Run the complete 168 MHz declarative survey:
 
 ```sh
 cargo krabi-caliper run rsa-signing-ct-jtrace-f407

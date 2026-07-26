@@ -151,16 +151,35 @@ args = [
 ]
 timeout-seconds = 30
 
-# rsa512 only: at 30 MHz the larger widths run long (RSA ops are ~10-2000x
-# ed25519's), so 1024/2048 stay on their own timeouts / a follow-up.
-[[case-sets.rsa512-cyccnt-30mhz]]
-name = "rsa512-u32x16-30mhz"
+# rsa768 (u32x24, 96-byte modulus): the CT gate proper. 768 is the smallest
+# OAEP-SHA256-compatible width, so the gate exercises a realistic key. At 0 WS
+# the measurement is deterministic (near-zero variance), so a small sample count
+# yields a valid verdict — the rsa512@30MHz precedent got a genuine t=0.655 pass
+# at this same count; validity comes from the determinism, not from N.
+[[case-sets.rsa768-cyccnt-30mhz]]
+name = "rsa768-u32x24-30mhz"
 binary = "rsa-cyccnt-hardware"
-features = ["rsa512", "carrier-u32x16"]
-expected-suite = "rsa512-cyccnt"
-timeout-seconds = 300
+features = ["rsa768", "carrier-u32x24"]
+expected-suite = "rsa768-cyccnt"
+timeout-seconds = 600
 
-[campaigns.rsa512-ct-jtrace-f407-30mhz]
+[campaigns.rsa768-ct-jtrace-f407-30mhz]
 profile = "jtrace-f407-30mhz-0ws"
-case-set = "rsa512-cyccnt-30mhz"
+case-set = "rsa768-cyccnt-30mhz"
 constant-time = { welch-threshold = 4.5, minimum-samples-per-class = 4, protected-classes = ["positive"], control-classes = ["negative"], gate = true }
+
+# rsa2048 (u32x64) functional smoke at 168 MHz: not a CT gate (gate = false) —
+# the CT property is width-independent and proven at 768; this only confirms a
+# deployment-width key signs correctly on hardware (output + RNG-draw checks).
+# 168 MHz keeps its wall time bounded (a 2048 sign at 30 MHz would run minutes).
+[[case-sets.rsa2048-smoke-168mhz]]
+name = "rsa2048-u32x64-smoke"
+binary = "rsa-cyccnt-hardware"
+features = ["rsa2048", "carrier-u32x64"]
+expected-suite = "rsa2048-cyccnt"
+timeout-seconds = 1800
+
+[campaigns.rsa2048-smoke-jtrace-f407-168mhz]
+profile = "jtrace-f407-168mhz"
+case-set = "rsa2048-smoke-168mhz"
+constant-time = { welch-threshold = 4.5, minimum-samples-per-class = 4, protected-classes = ["positive"], control-classes = ["negative"], gate = false }

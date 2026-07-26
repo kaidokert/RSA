@@ -11,13 +11,21 @@ clock-168mhz = ["dep:stm32f4xx-hal"]
 # The regime the CT gate wants; use in place of clock-168mhz for rig runs.
 clock-30mhz = ["dep:stm32f4xx-hal"]
 rsa512 = []
+# 768-bit: the smallest OAEP-SHA256-compatible width, so the gate exercises a
+# realistic key rather than toy 512. u32x24 carrier (24 * 4 = 96 bytes).
+rsa768 = []
 rsa1024 = []
 rsa2048 = []
 carrier-u32x16 = []
+carrier-u32x24 = []
 carrier-u32x32 = []
 carrier-u32x64 = []
 carrier-u8x64 = []
 etm-single-trial = []
+# Per-sample lifecycle conditioning (caliper positive_conditioned). Off by
+# default: redundant at 0 wait states, and doubling the sign count blows the
+# 10-min budget. Kept for the caliper conditioning validation.
+conditioning = []
 statistical-campaign = []
 # Short 20-sample slice for chunked accumulation on the rig (5 x 20 = 100),
 # avoiding one long fault-prone attach. See hw-statistical-chunked.yml.
