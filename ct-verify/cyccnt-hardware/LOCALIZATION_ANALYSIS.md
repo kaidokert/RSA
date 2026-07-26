@@ -174,3 +174,19 @@ obsolete historical 28K result, which no longer reproduces even *without*
 conditioning (current unconditioned 100-sample: `t=1.000`). The three
 data points: historical `t=77998` (superseded, cause not isolable) → current
 unconditioned `t=1.000` → current conditioned `t=2.035`.
+
+## 30 MHz / 0-wait-state: the root fix
+
+The warmth above is the 168 MHz ART prefetch/I-cache; the direct fix is to
+measure at 0 wait states, where there is no ART and core cycles carry no fetch
+jitter. Rig-validated at 30 MHz (the F407's 0-WS ceiling, `clock-30mhz` /
+`jtrace-f407-30mhz-0ws`) for rsa512-u32x16: sign Welch `t=0.655`
+(BelowThreshold, PASS), the negative control returns a `DeterministicDifference`
+verdict (zero-variance, fixed A/B offset — the 0-WS determinism itself), and
+`key_construction` trips (`t=136061`). Because 0 WS makes the measurement
+deterministic on its own, per-sample conditioning is belt-and-suspenders in this
+regime rather than load-bearing. This is the measurement regime the CT gate
+wants; 168 MHz stays only as a complementary fast-wall-time profile. Larger RSA
+widths at 30 MHz run long (ops ~10–2000× ed25519's), so 1024/2048 stay a
+follow-up (deterministic samples need far fewer trials, which recovers most of
+the wall-time).
