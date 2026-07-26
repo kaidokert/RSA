@@ -2,7 +2,9 @@ name: AVR
 
 on:
   push:
-    branches: ["**"]
+    branches:
+      - heapless
+      - 'feature/**'
   pull_request:
   workflow_dispatch:
   schedule:
