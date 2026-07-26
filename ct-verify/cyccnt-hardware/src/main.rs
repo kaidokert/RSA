@@ -661,8 +661,12 @@ fn run_campaign(key_a: SigningKey, mut platform: DwtMeasurementPlatform<'_>, hcl
     suite
         .stack_measurement(stack, &[Field::token("carrier", CARRIER)])
         .unwrap();
-    assert!(!stack.overflowed);
+    // Emit the summary before the overflow assert. finish() already fails the
+    // verdict on overflow (the suite folds `passed &= !overflowed`), so sending
+    // EM_SUMMARY first lets the host see the completion marker and fail fast
+    // rather than waiting out the full rig timeout on a panic with no marker.
     suite.finish().unwrap();
+    assert!(!stack.overflowed);
     stop();
 }
 
