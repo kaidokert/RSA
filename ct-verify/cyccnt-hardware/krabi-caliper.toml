@@ -156,6 +156,8 @@ timeout-seconds = 30
 # the measurement is deterministic (near-zero variance), so a small sample count
 # yields a valid verdict — the rsa512@30MHz precedent got a genuine t=0.655 pass
 # at this same count; validity comes from the determinism, not from N.
+# The fixture runs two positive schemes at this width: pkcs1v15_blinded_sign and
+# pss_blinded_sign (shared private op; PSS adds the EMSA-PSS encoding path).
 [[case-sets.rsa768-cyccnt-30mhz]]
 name = "rsa768-u32x24-30mhz"
 binary = "rsa-cyccnt-hardware"

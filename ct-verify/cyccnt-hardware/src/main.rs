@@ -23,6 +23,8 @@ use rand_chacha::ChaCha12Rng;
 use rand_core::{SeedableRng, TryCryptoRng, TryRng};
 use rsa::modmath_support::{public_key_ct_from_be_bytes, ModMathParams};
 use rsa::pkcs1v15::GenericSigningKey;
+#[cfg(all(feature = "rsa768", not(feature = "etm-single-trial")))]
+use rsa::pss::GenericSigningKey as PssGenericSigningKey;
 use rsa::traits::FixedWidthUnsignedInt;
 use rsa::GenericRsaPrivateKey;
 use sha2::Sha256;
@@ -55,9 +57,9 @@ const BATCHES: usize = 1;
 const MAX_POSITIVE_SPREAD: u32 = 40;
 #[cfg(not(feature = "etm-single-trial"))]
 const MAX_SAFE_DWT_REGION: u32 = 0xf000_0000;
-#[cfg(feature = "conditioning")]
+#[cfg(all(feature = "conditioning", not(feature = "etm-single-trial")))]
 const SIGN_CONDITIONING: &str = "per-sample-prewarm";
-#[cfg(not(feature = "conditioning"))]
+#[cfg(all(not(feature = "conditioning"), not(feature = "etm-single-trial")))]
 const SIGN_CONDITIONING: &str = "none";
 const RNG_SEED: u64 = 0x4354_5f52_5341_3531;
 const MESSAGE: &[u8] = b"RSA CYCCNT fixture message";
@@ -145,6 +147,14 @@ type Carrier = FixedUInt<u8, 64, Ct>;
 const CARRIER: &str = "u8x64";
 
 type SigningKey = GenericSigningKey<Sha256, Carrier, ModMathParams<Carrier, Ct>>;
+
+// PSS shares the entire secret-dependent core with pkcs1v15 (same blinded
+// private op); the only added path is the EMSA-PSS encoding (MGF1 + salt),
+// which runs on the public hash. Gated to rsa768 because 768 is the smallest
+// width where PSS's emLen (>= hLen + sLen + 2 = 66 bytes) fits — the same
+// constraint that makes 768 the gate width.
+#[cfg(all(feature = "rsa768", not(feature = "etm-single-trial")))]
+type PssSigningKey = PssGenericSigningKey<Sha256, Carrier, ModMathParams<Carrier, Ct>>;
 
 #[cfg(all(feature = "clock-30mhz", not(feature = "etm-single-trial")))]
 const CLOCK_PROFILE: &str = "hsi-pll-30mhz-0ws";
@@ -329,6 +339,44 @@ fn sign_once(signing_key: &SigningKey) -> SignOutcome {
         )
         .is_ok();
     let _ = black_box((encoded_message, signature));
+    SignOutcome {
+        ok,
+        rng_words: rng.words,
+    }
+}
+
+#[cfg(all(feature = "rsa768", not(feature = "etm-single-trial")))]
+fn prepare_pss_key(input: &KeyInput) -> Option<PssSigningKey> {
+    let Ok(public_key) = public_key_ct_from_be_bytes::<Carrier>(black_box(input.modulus), 65537)
+    else {
+        return None;
+    };
+    let Ok(d) = Carrier::try_from_be_bytes_vartime(black_box(input.private_exponent)) else {
+        return None;
+    };
+    Some(PssGenericSigningKey::<Sha256, _, _>::new(
+        GenericRsaPrivateKey::from_public_and_d(public_key, d),
+    ))
+}
+
+#[cfg(all(feature = "rsa768", not(feature = "etm-single-trial")))]
+#[inline(never)]
+fn sign_once_pss(signing_key: &PssSigningKey) -> SignOutcome {
+    let mut rng = CountingCryptoRng::new(RNG_SEED);
+    let mut encoded_message = [0u8; KEY_BYTES];
+    let mut signature = [0u8; KEY_BYTES];
+    // salt_len defaults to D::output_size(); 32 bytes for SHA-256.
+    let mut salt = [0u8; 32];
+    let ok = signing_key
+        .try_sign_with_rng_into(
+            &mut rng,
+            black_box(MESSAGE),
+            &mut encoded_message,
+            &mut signature,
+            &mut salt,
+        )
+        .is_ok();
+    let _ = black_box((encoded_message, signature, salt));
     SignOutcome {
         ok,
         rng_words: rng.words,
@@ -576,6 +624,29 @@ fn run_campaign(key_a: SigningKey, mut platform: DwtMeasurementPlatform<'_>, hcl
             streams_matched && outcome.ok && outcome.rng_words == preflight_a.rng_words
         })
         .unwrap();
+    // Second signing scheme on the gate. The measured private op is identical to
+    // pkcs1v15; this covers the distinct EMSA-PSS encoding path. PSS draws a salt
+    // on top of the blinding factor, so it has its own preflight/word count.
+    #[cfg(feature = "rsa768")]
+    {
+        let Some(pss_key_a) = prepare_pss_key(&KEY_A) else {
+            rtt::print(format_args!("SETUP_FAIL pss:A\n"));
+            stop();
+        };
+        let Some(pss_key_b) = prepare_pss_key(&KEY_B) else {
+            rtt::print(format_args!("SETUP_FAIL pss:B\n"));
+            stop();
+        };
+        let pss_a = sign_once_pss(&pss_key_a);
+        let pss_b = sign_once_pss(&pss_key_b);
+        let pss_streams_matched = pss_a.ok && pss_b.ok && pss_a.rng_words == pss_b.rng_words;
+        suite
+            .positive("pss_blinded_sign", &pss_key_a, &pss_key_b, |signing_key| {
+                let outcome = sign_once_pss(signing_key);
+                pss_streams_matched && outcome.ok && outcome.rng_words == pss_a.rng_words
+            })
+            .unwrap();
+    }
     const ZERO: [u8; KEY_BYTES] = [0; KEY_BYTES];
     suite
         .negative(

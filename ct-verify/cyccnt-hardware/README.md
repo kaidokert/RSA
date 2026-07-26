@@ -1,7 +1,8 @@
 # RSA signing CYCCNT fixtures
 
 Compares whole blinded PKCS#1 v1.5 SHA-256 signing for two independent real
-keypairs at each selected width on the J-Trace STM32F407VG. The gated measured
+keypairs at each selected width on the J-Trace STM32F407VG (the 768-bit gate
+adds a PSS fixture over the same private op). The gated measured
 region is the signing API boundary: encoding, deterministic random blinding,
 private exponentiation, constant-time inversion and unblinding,
 verify-after-sign, and serialization. Public modulus parsing and Montgomery
@@ -36,6 +37,11 @@ cycles are deterministic. The CI gate therefore splits across both clocks:
   gate exercises a realistic key. The deterministic (near-zero-variance)
   measurement makes a small sample count valid; the CT property itself is
   width-independent (fixed-iteration ladder / safegcd), proven at this width.
+  Two `positive` fixtures run here — `pkcs1v15_blinded_sign` and
+  `pss_blinded_sign`. Both route through the same blinded private op (the whole
+  secret-dependent surface); PSS additionally covers the distinct EMSA-PSS
+  encoding path (MGF1 + salt), and 768 is the smallest width where PSS's
+  `emLen >= hLen + sLen + 2` fits.
 - **`rsa2048-smoke-jtrace-f407-168mhz`** — a deployment-width functional smoke
   (`gate = false`) confirming a 2048-bit key signs correctly on hardware; 168 MHz
   keeps its wall time bounded (a 2048 sign at 30 MHz would run minutes).

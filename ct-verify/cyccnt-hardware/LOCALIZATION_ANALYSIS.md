@@ -196,7 +196,10 @@ The `hw-ct` gate runs two campaigns under one rig lock:
   smallest OAEP-SHA256-compatible width) at 30 MHz / 0 WS, so the verdict rests
   on deterministic core cycles. At near-zero variance a small sample count is
   valid (the rsa512@30 MHz precedent above got a genuine `t=0.655` pass at the
-  same count) — validity comes from the determinism, not from N.
+  same count) — validity comes from the determinism, not from N. Two positive
+  fixtures run at this width: `pkcs1v15_blinded_sign` and `pss_blinded_sign`.
+  They share the entire blinded private op (the secret-dependent surface Δ0 in
+  the per-stage table above); PSS adds only the public-input EMSA-PSS encoding.
 - **`rsa2048-smoke-jtrace-f407-168mhz`** — a deployment-width functional smoke
   (`gate = false`), confirming a 2048-bit key signs correctly on hardware
   (output + RNG-draw checks). It is *not* a CT gate: the CT property is
