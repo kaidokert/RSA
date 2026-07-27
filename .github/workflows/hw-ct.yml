@@ -10,8 +10,9 @@ on:
 
 jobs:
   hardware:
-    uses: ./.github/workflows/reusable-hw-ct.yml
+    uses: kaidokert/krabi-caliper-rs/.github/workflows/hw-ct.yml@hw-ct-v1
     with:
+      invocation-name: rsa
       campaigns-json: '["rsa768-ct-jtrace-f407-30mhz","rsa2048-smoke-jtrace-f407-168mhz"]'
       working-directory: ct-verify/cyccnt-hardware
       prepared: true
