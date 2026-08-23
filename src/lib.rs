@@ -243,6 +243,9 @@ pub use rand_core;
 pub use signature;
 
 mod algorithms;
+
+#[cfg(feature = "accelerator")]
+pub mod accelerator;
 pub mod ct_probe;
 pub mod errors;
 pub mod oaep;
