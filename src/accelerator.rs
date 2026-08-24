@@ -248,6 +248,33 @@ pub fn pkcs1v15_verify_prehash<K: RsaPublicOperation>(
     crate::algorithms::pkcs1v15::pkcs1v15_sign_unpad(digest_info_prefix, prehash, em, k)
 }
 
+/// Verify a PSS prehash through an accelerated public key.
+///
+/// `salt_len` is the expected PSS salt length. Pass `None` only for protocols
+/// that explicitly permit automatic salt-length recovery.
+pub fn pss_verify_prehash<K, D>(
+    key: &mut K,
+    prehash: &[u8],
+    signature: &[u8],
+    salt_len: Option<usize>,
+    hash: &mut D,
+    em_storage: &mut [u8],
+) -> Result<()>
+where
+    K: RsaPublicOperation,
+    D: Digest + FixedOutputReset,
+{
+    let bits = key.modulus_bits();
+    let k = modulus_len(bits)?;
+    if signature.len() != k {
+        return Err(Error::Verification);
+    }
+    let em = em_storage.get_mut(..k).ok_or(Error::OutputBufferTooSmall)?;
+    key.public_operation(signature, em)
+        .map_err(|_| Error::Verification)?;
+    crate::algorithms::pss::emsa_pss_verify(prehash, em, salt_len, hash, bits)
+}
+
 /// PSS-sign a prehash and caller-generated salt through an accelerated key.
 pub fn pss_sign_prehash<'sig, K, D>(
     key: &mut K,
@@ -397,6 +424,15 @@ mod tests {
         assert_eq!(signature.len(), 128);
         assert_eq!(signature[127], 0xbc);
         assert_eq!(signature[0] & 0x80, 0);
+        pss_verify_prehash(
+            &mut IdentityKey,
+            &[0x42; 32],
+            signature,
+            Some(32),
+            &mut sha2::Sha256::new(),
+            &mut em,
+        )
+        .unwrap();
     }
 
     struct U16ModExp;
