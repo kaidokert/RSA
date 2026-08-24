@@ -199,7 +199,7 @@ unsafe impl<A: SecretModularExponentiate> HardenedRsaPrivateOperation
 }
 
 fn modulus_len(bits: usize) -> Result<usize> {
-    if bits < 2 || bits > 8192 {
+    if !(2..=8192).contains(&bits) {
         return Err(Error::InvalidModulus);
     }
     Ok(bits.div_ceil(8))
