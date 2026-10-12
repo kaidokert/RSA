@@ -65,7 +65,7 @@ use rand_core::TryCryptoRng;
 
 use crate::algorithms::pad::uint_to_be_pad_into;
 #[cfg(feature = "alloc")]
-use crate::algorithms::pad::uint_to_zeroizing_be_pad;
+use crate::algorithms::pad::{uint_to_be_pad, uint_to_zeroizing_be_pad};
 use crate::algorithms::pkcs1v15::*;
 #[cfg(not(feature = "alloc"))]
 use crate::algorithms::rsa::rsa_encrypt;
@@ -328,11 +328,16 @@ fn decrypt<R: TryCryptoRng + ?Sized>(
 ) -> Result<Vec<u8>> {
     key::check_public(priv_key)?;
 
+    // RFC 8017 § 7.2.2 step 1
+    if ciphertext.len() != priv_key.size() {
+        return Err(Error::Decryption);
+    }
+
     let ciphertext = BoxedUint::from_be_slice(ciphertext, priv_key.n_bits_precision())?;
     let em = rsa_decrypt_and_check(priv_key, rng, &ciphertext)?;
     let em = uint_to_zeroizing_be_pad(em, priv_key.size())?;
 
-    pkcs1v15_encrypt_unpad(em, priv_key.size())
+    pkcs1v15_encrypt_unpad(&em, priv_key.size())
 }
 
 /// Calculates the signature of hashed using
@@ -359,7 +364,8 @@ fn sign<R: TryCryptoRng + ?Sized>(
     let em = pkcs1v15_sign_pad(prefix, hashed, priv_key.size())?;
 
     let em = BoxedUint::from_be_slice(&em, priv_key.n_bits_precision())?;
-    uint_to_zeroizing_be_pad(rsa_decrypt_and_check(priv_key, rng, &em)?, priv_key.size())
+    // The signature itself is public; only the computation is secret
+    uint_to_be_pad(rsa_decrypt_and_check(priv_key, rng, &em)?, priv_key.size())
 }
 
 /// Verifies an RSA PKCS#1 v1.5 signature.
@@ -548,6 +554,23 @@ mod tests {
             .decrypt(&Base64::decode_vec(ciphertext).unwrap())
             .unwrap();
         assert_eq!(out, plaintext.as_bytes());
+    }
+
+    #[test]
+    fn test_decrypt_pkcs1v15_rejects_wrong_length() {
+        let priv_key = get_private_key();
+        let ct = Base64::decode_vec(
+                "arReP9DJtEVyV2Dg3dDp4c/PSk1O6lxkoJ8HcFupoRorBZG+7+1fDAwT1olNddFnQMjmkb8vxwmNMoTAT/BFjQ==",
+            )
+            .unwrap();
+        assert!(priv_key.decrypt(Pkcs1v15Encrypt, &ct).is_ok());
+
+        // RFC 8017 § 7.2.2 step 1: a ciphertext shorter than `k`, even if numerically valid,
+        // must be rejected
+        assert!(priv_key.decrypt(Pkcs1v15Encrypt, &ct[1..]).is_err());
+        let mut long = vec![0u8];
+        long.extend_from_slice(&ct);
+        assert!(priv_key.decrypt(Pkcs1v15Encrypt, &long).is_err());
     }
 
     #[test]

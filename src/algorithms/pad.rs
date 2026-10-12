@@ -4,95 +4,88 @@
 use alloc::vec::Vec;
 #[cfg(feature = "alloc")]
 use crypto_bigint::BoxedUint;
-use zeroize::Zeroizing;
+use zeroize::{Zeroize, Zeroizing};
 
 use crate::errors::{Error, Result};
 use crate::traits::UnsignedModularInt;
 use core::borrow::Borrow;
 
-/// Returns a new vector of the given length, with 0s left padded.
-#[cfg(test)]
-#[cfg(feature = "alloc")]
+/// Writes the big-endian encoding of `bytes` into a buffer of exactly `padded_len` bytes
+///
+/// Constant-time with respect to the *value*: the only branches depend on the public lengths
+/// The previous implementation sliced at `leading_zeros() / 8`, so the amount of data copied (and
+/// whether an error was returned) depended on how many leading zero bytes the secret plaintext
+/// had, which is exactly the signal the Marvin attack measures
+///
+/// Uses checked splits and byte-copy loops instead of `split_at` / `copy_from_slice`, so no
+/// panic path is synthesized into the embedded sign binary.
 #[inline]
-fn left_pad(input: &[u8], padded_len: usize) -> Result<Vec<u8>> {
-    let mut out = vec![0u8; padded_len];
-    left_pad_into(input, padded_len, &mut out)?;
-    Ok(out)
-}
-
-#[inline]
-pub fn left_pad_into<'a>(
-    input: &[u8],
-    padded_len: usize,
-    storage: &'a mut [u8],
-) -> Result<&'a [u8]> {
-    if input.len() > padded_len {
-        return Err(Error::InvalidPadLen);
-    }
-
-    let start = padded_len - input.len();
-    {
-        // Fallible slicing (`get_mut`/`split_at_mut_checked`) and a
-        // byte-copy loop instead of `[..]` indexing + `copy_from_slice`,
-        // so no `slice_index_fail` / `copy_from_slice` panic path is
-        // synthesized into the (embedded) sign binary. `tail.len()` ==
-        // `padded_len - start` == `input.len()`, so the zip copies all
-        // of `input`.
-        let region = storage
-            .get_mut(..padded_len)
-            .ok_or(Error::OutputBufferTooSmall)?;
-        let (zeros, tail) = region
-            .split_at_mut_checked(start)
-            .ok_or(Error::InvalidPadLen)?;
-        zeros.fill(0);
-        for (dst, src) in tail.iter_mut().zip(input.iter()) {
+fn be_pad_into(bytes: &[u8], out: &mut [u8]) -> Result<()> {
+    let padded_len = out.len();
+    if bytes.len() >= padded_len {
+        let (hi, lo) = bytes
+            .split_at_checked(bytes.len() - padded_len)
+            .ok_or(Error::Internal)?;
+        let overflow = hi.iter().fold(0u8, |acc, b| acc | b);
+        for (dst, src) in out.iter_mut().zip(lo) {
+            *dst = *src;
+        }
+        if core::hint::black_box(overflow) != 0 {
+            out.zeroize();
+            return Err(Error::InvalidPadLen);
+        }
+    } else {
+        let (zero, tail) = out
+            .split_at_mut_checked(padded_len - bytes.len())
+            .ok_or(Error::Internal)?;
+        zero.fill(0);
+        for (dst, src) in tail.iter_mut().zip(bytes) {
             *dst = *src;
         }
     }
-    storage.get(..padded_len).ok_or(Error::OutputBufferTooSmall)
+    Ok(())
 }
 
 /// Converts input to the new vector of the given length, using BE and with 0s left padded.
-/// In some cases BoxedUint might already have leading zeroes, this function removes them
-/// before padding again.
 #[cfg(feature = "alloc")]
 #[inline]
 pub(crate) fn uint_to_be_pad(input: BoxedUint, padded_len: usize) -> Result<Vec<u8>> {
     let mut out = vec![0u8; padded_len];
-    uint_to_be_pad_into(input, padded_len, &mut out)?;
+    be_pad_into(&input.to_be_bytes(), &mut out)?;
     Ok(out)
 }
 
+/// Writes `input` big-endian into the first `padded_len` bytes of `storage`, with 0s left padded.
 #[inline]
 pub fn uint_to_be_pad_into<T>(input: T, padded_len: usize, storage: &mut [u8]) -> Result<&[u8]>
 where
     T: UnsignedModularInt,
 {
-    // Trim to the value's own bytes via its bit length — value-defined,
-    // so it holds for runtime-length carriers where a "leading zeros of
-    // the container" notion would be ambiguous.
-    let used_bytes = (input.bits() as usize).div_ceil(8);
     let bytes = input.to_be_bytes();
-    let borrow: &[u8] = bytes.borrow();
-    let start = borrow
-        .len()
-        .checked_sub(used_bytes)
-        .ok_or(Error::Internal)?;
-    let trimmed = borrow.get(start..).ok_or(Error::Internal)?;
-    left_pad_into(trimmed, padded_len, storage)
-}
-
-/// Converts input to the new vector of the given length, using BE and with 0s left padded.
-/// In some cases BoxedUint might already have leading zeroes, this function removes them
-/// before padding again.
-#[inline]
-#[cfg(feature = "alloc")]
-pub(crate) fn uint_to_zeroizing_be_pad(input: BoxedUint, padded_len: usize) -> Result<Vec<u8>> {
-    let mut out = vec![0u8; padded_len];
-    uint_to_zeroizing_be_pad_into(input, padded_len, &mut out)?;
+    let out = storage
+        .get_mut(..padded_len)
+        .ok_or(Error::OutputBufferTooSmall)?;
+    be_pad_into(bytes.borrow(), out)?;
     Ok(out)
 }
 
+/// Converts input to the new vector of the given length, using BE and with 0s left padded.
+///
+/// For secret values: every intermediate buffer, including the returned one, is zeroized on drop.
+#[cfg(feature = "alloc")]
+#[inline]
+pub(crate) fn uint_to_zeroizing_be_pad(
+    input: BoxedUint,
+    padded_len: usize,
+) -> Result<Zeroizing<Vec<u8>>> {
+    let input = Zeroizing::new(input);
+    let bytes = Zeroizing::new(input.to_be_bytes());
+    let mut out = Zeroizing::new(vec![0u8; padded_len]);
+    be_pad_into(&bytes, &mut out)?;
+    Ok(out)
+}
+
+/// As [`uint_to_be_pad_into`], for secret values: the intermediate buffers are zeroized on drop.
 #[inline]
 pub fn uint_to_zeroizing_be_pad_into<T>(
     input: T,
@@ -103,15 +96,13 @@ where
     T: UnsignedModularInt,
     T::Bytes: zeroize::Zeroize,
 {
-    // Same value-defined trim as `uint_to_be_pad_into`; computed before
-    // `input` moves into the `Zeroizing` wrapper.
-    let used_bytes = (input.bits() as usize).div_ceil(8);
-    let m = Zeroizing::new(input);
-    let m = Zeroizing::new(m.to_be_bytes());
-    let bytes: &[u8] = m.as_ref();
-    let start = bytes.len().checked_sub(used_bytes).ok_or(Error::Internal)?;
-    let trimmed = bytes.get(start..).ok_or(Error::Internal)?;
-    left_pad_into(trimmed, padded_len, storage)
+    let input = Zeroizing::new(input);
+    let bytes = Zeroizing::new(input.to_be_bytes());
+    let out = storage
+        .get_mut(..padded_len)
+        .ok_or(Error::OutputBufferTooSmall)?;
+    be_pad_into(bytes.as_ref(), out)?;
+    Ok(out)
 }
 
 #[cfg(test)]
@@ -119,20 +110,22 @@ where
 mod tests {
     use super::*;
     #[test]
-    fn test_left_pad() {
-        const INPUT_LEN: usize = 3;
-        let input = vec![0u8; INPUT_LEN];
+    fn be_pad() {
+        let x = BoxedUint::from(0x0102u64);
+        let p = uint_to_be_pad(x.clone(), 16).unwrap();
+        assert_eq!(&p[..14], &[0u8; 14]);
+        assert_eq!(&p[14..], &[1, 2]);
 
-        // input len < padded len
-        let padded = left_pad(&input, INPUT_LEN + 1).unwrap();
-        assert_eq!(padded.len(), INPUT_LEN + 1);
+        let p = uint_to_zeroizing_be_pad(x.clone(), 3).unwrap();
+        assert_eq!(&p[..], &[0, 1, 2]);
 
-        // input len == padded len
-        let padded = left_pad(&input, INPUT_LEN).unwrap();
-        assert_eq!(padded.len(), INPUT_LEN);
+        let p = uint_to_be_pad(x.clone(), 8).unwrap();
+        assert_eq!(&p[..], &[0, 0, 0, 0, 0, 0, 1, 2]);
 
-        // input len > padded len
-        let padded = left_pad(&input, INPUT_LEN - 1);
-        assert!(padded.is_err());
+        assert!(uint_to_be_pad(x.clone(), 1).is_err());
+        assert!(uint_to_zeroizing_be_pad(x, 1).is_err());
+
+        let p = uint_to_be_pad(BoxedUint::zero_with_precision(128), 4).unwrap();
+        assert_eq!(&p[..], &[0u8; 4]);
     }
 }

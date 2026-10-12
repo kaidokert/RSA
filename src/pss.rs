@@ -38,7 +38,7 @@ use digest::{Digest, FixedOutputReset};
 use rand_core::TryCryptoRng;
 
 #[cfg(feature = "alloc")]
-use crate::algorithms::pad::{uint_to_be_pad, uint_to_be_pad_into, uint_to_zeroizing_be_pad};
+use crate::algorithms::pad::{uint_to_be_pad, uint_to_be_pad_into};
 use crate::algorithms::pss::*;
 #[cfg(feature = "alloc")]
 use crate::algorithms::rsa::rsa_decrypt_and_check;
@@ -311,7 +311,7 @@ where
 
     let em = BoxedUint::from_be_slice(&em, priv_key.n_bits_precision())?;
     let raw = rsa_decrypt_and_check(priv_key, blind_rng, &em)?;
-    uint_to_zeroizing_be_pad(raw, priv_key.size())
+    uint_to_be_pad(raw, priv_key.size())
 }
 
 #[cfg(feature = "alloc")]
@@ -329,7 +329,7 @@ where
     let em = emsa_pss_encode_digest::<D>(hashed, em_bits as _, salt)?;
 
     let em = BoxedUint::from_be_slice(&em, priv_key.n_bits_precision())?;
-    uint_to_zeroizing_be_pad(
+    uint_to_be_pad(
         rsa_decrypt_and_check(priv_key, blind_rng, &em)?,
         priv_key.size(),
     )
