@@ -65,7 +65,7 @@ use rand_core::TryCryptoRng;
 
 use crate::algorithms::pad::i2osp_into;
 #[cfg(feature = "alloc")]
-use crate::algorithms::pad::{i2osp, i2osp_zeroizing};
+use crate::algorithms::pad::{i2osp, i2osp_zeroizing, os2ip};
 use crate::algorithms::pkcs1v15::*;
 #[cfg(not(feature = "alloc"))]
 use crate::algorithms::rsa::rsa_encrypt;
@@ -333,7 +333,7 @@ fn decrypt<R: TryCryptoRng + ?Sized>(
         return Err(Error::Decryption);
     }
 
-    let ciphertext = BoxedUint::from_be_slice(ciphertext, priv_key.n_bits_precision())?;
+    let ciphertext = os2ip(ciphertext, priv_key.n_bits_precision())?;
     let em = rsa_decrypt_and_check(priv_key, rng, &ciphertext)?;
     let em = i2osp_zeroizing(em, priv_key.size());
 

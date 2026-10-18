@@ -23,15 +23,13 @@ use alloc::boxed::Box;
 #[cfg(feature = "alloc")]
 use alloc::{vec, vec::Vec};
 use core::fmt;
-#[cfg(feature = "alloc")]
-use crypto_bigint::BoxedUint;
 
 use digest::{Digest, FixedOutputReset};
 use rand_core::TryCryptoRng;
 
 use crate::algorithms::oaep::*;
 #[cfg(feature = "alloc")]
-use crate::algorithms::pad::{i2osp, i2osp_into, i2osp_zeroizing};
+use crate::algorithms::pad::{i2osp, i2osp_into, i2osp_zeroizing, os2ip, os2ip_zeroizing};
 #[cfg(feature = "alloc")]
 use crate::algorithms::rsa::rsa_decrypt_and_check;
 #[cfg(feature = "alloc")]
@@ -247,7 +245,7 @@ where
 
     let em = oaep_encrypt(rng, msg, digest, mgf_digest, label, pub_key.size())?;
 
-    let int = BoxedUint::from_be_slice(&em, pub_key.n_bits_precision())?;
+    let int = os2ip_zeroizing(em, pub_key.n_bits_precision())?;
     Ok(i2osp(rsa_encrypt(pub_key, &int)?, pub_key.size()))
 }
 
@@ -275,7 +273,7 @@ where
 
     let em = oaep_encrypt_digest::<_, D, MGD>(rng, msg, label, pub_key.size())?;
 
-    let int = BoxedUint::from_be_slice(&em, pub_key.n_bits_precision())?;
+    let int = os2ip_zeroizing(em, pub_key.n_bits_precision())?;
     Ok(i2osp(rsa_encrypt(pub_key, &int)?, pub_key.size()))
 }
 
@@ -338,7 +336,7 @@ where
         return Err(Error::Decryption);
     }
 
-    let ciphertext = BoxedUint::from_be_slice(ciphertext, priv_key.n_bits_precision())?;
+    let ciphertext = os2ip(ciphertext, priv_key.n_bits_precision())?;
 
     let em = rsa_decrypt_and_check(priv_key, rng, &ciphertext)?;
     let mut em = i2osp_zeroizing(em, priv_key.size());
@@ -377,7 +375,7 @@ where
         return Err(Error::Decryption);
     }
 
-    let ciphertext = BoxedUint::from_be_slice(ciphertext, priv_key.n_bits_precision())?;
+    let ciphertext = os2ip(ciphertext, priv_key.n_bits_precision())?;
     let em = rsa_decrypt_and_check(priv_key, rng, &ciphertext)?;
     let mut em = i2osp_zeroizing(em, priv_key.size());
 
