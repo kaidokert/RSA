@@ -26,9 +26,8 @@ See the security warning below for known implementation vulnerabilities.
 ## Example
 
 ```rust
-# #[cfg(feature = "private-key")]
-# {
-use rsa::{Pkcs1v15Encrypt, RsaPrivateKey, RsaPublicKey};
+use rsa::{Oaep, RsaPrivateKey, RsaPublicKey};
+use sha2::Sha256;
 
 let mut rng = rand::rng();
 let bits = 2048;
@@ -37,13 +36,12 @@ let pub_key = RsaPublicKey::from(&priv_key);
 
 // Encrypt
 let data = b"hello world";
-let enc_data = pub_key.encrypt(&mut rng, Pkcs1v15Encrypt, &data[..]).expect("failed to encrypt");
+let enc_data = pub_key.encrypt(&mut rng, Oaep::<Sha256>::new(), &data[..]).expect("failed to encrypt");
 assert_ne!(&data[..], &enc_data[..]);
 
 // Decrypt
-let dec_data = priv_key.decrypt(Pkcs1v15Encrypt, &enc_data).expect("failed to decrypt");
+let dec_data = priv_key.decrypt_blinded(&mut rng, Oaep::<Sha256>::new(), &enc_data).expect("failed to decrypt");
 assert_eq!(&data[..], &dec_data[..]);
-# }
 ```
 
 > **Note:** If you encounter unusually slow key generation time while using `RsaPrivateKey::new` you can try to compile in release mode or add the following to your `Cargo.toml`. Key generation is much faster when building with higher optimization levels, but this will increase the compile time a bit.
