@@ -31,7 +31,7 @@ use rand_core::TryCryptoRng;
 
 use crate::algorithms::oaep::*;
 #[cfg(feature = "alloc")]
-use crate::algorithms::pad::{uint_to_be_pad, uint_to_be_pad_into, uint_to_zeroizing_be_pad};
+use crate::algorithms::pad::{i2osp, i2osp_into, i2osp_zeroizing};
 #[cfg(feature = "alloc")]
 use crate::algorithms::rsa::rsa_decrypt_and_check;
 #[cfg(feature = "alloc")]
@@ -204,8 +204,7 @@ where
         )?;
         let int = T::try_from_be_bytes_vartime(&em)?;
         let mut storage = vec![0u8; pub_key.size()];
-        let ciphertext =
-            uint_to_be_pad_into(rsa_encrypt(pub_key, &int)?, pub_key.size(), &mut storage)?;
+        let ciphertext = i2osp_into(rsa_encrypt(pub_key, &int)?, pub_key.size(), &mut storage)?;
         Ok(ciphertext.to_vec())
     }
 }
@@ -249,7 +248,7 @@ where
     let em = oaep_encrypt(rng, msg, digest, mgf_digest, label, pub_key.size())?;
 
     let int = BoxedUint::from_be_slice(&em, pub_key.n_bits_precision())?;
-    Ok(uint_to_be_pad(rsa_encrypt(pub_key, &int)?, pub_key.size()))
+    Ok(i2osp(rsa_encrypt(pub_key, &int)?, pub_key.size()))
 }
 
 /// Encrypts the given message with RSA and the padding scheme from
@@ -277,7 +276,7 @@ where
     let em = oaep_encrypt_digest::<_, D, MGD>(rng, msg, label, pub_key.size())?;
 
     let int = BoxedUint::from_be_slice(&em, pub_key.n_bits_precision())?;
-    Ok(uint_to_be_pad(rsa_encrypt(pub_key, &int)?, pub_key.size()))
+    Ok(i2osp(rsa_encrypt(pub_key, &int)?, pub_key.size()))
 }
 
 /// Does not call `key::check_public` — that validator is `alloc`-only.
@@ -301,7 +300,7 @@ where
         rng, msg, label, padded_len, storage,
     )?;
     let int = T::try_from_be_bytes_vartime(em)?;
-    crate::algorithms::pad::uint_to_be_pad_into(
+    crate::algorithms::pad::i2osp_into(
         crate::algorithms::rsa::rsa_encrypt(pub_key, &int)?,
         padded_len,
         storage,
@@ -342,7 +341,7 @@ where
     let ciphertext = BoxedUint::from_be_slice(ciphertext, priv_key.n_bits_precision())?;
 
     let em = rsa_decrypt_and_check(priv_key, rng, &ciphertext)?;
-    let mut em = uint_to_zeroizing_be_pad(em, priv_key.size());
+    let mut em = i2osp_zeroizing(em, priv_key.size());
 
     oaep_decrypt(&mut em, digest, mgf_digest, label, priv_key.size())
 }
@@ -380,7 +379,7 @@ where
 
     let ciphertext = BoxedUint::from_be_slice(ciphertext, priv_key.n_bits_precision())?;
     let em = rsa_decrypt_and_check(priv_key, rng, &ciphertext)?;
-    let mut em = uint_to_zeroizing_be_pad(em, priv_key.size());
+    let mut em = i2osp_zeroizing(em, priv_key.size());
 
     oaep_decrypt_digest::<D, MGD>(&mut em, label, priv_key.size())
 }

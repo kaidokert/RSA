@@ -257,7 +257,7 @@ where
     let em_slice = emsa_pss_encode_into(m_hash, em_bits, salt, hash, em_storage)?;
     let em = T::try_from_be_bytes_vartime(em_slice)?;
     let s = crate::algorithms::rsa::rsa_private_op_and_check(&em, d, e, n_params)?;
-    crate::algorithms::pad::uint_to_zeroizing_be_pad_into(s, k, sig_storage)
+    crate::algorithms::pad::i2osp_zeroizing_into(s, k, sig_storage)
 }
 
 /// ⚠️ Raw PSS sign with RNG-driven base-blinding. Same shape and
@@ -318,7 +318,7 @@ where
     let em_slice = emsa_pss_encode_into(m_hash, em_bits, salt, hash, em_storage)?;
     let em = T::try_from_be_bytes_vartime(em_slice)?;
     let s = crate::algorithms::rsa::rsa_private_op_and_check_blinded(rng, &em, d, e, n_params)?;
-    crate::algorithms::pad::uint_to_zeroizing_be_pad_into(s, k, sig_storage)
+    crate::algorithms::pad::i2osp_zeroizing_into(s, k, sig_storage)
 }
 
 fn emsa_pss_verify_pre<'a>(

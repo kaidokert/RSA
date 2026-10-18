@@ -63,9 +63,9 @@ use crypto_bigint::BoxedUint;
 use digest::Digest;
 use rand_core::TryCryptoRng;
 
-use crate::algorithms::pad::uint_to_be_pad_into;
+use crate::algorithms::pad::i2osp_into;
 #[cfg(feature = "alloc")]
-use crate::algorithms::pad::{uint_to_be_pad, uint_to_zeroizing_be_pad};
+use crate::algorithms::pad::{i2osp, i2osp_zeroizing};
 use crate::algorithms::pkcs1v15::*;
 #[cfg(not(feature = "alloc"))]
 use crate::algorithms::rsa::rsa_encrypt;
@@ -101,7 +101,7 @@ impl Pkcs1v15Encrypt {
         let em = pkcs1v15_encrypt_pad_into(rng, msg, padded_len, storage)?;
         let int = T::try_from_be_bytes_vartime(em)?;
 
-        uint_to_be_pad_into(rsa_encrypt(pub_key, &int)?, padded_len, storage)
+        i2osp_into(rsa_encrypt(pub_key, &int)?, padded_len, storage)
     }
 }
 
@@ -335,7 +335,7 @@ fn decrypt<R: TryCryptoRng + ?Sized>(
 
     let ciphertext = BoxedUint::from_be_slice(ciphertext, priv_key.n_bits_precision())?;
     let em = rsa_decrypt_and_check(priv_key, rng, &ciphertext)?;
-    let em = uint_to_zeroizing_be_pad(em, priv_key.size());
+    let em = i2osp_zeroizing(em, priv_key.size());
 
     pkcs1v15_encrypt_unpad(&em, priv_key.size())
 }
@@ -365,7 +365,7 @@ fn sign<R: TryCryptoRng + ?Sized>(
 
     let em = BoxedUint::from_be_slice(&em, priv_key.n_bits_precision())?;
     // The signature itself is public; only the computation is secret
-    Ok(uint_to_be_pad(
+    Ok(i2osp(
         rsa_decrypt_and_check(priv_key, rng, &em)?,
         priv_key.size(),
     ))
@@ -389,7 +389,7 @@ where
         return Err(Error::Verification);
     }
 
-    let em = uint_to_be_pad_into(rsa_encrypt(pub_key, sig)?, pub_key.size(), storage)?;
+    let em = i2osp_into(rsa_encrypt(pub_key, sig)?, pub_key.size(), storage)?;
 
     pkcs1v15_sign_unpad(prefix, hashed, em, pub_key.size())
 }

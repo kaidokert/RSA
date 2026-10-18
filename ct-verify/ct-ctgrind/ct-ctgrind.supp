@@ -53,7 +53,7 @@
 # ---------------------------------------------------------------------
 # (2) Leading-zero-trim serialization of the PUBLIC RSA signature.
 #
-# The sign path serializes the signature with `uint_to_zeroizing_be_pad`,
+# The sign path serializes the signature with `i2osp_zeroizing`,
 # which trims the value's leading zero bytes (`&buf[leading_zeros..]`)
 # then left-pads to the modulus width — variable-time in the signature's
 # leading-zero count. The RSA signature is secret-*derived* but

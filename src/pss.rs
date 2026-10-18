@@ -38,7 +38,7 @@ use digest::{Digest, FixedOutputReset};
 use rand_core::TryCryptoRng;
 
 #[cfg(feature = "alloc")]
-use crate::algorithms::pad::{uint_to_be_pad, uint_to_be_pad_into};
+use crate::algorithms::pad::{i2osp, i2osp_into};
 use crate::algorithms::pss::*;
 #[cfg(feature = "alloc")]
 use crate::algorithms::rsa::rsa_decrypt_and_check;
@@ -153,8 +153,7 @@ where
         }
 
         let mut em = vec![0u8; pub_key.size()];
-        let em_len =
-            uint_to_be_pad_into(rsa_encrypt(pub_key, &sig)?, pub_key.size(), &mut em)?.len();
+        let em_len = i2osp_into(rsa_encrypt(pub_key, &sig)?, pub_key.size(), &mut em)?.len();
 
         emsa_pss_verify(
             hashed,
@@ -193,7 +192,7 @@ where
         return Err(Error::Verification);
     }
     let raw = rsa_encrypt(pub_key, sig)?;
-    let mut em = uint_to_be_pad(raw, pub_key.size());
+    let mut em = i2osp(raw, pub_key.size());
 
     emsa_pss_verify(hashed, &mut em, salt_len, digest, pub_key.n().bits() as _)
 }
@@ -230,12 +229,12 @@ where
         return Err(crate::Error::Verification);
     }
     let padded_len = pub_key.size();
-    let em = crate::algorithms::pad::uint_to_be_pad_into(
+    let em = crate::algorithms::pad::i2osp_into(
         crate::algorithms::rsa::rsa_encrypt(pub_key, sig)?,
         padded_len,
         storage,
     )?;
-    // `uint_to_be_pad_into` returns an immutable slice into `storage`; PSS
+    // `i2osp_into` returns an immutable slice into `storage`; PSS
     // verify wants `&mut [u8]`. Drop the borrow and re-slice mutably.
     let em_len = em.len();
     emsa_pss_verify_digest::<D>(
@@ -311,7 +310,7 @@ where
 
     let em = BoxedUint::from_be_slice(&em, priv_key.n_bits_precision())?;
     let raw = rsa_decrypt_and_check(priv_key, blind_rng, &em)?;
-    Ok(uint_to_be_pad(raw, priv_key.size()))
+    Ok(i2osp(raw, priv_key.size()))
 }
 
 #[cfg(feature = "alloc")]
@@ -329,7 +328,7 @@ where
     let em = emsa_pss_encode_digest::<D>(hashed, em_bits as _, salt)?;
 
     let em = BoxedUint::from_be_slice(&em, priv_key.n_bits_precision())?;
-    Ok(uint_to_be_pad(
+    Ok(i2osp(
         rsa_decrypt_and_check(priv_key, blind_rng, &em)?,
         priv_key.size(),
     ))
