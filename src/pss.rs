@@ -188,12 +188,7 @@ pub(crate) fn verify<D>(
 where
     D: Digest + FixedOutputReset,
 {
-    if sig_len != pub_key.size() {
-        return Err(Error::Verification);
-    }
-    let raw = rsa_encrypt(pub_key, sig)?;
-    let mut em = i2osp(raw, pub_key.size());
-
+    let mut em = decode_signature(pub_key, sig, sig_len)?;
     emsa_pss_verify(hashed, &mut em, salt_len, digest, pub_key.n().bits() as _)
 }
 
@@ -243,6 +238,23 @@ where
         salt_len,
         pub_key.n().bits() as _,
     )
+}
+
+/// Checks signature length and range before applying the public-key operation.
+#[cfg(feature = "alloc")]
+fn decode_signature(pub_key: &RsaPublicKey, sig: &BoxedUint, sig_len: usize) -> Result<Vec<u8>> {
+    // Step 1: S must be exactly k octets, independently of integer storage precision.
+    if sig_len != pub_key.size() {
+        return Err(Error::Verification);
+    }
+
+    // Steps 2a and 2b: s = OS2IP(S), m = RSAVP1((n, e), s). `sig` arrives already decoded.
+    if sig >= pub_key.n().as_ref() || sig.bits_precision() != pub_key.n_bits_precision() {
+        return Err(Error::Verification);
+    }
+    let m = rsa_encrypt(pub_key, sig)?;
+
+    Ok(i2osp(m, pub_key.size()))
 }
 
 /// SignPSS calculates the signature of hashed using RSASSA-PSS.
