@@ -1,4 +1,8 @@
-//! Generic RSA implementation
+//! Shared integer arithmetic for RSAEP/RSAVP1 and RSADP/RSASP1 (RFC8017 §5).
+//!
+//! These functions do not implement octet-string conversion or scheme encoding. In particular,
+//! `rsa_encrypt` performs modular exponentiation without checking the representative's range;
+//! callers implementing RSAEP or RSAVP1 must establish that the input is less than `n`.
 
 #[cfg(feature = "alloc")]
 use core::cmp::Ordering;
@@ -29,7 +33,11 @@ use crate::{
     },
 };
 
-/// ⚠️ Raw RSA encryption of m with the public key. No padding is performed.
+/// ⚠️ Raw RSA public-key operation on the integer representative `m`, without padding.
+///
+/// Computes the exponentiation shared by RSAEP (RFC8017 §5.1.1) and RSAVP1 (§5.2.2).
+/// The caller must check that the representative is less than `n` to implement either primitive;
+/// this function reduces out-of-range inputs modulo `n`.
 ///
 /// # ☢️️ WARNING: HAZARDOUS API ☢️
 ///
@@ -46,7 +54,10 @@ where
     Ok(res)
 }
 
-/// ⚠️ Performs raw RSA decryption with no padding or error checking.
+/// ⚠️ Performs the raw RSA private-key operation without padding or a CRT fault check.
+///
+/// Implements the integer arithmetic shared by RSADP (RFC8017 §5.1.2) and RSASP1 (§5.2.1).
+/// Checks that `c < n` and that `c` has the modulus's storage precision.
 ///
 /// Returns a plaintext `BoxedUint`. Performs RSA blinding if an `Rng` is passed.
 ///

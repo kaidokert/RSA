@@ -69,7 +69,8 @@ fn try_be_pad_into(bytes: &[u8], out: &mut [u8]) -> Result<()> {
 ///
 /// Converts `input` to exactly `padded_len` big-endian bytes, left-padded with zeros.
 /// `input` must fit in `padded_len` bytes. This is a caller-established precondition, checked by a
-/// debug assertion.
+/// debug assertion. Unlike the general RFC primitive, this internal helper does not return an
+/// "integer too large" error: callers must establish `input < 256^padded_len` before calling it.
 ///
 /// Use [`i2osp_zeroizing`] when encoding secret values.
 ///
