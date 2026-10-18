@@ -1494,7 +1494,7 @@ mod private_op_tests {
             &mut em_copy,
             Some(salt.len()),
             &mut verify_hash,
-            KEY_BITS,
+            KEY_BITS - 1,
         )
         .unwrap();
     }
@@ -1849,7 +1849,14 @@ mod private_op_tests {
         let mut em_copy = [0u8; K];
         em_copy.copy_from_slice(recovered.as_ref());
         let mut verify_hash = Sha1::new();
-        emsa_pss_verify(&digest, &mut em_copy, Some(0), &mut verify_hash, KEY_BITS).unwrap();
+        emsa_pss_verify(
+            &digest,
+            &mut em_copy,
+            Some(0),
+            &mut verify_hash,
+            KEY_BITS - 1,
+        )
+        .unwrap();
     }
 
     // Exact-width blinded sign round trip on the modmath backend:
@@ -1900,7 +1907,14 @@ mod private_op_tests {
         let mut em_copy = [0u8; K];
         em_copy.copy_from_slice(recovered.as_ref());
         let mut verify_hash = Sha1::new();
-        emsa_pss_verify(&digest, &mut em_copy, Some(0), &mut verify_hash, KEY_BITS).unwrap();
+        emsa_pss_verify(
+            &digest,
+            &mut em_copy,
+            Some(0),
+            &mut verify_hash,
+            KEY_BITS - 1,
+        )
+        .unwrap();
     }
 
     #[test]

@@ -38,7 +38,7 @@ use digest::{Digest, FixedOutputReset};
 use rand_core::TryCryptoRng;
 
 #[cfg(feature = "alloc")]
-use crate::algorithms::pad::{i2osp, i2osp_into};
+use crate::algorithms::pad::i2osp;
 use crate::algorithms::pss::*;
 #[cfg(feature = "alloc")]
 use crate::algorithms::rsa::rsa_decrypt_and_check;
@@ -152,16 +152,11 @@ where
             return Err(Error::Verification);
         }
 
-        let mut em = vec![0u8; pub_key.size()];
-        let em_len = i2osp_into(rsa_encrypt(pub_key, &sig)?, pub_key.size(), &mut em)?.len();
+        let em_bits = pub_key.n().bits() as usize - 1;
+        let mut storage = vec![0u8; pub_key.size()];
+        let em = decode_em_into(pub_key, &sig, em_bits, &mut storage)?;
 
-        emsa_pss_verify(
-            hashed,
-            &mut em[..em_len],
-            self.salt_len,
-            &mut self.digest,
-            pub_key.n().bits() as _,
-        )
+        emsa_pss_verify(hashed, em, self.salt_len, &mut self.digest, em_bits)
     }
 }
 
@@ -189,7 +184,8 @@ where
     D: Digest + FixedOutputReset,
 {
     let mut em = decode_signature(pub_key, sig, sig_len)?;
-    emsa_pss_verify(hashed, &mut em, salt_len, digest, pub_key.n().bits() as _)
+    let em_bits = pub_key.n().bits() as usize - 1;
+    emsa_pss_verify(hashed, &mut em, salt_len, digest, em_bits)
 }
 
 #[cfg(feature = "alloc")]
@@ -223,38 +219,56 @@ where
     if sig >= pub_key.n().as_ref() || sig.bits_precision() != pub_key.n_bits_precision() {
         return Err(crate::Error::Verification);
     }
-    let padded_len = pub_key.size();
-    let em = crate::algorithms::pad::i2osp_into(
-        crate::algorithms::rsa::rsa_encrypt(pub_key, sig)?,
-        padded_len,
-        storage,
-    )?;
-    // `i2osp_into` returns an immutable slice into `storage`; PSS
-    // verify wants `&mut [u8]`. Drop the borrow and re-slice mutably.
-    let em_len = em.len();
-    emsa_pss_verify_digest::<D>(
-        hashed,
-        &mut storage[..em_len],
-        salt_len,
-        pub_key.n().bits() as _,
-    )
+    let em_bits = pub_key.n().bits() as usize - 1;
+    let em = decode_em_into(pub_key, sig, em_bits, storage)?;
+    emsa_pss_verify_digest::<D>(hashed, em, salt_len, em_bits)
 }
 
-/// Checks signature length and range before applying the public-key operation.
+/// Performs the RSAVP1 and I2OSP steps of RFC8017 §8.1.2 into `storage`, for a signature whose
+/// length and range the caller has checked.
+///
+/// EM has `emLen` octets, which can be `k - 1`. The fallible I2OSP rejects a representative with a
+/// nonzero octet above `emLen`.
+fn decode_em_into<'a, K, T>(
+    pub_key: &K,
+    sig: &T,
+    em_bits: usize,
+    storage: &'a mut [u8],
+) -> Result<&'a mut [u8]>
+where
+    K: PublicKeyParts<T>,
+    T: UnsignedModularInt,
+{
+    let em_len = em_bits.div_ceil(8);
+    let m = crate::algorithms::rsa::rsa_encrypt(pub_key, sig)?;
+    crate::algorithms::pad::i2osp_into(m, em_len, storage).map_err(|_| Error::Verification)?;
+    storage.get_mut(..em_len).ok_or(Error::Verification)
+}
+
+/// Performs the length, RSAVP1, and I2OSP steps of RFC8017 §8.1.2.
 #[cfg(feature = "alloc")]
 fn decode_signature(pub_key: &RsaPublicKey, sig: &BoxedUint, sig_len: usize) -> Result<Vec<u8>> {
-    // Step 1: S must be exactly k octets, independently of integer storage precision.
+    // Step 1: `S` must be exactly `k` octets, independently of integer storage precision.
     if sig_len != pub_key.size() {
         return Err(Error::Verification);
     }
 
-    // Steps 2a and 2b: s = OS2IP(S), m = RSAVP1((n, e), s). `sig` arrives already decoded.
+    // Steps 2a and 2b: `s = OS2IP(S), m = RSAVP1((n, e), s)`. `sig` arrives already decoded.
     if sig >= pub_key.n().as_ref() || sig.bits_precision() != pub_key.n_bits_precision() {
         return Err(Error::Verification);
     }
     let m = rsa_encrypt(pub_key, sig)?;
 
-    Ok(i2osp(m, pub_key.size()))
+    // Step 2c: EM has `emLen` octets, which can be `k - 1`.
+    //
+    // Check the public representative's width before calling infallible I2OSP; discarding a nonzero
+    // leading octet is invalid.
+    let em_bits = pub_key.n().bits() as usize - 1;
+    let em_len = em_bits.div_ceil(8);
+    if m.bits() as usize > 8 * em_len {
+        return Err(Error::Verification);
+    }
+    Ok(i2osp(m, em_len))
 }
 
 /// SignPSS calculates the signature of hashed using RSASSA-PSS.
