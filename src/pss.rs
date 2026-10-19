@@ -42,7 +42,6 @@ use crate::algorithms::pad::i2osp;
 use crate::algorithms::pss::*;
 #[cfg(feature = "alloc")]
 use crate::algorithms::rsa::rsa_decrypt_and_check;
-#[cfg(feature = "alloc")]
 use crate::algorithms::rsa::rsa_encrypt;
 use crate::errors::{Error, Result};
 use crate::traits::{PublicKeyParts, SignatureScheme, UnsignedModularInt};
@@ -90,11 +89,13 @@ where
 {
     /// New PSS padding for the given digest.
     /// Digest output size is used as a salt length.
+    #[must_use]
     pub fn new() -> Self {
         Self::new_with_salt(<D as Digest>::output_size())
     }
 
     /// New PSS padding for the given digest with a salt value of the given length.
+    #[must_use]
     pub fn new_with_salt(len: usize) -> Self {
         Self {
             blinded: false,
@@ -105,12 +106,14 @@ where
 
     /// New PSS padding for blinded signatures (RSA-BSSA) for the given digest.
     /// Digest output size is used as a salt length.
+    #[must_use]
     pub fn new_blinded() -> Self {
         Self::new_blinded_with_salt(<D as Digest>::output_size())
     }
 
     /// New PSS padding for blinded signatures (RSA-BSSA) for the given digest
     /// with a salt value of the given length.
+    #[must_use]
     pub fn new_blinded_with_salt(len: usize) -> Self {
         Self {
             blinded: true,
@@ -126,6 +129,7 @@ where
     D: Digest + FixedOutputReset,
 {
     #[cfg(feature = "alloc")]
+    #[allow(clippy::unwrap_in_result, reason = "TODO")]
     fn sign<Rng: TryCryptoRng + ?Sized>(
         mut self,
         rng: Option<&mut Rng>,
@@ -207,20 +211,21 @@ where
 }
 
 /// `storage` must be at least `pub_key.size()` bytes.
+#[allow(clippy::missing_errors_doc, reason = "TODO")]
 pub fn verify_digest_into<D, K, T>(
     pub_key: &K,
     hashed: &[u8],
     sig: &T,
     salt_len: Option<usize>,
     storage: &mut [u8],
-) -> crate::Result<()>
+) -> Result<()>
 where
-    D: digest::Digest + digest::FixedOutputReset,
-    K: crate::traits::PublicKeyParts<T>,
-    T: crate::traits::UnsignedModularInt,
+    D: Digest + FixedOutputReset,
+    K: PublicKeyParts<T>,
+    T: UnsignedModularInt,
 {
     if sig >= pub_key.n().as_ref() || sig.bits_precision() != pub_key.n_bits_precision() {
-        return Err(crate::Error::Verification);
+        return Err(Error::Verification);
     }
     let em_bits = pub_key.n().bits() as usize - 1;
     let em = decode_em_into(pub_key, sig, em_bits, storage)?;
@@ -243,7 +248,7 @@ where
     T: UnsignedModularInt,
 {
     let em_len = em_bits.div_ceil(8);
-    let m = crate::algorithms::rsa::rsa_encrypt(pub_key, sig)?;
+    let m = rsa_encrypt(pub_key, sig)?;
     crate::algorithms::pad::i2osp_into(m, em_len, storage).map_err(|_| Error::Verification)?;
     storage.get_mut(..em_len).ok_or(Error::Verification)
 }
@@ -365,6 +370,7 @@ where
 
 /// Returns the [`AlgorithmIdentifierOwned`] associated with PSS signature using a given digest.
 #[cfg(feature = "encoding")]
+#[allow(clippy::missing_errors_doc, reason = "TODO")]
 pub fn get_default_pss_signature_algo_id<D>() -> spki::Result<AlgorithmIdentifierOwned>
 where
     D: Digest + AssociatedOid,

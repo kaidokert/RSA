@@ -215,7 +215,7 @@ pub fn sign_with_rng_into<'sig, R, T, M>(
     sig_storage: &'sig mut [u8],
 ) -> Result<&'sig [u8]>
 where
-    R: rand_core::TryCryptoRng + ?Sized,
+    R: TryCryptoRng + ?Sized,
     T: UnsignedModularInt + crate::traits::modular::TryRandomMod,
     T::Bytes: zeroize::Zeroize,
     M: ModulusParams<Modulus = T> + crate::traits::modular::CtModulusParams,
@@ -252,7 +252,7 @@ pub(crate) fn pkcs1v15_sign_unpad(prefix: &[u8], hashed: &[u8], em: &[u8], k: us
     ok &= em[k - t_len - 1].ct_eq(&0u8);
 
     for el in em.iter().skip(2).take(k - t_len - 3) {
-        ok &= el.ct_eq(&0xff)
+        ok &= el.ct_eq(&0xff);
     }
 
     // TODO(tarcieri): avoid branching here by e.g. using a pseudorandom rejection symbol
@@ -266,6 +266,7 @@ pub(crate) fn pkcs1v15_sign_unpad(prefix: &[u8], hashed: &[u8], em: &[u8], k: us
 /// prefix = 0x30 <oid_len + 8 + digest_len> 0x30 <oid_len + 4> 0x06 <oid_len> oid 0x05 0x00 0x04 <digest_len>
 #[cfg(feature = "alloc")]
 #[inline]
+#[allow(clippy::cast_possible_truncation, reason = "TODO")]
 pub(crate) fn pkcs1v15_generate_prefix<D>() -> Vec<u8>
 where
     D: Digest + AssociatedOid,
@@ -283,8 +284,8 @@ where
     D: Digest + AssociatedOid,
 {
     let oid = D::OID.as_bytes();
-    let oid_len = oid.len() as u8;
-    let digest_len = <D as Digest>::output_size() as u8;
+    let oid_len = u8::try_from(oid.len()).map_err(|_| Error::Internal)?;
+    let digest_len = u8::try_from(<D as Digest>::output_size()).map_err(|_| Error::Internal)?;
     let total = oid.len() + 10;
     // Fallible slicing + byte-copy loops (no `[..]` indexing /
     // `copy_from_slice`) so no `slice_index_fail` / `copy_from_slice`

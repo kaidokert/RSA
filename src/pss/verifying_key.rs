@@ -74,6 +74,7 @@ where
     }
 
     /// Return specified salt length for this key
+    #[must_use]
     pub fn salt_len(&self) -> Option<usize> {
         self.salt_len
     }

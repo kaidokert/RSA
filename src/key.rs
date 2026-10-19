@@ -114,7 +114,7 @@ where
     /// Odd prime factors of N (≥ 2 elements when populated), empty when
     /// constructed without primes.
     #[cfg(feature = "alloc")]
-    pub(crate) primes: alloc::vec::Vec<CryptoOdd<BoxedUint>>,
+    pub(crate) primes: Vec<CryptoOdd<BoxedUint>>,
     /// Precomputed CRT values, when available; `None` on the raw path.
     #[cfg(feature = "alloc")]
     pub(crate) precomputed: Option<PrecomputedValues<T, M>>,
@@ -189,7 +189,7 @@ where
             pubkey_components,
             d,
             #[cfg(feature = "alloc")]
-            primes: alloc::vec::Vec::new(),
+            primes: Vec::new(),
             #[cfg(feature = "alloc")]
             precomputed: None,
         }
@@ -467,6 +467,7 @@ where
     ///
     /// This is intended for alternate bigint backends that prepare their own
     /// modular arithmetic context outside the `BoxedUint` constructors.
+    #[allow(clippy::missing_errors_doc, reason = "TODO")]
     pub fn from_components(n: T, e: T, n_params: M) -> Result<Self> {
         let n = NonZero::new(n).ok_or(Error::InvalidModulus)?;
         Ok(Self { n, e, n_params })
@@ -480,6 +481,7 @@ where
 {
     /// Encrypt the given message.
     #[cfg(feature = "alloc")]
+    #[allow(clippy::missing_errors_doc, reason = "TODO")]
     pub fn encrypt<R: CryptoRng + ?Sized, P: PaddingScheme>(
         &self,
         rng: &mut R,
@@ -498,6 +500,7 @@ where
     /// passed in through `hash`.
     ///
     /// If the message is valid `Ok(())` is returned, otherwise an `Err` indicating failure.
+    #[allow(clippy::missing_errors_doc, reason = "TODO")]
     pub fn verify<S: SignatureScheme>(&self, scheme: S, hashed: &[u8], sig: &[u8]) -> Result<()> {
         scheme.verify(self, hashed, sig)
     }
@@ -522,7 +525,7 @@ impl GenericRsaPublicKey<BoxedUint, BoxedMontyParams> {
     /// If for some reason you have a legitimate reason to use keys with public exponents larger
     /// than this value, use the special APIs:
     ///
-    /// - [`RsaPublicKey::new_with_large_exp`]
+    /// - [`RsaPublicKey::new_with_max_size`]
     /// - [`RsaPrivateKey::from_components_with_large_exponent`]
     pub const MAX_PUB_EXPONENT: u64 = (1 << 33) - 1;
 
@@ -533,11 +536,13 @@ impl GenericRsaPublicKey<BoxedUint, BoxedMontyParams> {
     ///
     /// This function accepts public keys with a modulus size up to 8192-bits,
     /// i.e. [`RsaPublicKey::MAX_SIZE`].
+    #[allow(clippy::missing_errors_doc, reason = "TODO")]
     pub fn new(n: BoxedUint, e: BoxedUint) -> Result<Self> {
         Self::new_with_max_size(n, e, Self::MAX_SIZE)
     }
 
     /// Create a new public key from its components.
+    #[allow(clippy::missing_errors_doc, reason = "TODO")]
     pub fn new_with_max_size(n: BoxedUint, e: BoxedUint, max_size: usize) -> Result<Self> {
         check_public_with_max_size(&n, &e, Some(max_size))?;
 
@@ -545,7 +550,7 @@ impl GenericRsaPublicKey<BoxedUint, BoxedMontyParams> {
             .into_option()
             .ok_or(Error::InvalidModulus)?;
         let n_params = BoxedMontyParams::new(n_odd);
-        let n = NonZero::new(n).expect("checked above");
+        let n = NonZero::new(n).ok_or(Error::InvalidModulus)?;
 
         Ok(Self { n, e, n_params })
     }
@@ -556,6 +561,11 @@ impl GenericRsaPublicKey<BoxedUint, BoxedMontyParams> {
     /// This method is not recommended, and only intended for unusual use cases.
     /// Most applications should use [`RsaPublicKey::new`] or
     /// [`RsaPublicKey::new_with_max_size`] instead.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `n` is even.
+    #[must_use]
     pub fn new_unchecked(n: BoxedUint, e: BoxedUint) -> Self {
         let n_odd = CryptoOdd::new(n.clone()).expect("n must be odd");
         let n_params = BoxedMontyParams::new(n_odd);
@@ -584,10 +594,12 @@ impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
 
     /// Generate a new RSA key pair of the given bit size.
     ///
-    /// #⚠️Warning: Hazmat!
+    /// <div class="warning">
+    /// <b>⚠️Warning: Hazmat!</b>
     /// This version does not apply minimum key size checks, and as such may generate keys
     /// which are insecure!
     #[cfg(all(feature = "hazmat", feature = "keygen"))]
+    #[allow(clippy::missing_errors_doc, reason = "TODO")]
     pub fn new_unchecked<R: CryptoRng + ?Sized>(rng: &mut R, bit_size: usize) -> Result<Self> {
         Self::new_with_exp_unchecked(rng, bit_size, Self::EXP.into())
     }
@@ -597,6 +609,7 @@ impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
     ///
     /// Unless you have specific needs, you should use [`RsaPrivateKey::new`] instead.
     #[cfg(feature = "keygen")]
+    #[allow(clippy::missing_errors_doc, reason = "TODO")]
     pub fn new_with_exp<R: CryptoRng + ?Sized>(
         rng: &mut R,
         bit_size: usize,
@@ -620,10 +633,12 @@ impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
     ///
     /// Unless you have specific needs, you should use [`RsaPrivateKey::new`] instead.
     ///
-    /// #⚠️Warning: Hazmat!
+    /// <div class="warning">
+    /// <b>⚠️Warning: Hazmat!</b>
     /// This version does not apply minimum key size checks, and as such may generate keys
     /// which are insecure!
     #[cfg(all(feature = "hazmat", feature = "keygen"))]
+    #[allow(clippy::missing_errors_doc, reason = "TODO")]
     pub fn new_with_exp_unchecked<R: CryptoRng + ?Sized>(
         rng: &mut R,
         bit_size: usize,
@@ -738,19 +753,21 @@ impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
     ///
     /// See [`RsaPrivateKey::from_components`] for an explanation on the parameters.
     ///
-    /// # ⚠️ Warning: Hazmat!
+    /// <div class="warning">
+    /// <b>⚠️ Warning: Hazmat!</b>
     ///
     /// This method accepts public exponents outside the standard bounds (2 ≤ e ≤ 2^33-1),
     /// but still performs full cryptographic validation to ensure the key is mathematically
     /// correct (i.e., verifies that de ≡ 1 mod λ(n)).
     ///
     /// **Note:** This method is dangerous as it can be used as a DOS vector if used with
-    /// untrusted input https://www.imperialviolet.org/2012/03/17/rsados.html
+    /// untrusted input: <https://www.imperialviolet.org/2012/03/17/rsados.html>
     ///
     /// This is intended for interoperating with systems that use non-standard exponents
     /// or loading legacy keys. Use [`RsaPrivateKey::from_components`] for standard key
     /// construction.
     #[cfg(all(feature = "hazmat", feature = "alloc"))]
+    #[allow(clippy::missing_errors_doc, reason = "TODO")]
     pub fn from_components_with_large_exponent(
         n: BoxedUint,
         e: BoxedUint,
@@ -786,6 +803,7 @@ impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
     /// Multiprime keys use modulus-width factors and the non-CRT private operation.
     ///
     ///  [NIST SP 800-56B Revision 2]: https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-56Br2.pdf
+    #[allow(clippy::missing_errors_doc, reason = "TODO")]
     pub fn from_components(
         n: BoxedUint,
         e: BoxedUint,
@@ -833,6 +851,7 @@ impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
     ///
     /// Private exponent will be rebuilt using the method defined in
     /// [NIST 800-56B Section 6.2.1](https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-56Br2.pdf#page=47).
+    #[allow(clippy::missing_errors_doc, reason = "TODO")]
     pub fn from_p_q(
         p: BoxedUint,
         q: BoxedUint,
@@ -856,6 +875,7 @@ impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
     /// The factor-width policy of [`Self::from_components`] applies.
     ///
     /// This will rebuild the private exponent and the modulus.
+    #[allow(clippy::missing_errors_doc, reason = "TODO")]
     pub fn from_primes(
         primes: Vec<BoxedUint>,
         public_exponent: BoxedUint,
@@ -883,6 +903,7 @@ impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
     /// Get the public key from the private key.
     ///
     /// Specific alternative to [`AsRef::as_ref`].
+    #[must_use]
     pub fn as_public_key(&self) -> &RsaPublicKey {
         &self.pubkey_components
     }
@@ -891,11 +912,13 @@ impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
     ///
     /// Generally this is not needed since `RsaPrivateKey` implements the `PublicKey` trait,
     /// but it can occasionally be useful to discard the private information entirely.
+    #[must_use]
     pub fn to_public_key(&self) -> RsaPublicKey {
         self.pubkey_components.clone()
     }
 
     /// Performs some calculations to speed up private key operations.
+    #[allow(clippy::missing_errors_doc, reason = "TODO")]
     pub fn precompute(&mut self) -> Result<()> {
         if self.precomputed.is_some() {
             return Ok(());
@@ -941,6 +964,7 @@ impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
     }
 
     /// Compute CRT coefficient: `(1/q) mod p`.
+    #[must_use]
     pub fn crt_coefficient(&self) -> Option<BoxedUint> {
         let p = &self.primes[0];
         let q = &self.primes[1];
@@ -949,6 +973,7 @@ impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
 
     /// Performs basic sanity checks on the key.
     /// Returns `Ok(())` if everything is good, otherwise an appropriate error.
+    #[allow(clippy::missing_errors_doc, reason = "TODO")]
     pub fn validate(&self) -> Result<()> {
         check_public(self)?;
         validate_private_key_parts(self)?;
@@ -964,6 +989,7 @@ impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
     /// [`Pkcs1v15Encrypt`][crate::Pkcs1v15Encrypt] uses implicit rejection: invalid padding returns
     /// deterministic synthetic plaintext, not an error. The enclosing protocol must authenticate
     /// the returned message.
+    #[allow(clippy::missing_errors_doc, reason = "TODO")]
     pub fn decrypt<P: PaddingScheme>(&self, padding: P, ciphertext: &[u8]) -> Result<Vec<u8>> {
         #[cfg(feature = "getrandom")]
         {
@@ -985,6 +1011,7 @@ impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
     ///
     /// [`Pkcs1v15Encrypt`][crate::Pkcs1v15Encrypt] has the same implicit-rejection
     /// behavior as [`Self::decrypt`], independently of the blinding randomness.
+    #[allow(clippy::missing_errors_doc, reason = "TODO")]
     pub fn decrypt_blinded<R: CryptoRng + ?Sized, P: PaddingScheme>(
         &self,
         rng: &mut R,
@@ -995,6 +1022,7 @@ impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
     }
 
     /// Sign the given digest.
+    #[allow(clippy::missing_errors_doc, reason = "TODO")]
     pub fn sign<S: SignatureScheme>(&self, padding: S, digest_in: &[u8]) -> Result<Vec<u8>> {
         padding.sign(Option::<&mut DummyRng>::None, self, digest_in)
     }
@@ -1009,6 +1037,7 @@ impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
     ///   [`Pss::new`][`crate::Pss::new`] for a standard RSASSA-PSS signature, or
     ///   [`Pss::new_blinded`][`crate::Pss::new_blinded`] for RSA-BSSA blind
     ///   signatures.
+    #[allow(clippy::missing_errors_doc, reason = "TODO")]
     pub fn sign_with_rng<R: CryptoRng + ?Sized, S: SignatureScheme>(
         &self,
         rng: &mut R,
@@ -1141,7 +1170,7 @@ fn validate_skip_exponent_size(key: &RsaPrivateKey) -> Result<()> {
 impl Serialize for RsaPublicKey {
     fn serialize<S>(&self, serializer: S) -> core::prelude::v1::Result<S::Ok, S::Error>
     where
-        S: serdect::serde::Serializer,
+        S: serde::Serializer,
     {
         let der = self.to_public_key_der().map_err(ser::Error::custom)?;
         serdect::slice::serialize_hex_lower_or_bin(&der, serializer)
@@ -1152,7 +1181,7 @@ impl Serialize for RsaPublicKey {
 impl<'de> Deserialize<'de> for RsaPublicKey {
     fn deserialize<D>(deserializer: D) -> core::prelude::v1::Result<Self, D::Error>
     where
-        D: serdect::serde::Deserializer<'de>,
+        D: serde::Deserializer<'de>,
     {
         let der_bytes = serdect::slice::deserialize_hex_or_bin_vec(deserializer)?;
         Self::from_public_key_der(&der_bytes).map_err(de::Error::custom)

@@ -164,6 +164,7 @@ where
     ///
     /// Mirrors [`crate::traits::RandomizedEncryptor::encrypt_with_rng_into`]:
     /// caller owns storage, returned slice borrows from `sig_storage`.
+    #[allow(clippy::missing_errors_doc, reason = "TODO")]
     pub fn try_sign_with_rng_into<'sig, R: TryCryptoRng + ?Sized>(
         &self,
         rng: &mut R,
@@ -189,6 +190,7 @@ where
     /// Returns [`Error::InputNotHashed`] if `prehash.len()` doesn't match
     /// `D::output_size()`. Returns [`Error::OutputBufferTooSmall`] if
     /// `salt_storage.len() < self.salt_len()`.
+    #[allow(clippy::missing_errors_doc, reason = "TODO")]
     pub fn try_sign_prehash_with_rng_into<'sig, R: TryCryptoRng + ?Sized>(
         &self,
         rng: &mut R,
@@ -239,6 +241,7 @@ where
     /// `salt.len() != self.salt_len()` — a mismatch silently produces a
     /// signature that no verifier configured with the key's advertised
     /// `salt_len` will accept, so we reject it up front.
+    #[allow(clippy::missing_errors_doc, reason = "TODO")]
     pub fn try_sign_prehash_with_salt_into<'sig>(
         &self,
         prehash: &[u8],

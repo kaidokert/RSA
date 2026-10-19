@@ -38,12 +38,14 @@ where
     /// Create a new RSASSA-PSS signing key which produces "blinded"
     /// signatures.
     /// Digest output size is used as a salt length.
+    #[must_use]
     pub fn new(key: RsaPrivateKey) -> Self {
         Self(SigningKey::new(key))
     }
 
     /// Create a new RSASSA-PSS signing key which produces "blinded"
     /// signatures with a salt of the given length.
+    #[must_use]
     pub fn new_with_salt_len(key: RsaPrivateKey, salt_len: usize) -> Self {
         Self(SigningKey::new_with_salt_len(key, salt_len))
     }
@@ -52,6 +54,7 @@ where
     /// signatures.
     /// Digest output size is used as a salt length.
     #[cfg(feature = "keygen")]
+    #[allow(clippy::missing_errors_doc, reason = "TODO")]
     pub fn random<R: CryptoRng + ?Sized>(rng: &mut R, bit_size: usize) -> Result<Self> {
         SigningKey::random(rng, bit_size).map(Self)
     }
@@ -59,6 +62,7 @@ where
     /// Create a new random RSASSA-PSS signing key which produces "blinded"
     /// signatures with a salt of the given length.
     #[cfg(feature = "keygen")]
+    #[allow(clippy::missing_errors_doc, reason = "TODO")]
     pub fn random_with_salt_len<R: CryptoRng + ?Sized>(
         rng: &mut R,
         bit_size: usize,
@@ -68,6 +72,7 @@ where
     }
 
     /// Return specified salt length for this key
+    #[must_use]
     pub fn salt_len(&self) -> usize {
         self.0.salt_len()
     }

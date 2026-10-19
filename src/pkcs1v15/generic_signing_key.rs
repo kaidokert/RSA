@@ -20,6 +20,8 @@ use crate::{
         PublicKeyParts, UnsignedModularInt,
     },
 };
+#[cfg(feature = "alloc")]
+use alloc::vec::Vec;
 use const_oid::AssociatedOid;
 use core::fmt;
 use core::marker::PhantomData;
@@ -39,7 +41,7 @@ where
 {
     pub(super) inner: GenericRsaPrivateKey<T, M>,
     #[cfg(feature = "alloc")]
-    pub(super) prefix: alloc::vec::Vec<u8>,
+    pub(super) prefix: Vec<u8>,
     #[cfg(not(feature = "alloc"))]
     pub(super) prefix: Prefix,
     pub(super) phantom: PhantomData<D>,
@@ -130,7 +132,7 @@ where
         Self {
             inner: key,
             #[cfg(feature = "alloc")]
-            prefix: alloc::vec::Vec::new(),
+            prefix: Vec::new(),
             #[cfg(not(feature = "alloc"))]
             prefix: Prefix::new(),
             phantom: PhantomData,
@@ -167,6 +169,7 @@ where
     /// [`crate::traits::RandomizedEncryptor::encrypt_with_rng_into`] on
     /// the encrypt side: caller owns storage, returned slice borrows from
     /// `sig_storage` with the same lifetime.
+    #[allow(clippy::missing_errors_doc, reason = "TODO")]
     pub fn try_sign_into<'sig>(
         &self,
         msg: &[u8],
@@ -194,6 +197,7 @@ where
     /// Returns [`Error::InputNotHashed`] if `prehash.len()` doesn't match
     /// `D::output_size()` — a mismatch would silently produce malformed
     /// PKCS#1 v1.5 padding rather than a usable signature.
+    #[allow(clippy::missing_errors_doc, reason = "TODO")]
     pub fn try_sign_prehash_into<'sig>(
         &self,
         prehash: &[u8],
@@ -236,6 +240,7 @@ where
 {
     /// RNG-driven blinded variant of [`Self::try_sign_into`]. Uses
     /// `rng` to sample a fresh blinding factor per signature.
+    #[allow(clippy::missing_errors_doc, reason = "TODO")]
     pub fn try_sign_with_rng_into<'sig, R: rand_core::TryCryptoRng + ?Sized>(
         &self,
         rng: &mut R,
@@ -259,6 +264,7 @@ where
     }
 
     /// RNG-driven blinded variant of [`Self::try_sign_prehash_into`].
+    #[allow(clippy::missing_errors_doc, reason = "TODO")]
     pub fn try_sign_prehash_with_rng_into<'sig, R: rand_core::TryCryptoRng + ?Sized>(
         &self,
         rng: &mut R,
