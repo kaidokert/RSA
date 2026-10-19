@@ -324,6 +324,7 @@ pub type ModMathValue<T> = T;
 //
 // See the `TryRandomMod` trait doc for the CT-property discussion.
 #[cfg(feature = "modmath")]
+#[allow(clippy::integer_division_remainder_used, reason = "public bit counts")]
 fn try_random_mod_masked<R, T, W, F>(
     rng: &mut R,
     modulus_bits: u32,
