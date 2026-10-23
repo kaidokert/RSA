@@ -6,7 +6,7 @@ edition = "2024"
 
 [dependencies]
 checkct_macros = { path = "../checkct_macros" }
-rsa = { package = "rsa_heapless", path = "../..", default-features = false, features = ["alloc"] }
+rsa = { package = "rsa_heapless", path = "../..", default-features = false, features = ["alloc", "hazmat"] }
 crypto-bigint = { version = "0.7", default-features = false, features = ["alloc", "zeroize"] }
 zeroize = { version = "1.8", default-features = false, features = ["alloc"] }
 # RNG traits supplied by cargo-checkct's generated rng.rs.
