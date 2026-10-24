@@ -82,7 +82,7 @@ where
     /// Returns the private exponent of the key.
     fn d(&self) -> &T;
 
-    /// Returns the odd prime factors of the modulus. Returns `&[]` for
+    /// Returns the prime factors as [`Odd`](crypto_bigint::Odd). Returns `&[]` for
     /// keys that don't store factors.
     #[cfg(feature = "alloc")]
     fn primes(&self) -> &[crypto_bigint::Odd<crypto_bigint::BoxedUint>] {
