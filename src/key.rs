@@ -956,8 +956,23 @@ impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
     }
 
     /// Decrypt the given message.
+    ///
+    /// With the `getrandom` feature (enabled by default), uses the operating system RNG for
+    /// RSA blinding. Without this feature, decryption is unblinded; use
+    /// [`Self::decrypt_blinded`] to supply an RNG explicitly.
     pub fn decrypt<P: PaddingScheme>(&self, padding: P, ciphertext: &[u8]) -> Result<Vec<u8>> {
-        padding.decrypt(Option::<&mut DummyRng>::None, self, ciphertext)
+        #[cfg(feature = "getrandom")]
+        {
+            padding.decrypt(
+                Some(&mut crypto_common::getrandom::SysRng),
+                self,
+                ciphertext,
+            )
+        }
+        #[cfg(not(feature = "getrandom"))]
+        {
+            padding.decrypt(Option::<&mut DummyRng>::None, self, ciphertext)
+        }
     }
 
     /// Decrypt the given message.
