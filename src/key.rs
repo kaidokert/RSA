@@ -867,12 +867,13 @@ impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
         let x = CryptoNonZero::new(p.wrapping_sub(BoxedUint::one()))
             .into_option()
             .ok_or(Error::InvalidPrime)?;
-        let dp = d.rem_vartime(&x);
+
+        let dp = d.rem(&x);
 
         let x = CryptoNonZero::new(q.wrapping_sub(BoxedUint::one()))
             .into_option()
             .ok_or(Error::InvalidPrime)?;
-        let dq = d.rem_vartime(&x);
+        let dq = d.rem(&x);
 
         // Note that since `p` and `q` may have different `bits_precision`,
         // so we have to equalize them to calculate the remainder.
@@ -1044,7 +1045,7 @@ fn validate_private_key_parts(key: &RsaPrivateKey) -> Result<()> {
 
     for prime in &key.primes {
         let x = CryptoNonZero::new(prime.wrapping_sub(BoxedUint::one())).unwrap();
-        let congruence = de.rem_vartime(&x);
+        let congruence = de.rem(&x);
         if !bool::from(congruence.is_one()) {
             return Err(Error::InvalidExponent);
         }
