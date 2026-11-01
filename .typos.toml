@@ -3,3 +3,6 @@
 typ = "typ"
 HSI = "HSI"
 hsi = "hsi"
+
+[files]
+extend-exclude = ["/tests/examples/pkcs1v15_cfrg_rsa_guidance/**"]

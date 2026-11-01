@@ -21,10 +21,8 @@
 //!
 //! ## OAEP encryption
 //!
-//! Note: requires `sha2` feature of `rsa` crate is enabled.
-//!
-#![cfg_attr(feature = "sha2", doc = "```")]
-#![cfg_attr(not(feature = "sha2"), doc = "```ignore")]
+#![cfg_attr(feature = "keygen", doc = "```")]
+#![cfg_attr(not(feature = "keygen"), doc = "```ignore")]
 //! use rsa::{RsaPrivateKey, RsaPublicKey, Oaep, sha2::Sha256};
 //!
 //! let mut rng = rand::rng();
@@ -49,7 +47,8 @@
 //!
 //! <div class="warning">
 //! <b>Warning:</b>
-//! See security notes in the <code><a href="./pkcs1v15/index.html">pkcs1v15</a></code> module.
+//! PKCS#1 v1.5 encryption is deprecated due to security concerns. See security notes in the
+//! <code><a href="./pkcs1v15/index.html">pkcs1v15</a></code> module.
 //! </div>
 //!
 #![cfg_attr(feature = "keygen", doc = "```")]
@@ -79,10 +78,8 @@
 //! See security notes in the <code><a href="./pkcs1v15/index.html">pkcs1v15</a></code> module.
 //! </div>
 //!
-//! Note: requires `sha2` feature of `rsa` crate is enabled.
-//!
-#![cfg_attr(feature = "sha2", doc = "```")]
-#![cfg_attr(not(feature = "sha2"), doc = "```ignore")]
+#![cfg_attr(feature = "keygen", doc = "```")]
+#![cfg_attr(not(feature = "keygen"), doc = "```ignore")]
 //! use rsa::RsaPrivateKey;
 //! use rsa::pkcs1v15::{SigningKey, VerifyingKey};
 //! use rsa::signature::{Keypair, RandomizedSigner, SignatureEncoding, Verifier};
@@ -106,10 +103,8 @@
 //!
 //! ## PSS signatures
 //!
-//! Note: requires `sha2` feature of `rsa` crate is enabled.
-//!
-#![cfg_attr(feature = "sha2", doc = "```")]
-#![cfg_attr(not(feature = "sha2"), doc = "```ignore")]
+#![cfg_attr(feature = "keygen", doc = "```")]
+#![cfg_attr(not(feature = "keygen"), doc = "```ignore")]
 //! use rsa::RsaPrivateKey;
 //! use rsa::pss::{BlindedSigningKey, VerifyingKey};
 //! use rsa::signature::{Keypair,RandomizedSigner, SignatureEncoding, Verifier};
@@ -266,7 +261,6 @@ pub use const_num_traits::{Ct, Nct};
 pub use pkcs1;
 #[cfg(feature = "encoding")]
 pub use pkcs8;
-#[cfg(feature = "sha2")]
 pub use sha2;
 
 #[cfg(feature = "alloc")]
