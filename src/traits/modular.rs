@@ -374,17 +374,9 @@ impl IntoMontyForm<BoxedMontyParams> for BoxedMontyForm {
         BoxedMontyForm::new(integer, params)
     }
 
-    /// Constant-time with respect to `integer`.
+    /// Constant-time with respect to `integer`, and division-free so the modulus may be secret.
     fn from_value(integer: BoxedUint, params: &BoxedMontyParams) -> Self {
-        let bits = params.bits_precision();
-        let x = if integer.bits_precision() <= bits {
-            // Montgomery conversion computes REDC(x * R^2 mod N). For any x < R = 2^bits the product
-            // is < R * N, so REDC already yields a fully reduced result and no division is needed
-            CryptoResize::resize_unchecked(integer, bits)
-        } else {
-            CryptoResize::resize_unchecked(integer.rem(params.modulus().as_nz_ref()), bits)
-        };
-        Self::from_reduced(x, params)
+        crate::algorithms::reduction::to_monty(&integer, params)
     }
 }
 

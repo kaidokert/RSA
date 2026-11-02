@@ -20,4 +20,6 @@ pub(crate) mod oaep;
 pub(crate) mod pad;
 pub(crate) mod pkcs1v15;
 pub(crate) mod pss;
+#[cfg(feature = "alloc")]
+pub(crate) mod reduction;
 pub(crate) mod rsa;

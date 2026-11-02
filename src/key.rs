@@ -1,16 +1,12 @@
 #[cfg(feature = "alloc")]
 use alloc::vec::Vec;
-use core::cmp::Ordering;
 use core::fmt;
 use core::hash::{Hash, Hasher};
 
 #[cfg(feature = "alloc")]
 use crypto_bigint::Resize as _;
 #[cfg(feature = "alloc")]
-use crypto_bigint::{
-    modular::{BoxedMontyForm, BoxedMontyParams},
-    BoxedUint, ConcatenatingMul, Integer,
-};
+use crypto_bigint::{modular::BoxedMontyParams, BoxedUint, ConcatenatingMul, Integer};
 #[cfg(feature = "alloc")]
 use crypto_bigint::{NonZero as CryptoNonZero, Odd as CryptoOdd};
 
@@ -28,7 +24,7 @@ use crate::algorithms::generate::generate_multi_prime_key_with_exp;
 #[cfg(feature = "alloc")]
 use crate::algorithms::rsa::{
     compute_modulus, compute_private_exponent_carmicheal, compute_private_exponent_euler_totient,
-    recover_primes,
+    recover_primes, to_monty,
 };
 
 #[cfg(feature = "alloc")]
@@ -918,16 +914,7 @@ impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
             .ok_or(Error::InvalidPrime)?;
         let dq = d.rem(&x);
 
-        // Note that since `p` and `q` may have different `bits_precision`,
-        // so we have to equalize them to calculate the remainder.
-        let q_mod_p = match p.bits_precision().cmp(&q.bits_precision()) {
-            Ordering::Less => (q.as_ref() % p.as_nz_ref().resize_unchecked(q.bits_precision()))
-                .resize_unchecked(p.bits_precision()),
-            Ordering::Greater => q.as_ref().resize_unchecked(p.bits_precision()) % p.as_nz_ref(),
-            Ordering::Equal => q.as_ref() % p.as_nz_ref(),
-        };
-
-        let q_mod_p = BoxedMontyForm::new(q_mod_p, &p_params);
+        let q_mod_p = to_monty(q.as_ref(), &p_params);
         let qinv = q_mod_p.invert().into_option().ok_or(Error::InvalidPrime)?;
 
         debug_assert_eq!(dp.bits_precision(), p.bits_precision());

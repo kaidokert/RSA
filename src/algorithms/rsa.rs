@@ -5,14 +5,10 @@
 //! callers implementing RSAEP or RSAVP1 must establish that the input is less than `n`.
 
 #[cfg(feature = "alloc")]
-use core::cmp::Ordering;
-
-#[cfg(feature = "alloc")]
 use crypto_bigint::Resize as _;
 #[cfg(feature = "alloc")]
 use crypto_bigint::{
-    modular::{BoxedMontyForm, BoxedMontyParams},
-    BoxedUint, ConcatenatingMul, ConcatenatingSquare, Gcd, RandomMod,
+    modular::BoxedMontyParams, BoxedUint, ConcatenatingMul, ConcatenatingSquare, Gcd, RandomMod,
 };
 #[cfg(feature = "alloc")]
 use crypto_bigint::{NonZero as CryptoNonZero, Odd as CryptoOdd};
@@ -115,39 +111,19 @@ pub fn rsa_decrypt<R: TryCryptoRng + ?Sized>(
             // precomputed: dP = (1/e) mod (p-1) = d mod (p-1)
             // precomputed: dQ = (1/e) mod (q-1) = d mod (q-1)
 
-            // TODO: it may be faster to convert to and from Montgomery with prepared parameters
-            // (modulo `p` and `q`) rather than calculating the remainder directly.
-
             // TODO(tarcieri): zeroize intermediates
             let p_params = BoxedMontyParams::from(p.clone());
             let q_params = BoxedMontyParams::from(q.clone());
 
             // m1 = c^dP mod p
-            let p_wide = p.modulus().resize_unchecked(c.bits_precision());
-            let c_mod_dp = (&c % p_wide.as_nz_ref()).resize_unchecked(dp.bits_precision());
-            let cp = BoxedMontyForm::new(c_mod_dp, &p_params);
+            let cp = to_monty(&c, &p_params);
             let mut m1 = cp.pow(dp);
             // m2 = c^dQ mod q
-            let q_wide = q.modulus().resize_unchecked(c.bits_precision());
-            let c_mod_dq = (&c % q_wide.as_nz_ref()).resize_unchecked(dq.bits_precision());
-            let cq = BoxedMontyForm::new(c_mod_dq, &q_params);
+            let cq = to_monty(&c, &q_params);
             let m2 = cq.pow(dq).retrieve();
 
-            // Note that since `p` and `q` may have different `bits_precision`,
-            // it may be different for `m1` and `m2` as well.
-
-            // (m1 - m2) mod p = (m1 mod p) - (m2 mod p) mod p
-            let m2_mod_p = match p_params.bits_precision().cmp(&q_params.bits_precision()) {
-                Ordering::Less => {
-                    let p_wide = primes[0]
-                        .as_nz_ref()
-                        .resize_unchecked(q_params.bits_precision());
-                    (&m2 % p_wide).resize_unchecked(p_params.bits_precision())
-                }
-                Ordering::Greater => (&m2).resize_unchecked(p_params.bits_precision()),
-                Ordering::Equal => m2.clone(),
-            };
-            let m2r = BoxedMontyForm::new(m2_mod_p, &p_params);
+            // (m1 - m2) mod p, also supporting custom keys with unequal public widths.
+            let m2r = to_monty(&m2, &p_params);
             m1 -= &m2r;
 
             // precomputed: qInv = (1/q) mod p
@@ -499,7 +475,7 @@ where
 ///
 /// Inputs wider than the modulus are passed through unresized, so `from_value` can reduce them
 /// instead of having them truncated.
-fn to_monty<T, M>(x: &T, p: &M) -> M::MontgomeryForm
+pub(crate) fn to_monty<T, M>(x: &T, p: &M) -> M::MontgomeryForm
 where
     T: UnsignedModularInt,
     M: ModulusParams<Modulus = T>,
