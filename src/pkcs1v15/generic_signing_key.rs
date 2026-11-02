@@ -318,7 +318,7 @@ where
     /// method-call syntax.
     pub fn to_verifying_key(&self) -> GenericVerifyingKey<D, T, M>
     where
-        crate::private_key::GenericRsaPublicKey<T, M>: Clone,
+        crate::public_key::GenericRsaPublicKey<T, M>: Clone,
     {
         GenericVerifyingKey {
             inner: self.inner.as_public().clone(),

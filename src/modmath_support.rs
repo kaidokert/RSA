@@ -20,7 +20,7 @@ use zeroize::Zeroize;
 use crate::{
     algorithms::rsa::rsa_encrypt,
     errors::{Error, Result},
-    private_key::GenericRsaPublicKey,
+    public_key::GenericRsaPublicKey,
     traits::modular::{
         FixedWidthUnsignedInt, IntegerResize, IntoMontyForm, ModulusParams, NonZero, Odd, Pow,
         PowBoundedExp, TryFromBeBytes, UnsignedModularInt,
@@ -810,7 +810,7 @@ mod tests {
         public_key_from_be_bytes,
     };
     use crate::pkcs1v15::{GenericEncryptingKey, GenericSignature, GenericVerifyingKey};
-    use crate::private_key::GenericRsaPublicKey;
+    use crate::public_key::GenericRsaPublicKey;
     use crate::{BoxedUint, Pkcs1v15Encrypt, RsaPublicKey, traits::RandomizedEncryptor};
 
     type SmallU = FixedUInt<u8, 64>;
@@ -1758,7 +1758,7 @@ mod private_op_tests {
     #[test]
     fn pkcs1v15_signing_key_round_trip_2048_sha1() {
         use crate::pkcs1v15::{GenericSignature, GenericSigningKey, GenericVerifyingKey};
-        use crate::private_key::{GenericRsaPrivateKey, GenericRsaPublicKey};
+        use crate::{private_key::GenericRsaPrivateKey, public_key::GenericRsaPublicKey};
         use digest::Digest;
         use sha1::Sha1;
         use signature::hazmat::PrehashVerifier;

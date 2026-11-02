@@ -1,5 +1,5 @@
 use super::{GenericSignature, verify_digest_into};
-use crate::private_key::GenericRsaPublicKey;
+use crate::public_key::GenericRsaPublicKey;
 use crate::traits::{PublicKeyParts, UnsignedModularInt, modular::ModulusParams};
 use core::marker::PhantomData;
 #[cfg(feature = "alloc")]

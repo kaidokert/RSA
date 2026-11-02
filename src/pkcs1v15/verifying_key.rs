@@ -4,7 +4,7 @@ use super::{GenericSignature, verify_generic};
 #[cfg(not(feature = "alloc"))]
 use super::{Prefix, pkcs1v15_generate_prefix_helper};
 use crate::{
-    private_key::GenericRsaPublicKey,
+    public_key::GenericRsaPublicKey,
     traits::{PublicKeyParts, UnsignedModularInt, modular::ModulusParams},
 };
 #[cfg(feature = "alloc")]
@@ -17,7 +17,7 @@ use digest::{Digest, FixedOutput, HashMarker, Update};
 use signature::{DigestVerifier, Verifier, hazmat::PrehashVerifier};
 
 #[cfg(all(feature = "alloc", feature = "encoding"))]
-use crate::private_key::RsaPublicKey;
+use crate::public_key::RsaPublicKey;
 #[cfg(feature = "encoding")]
 use {
     super::oid,
