@@ -1,5 +1,7 @@
-use super::{GenericSigningKey, GenericVerifyingKey, Signature, VerifyingKey, sign};
-use crate::{Result, RsaPrivateKey, dummy_rng::DummyRng};
+use super::{
+    GenericSigningKey, GenericVerifyingKey, Signature, VerifyingKey, sign, sign_with_default_rng,
+};
+use crate::{Result, RsaPrivateKey};
 use const_oid::AssociatedOid;
 use crypto_bigint::{BoxedUint, modular::BoxedMontyParams};
 use digest::{Digest, FixedOutput, HashMarker, Update};
@@ -26,6 +28,10 @@ use {
 };
 
 /// Signing key for `RSASSA-PKCS1-v1_5` signatures as described in [RFC8017 § 8.2].
+///
+/// With the `getrandom` feature (enabled by default), signing uses the operating system RNG for
+/// RSA blinding. Without this feature, use the randomized signing traits to supply an RNG.
+/// Blinding does not change the deterministic signature value.
 ///
 /// [RFC8017 § 8.2]: https://datatracker.ietf.org/doc/html/rfc8017#section-8.2
 pub type SigningKey<D> = GenericSigningKey<D, BoxedUint, BoxedMontyParams>;
@@ -68,7 +74,7 @@ where
     ) -> signature::Result<Signature> {
         let mut digest = D::default();
         f(&mut digest)?;
-        sign::<DummyRng>(None, &self.inner, &self.prefix, &digest.finalize_fixed())?
+        sign_with_default_rng(&self.inner, &self.prefix, &digest.finalize_fixed())?
             .as_slice()
             .try_into()
     }
@@ -79,7 +85,7 @@ where
     D: Digest,
 {
     fn sign_prehash(&self, prehash: &[u8]) -> signature::Result<Signature> {
-        sign::<DummyRng>(None, &self.inner, &self.prefix, prehash)?
+        sign_with_default_rng(&self.inner, &self.prefix, prehash)?
             .as_slice()
             .try_into()
     }
@@ -156,7 +162,7 @@ where
     fn try_multipart_sign(&self, msg: &[&[u8]]) -> signature::Result<Signature> {
         let mut digest = D::new();
         msg.iter().for_each(|slice| digest.update(slice));
-        sign::<DummyRng>(None, &self.inner, &self.prefix, &digest.finalize())?
+        sign_with_default_rng(&self.inner, &self.prefix, &digest.finalize())?
             .as_slice()
             .try_into()
     }

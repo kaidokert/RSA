@@ -29,7 +29,7 @@ use crate::algorithms::rsa::{
     recover_primes, to_monty,
 };
 
-#[cfg(feature = "alloc")]
+#[cfg(all(feature = "alloc", not(feature = "getrandom")))]
 use crate::dummy_rng::DummyRng;
 use crate::errors::{Error, Result};
 use crate::traits::keys::PublicKeyParts;
@@ -1022,9 +1022,20 @@ impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
     }
 
     /// Sign the given digest.
+    ///
+    /// With the `getrandom` feature (enabled by default), supplies the operating system RNG for
+    /// RSA blinding and any randomness required by the signature scheme. Without this feature,
+    /// use [`Self::sign_with_rng`] to supply an RNG explicitly.
     #[allow(clippy::missing_errors_doc, reason = "TODO")]
     pub fn sign<S: SignatureScheme>(&self, padding: S, digest_in: &[u8]) -> Result<Vec<u8>> {
-        padding.sign(Option::<&mut DummyRng>::None, self, digest_in)
+        #[cfg(feature = "getrandom")]
+        {
+            padding.sign(Some(&mut crypto_common::getrandom::SysRng), self, digest_in)
+        }
+        #[cfg(not(feature = "getrandom"))]
+        {
+            padding.sign(Option::<&mut DummyRng>::None, self, digest_in)
+        }
     }
 
     /// Sign the given digest using the provided `rng`, which is used in the
@@ -1034,9 +1045,8 @@ impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
     ///   to mask the private key operation with random blinding, which helps
     ///   mitigate sidechannel attacks.
     /// - [`Pss`][`crate::Pss`] always requires randomness. Use
-    ///   [`Pss::new`][`crate::Pss::new`] for a standard RSASSA-PSS signature, or
-    ///   [`Pss::new_blinded`][`crate::Pss::new_blinded`] for RSA-BSSA blind
-    ///   signatures.
+    ///   [`Pss::new`][`crate::Pss::new`] for a standard RSASSA-PSS signature with
+    ///   RSA base blinding enabled by default.
     #[allow(clippy::missing_errors_doc, reason = "TODO")]
     pub fn sign_with_rng<R: CryptoRng + ?Sized, S: SignatureScheme>(
         &self,

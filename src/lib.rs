@@ -243,6 +243,7 @@ pub mod pkcs1v15;
 pub mod pss;
 pub mod traits;
 
+#[cfg(not(feature = "getrandom"))]
 mod dummy_rng;
 mod encoding;
 mod key;
