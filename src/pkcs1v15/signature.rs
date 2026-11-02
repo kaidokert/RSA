@@ -14,7 +14,10 @@ use serdect::serde::{Deserialize, Serialize, de};
 #[cfg(feature = "encoding")]
 use spki::{
     SignatureBitStringEncoding,
-    der::{Result as DerResult, asn1::BitString},
+    der::{
+        Result as DerResult,
+        asn1::{BitString, BitStringRef},
+    },
 };
 
 /// `RSASSA-PKCS1-v1_5` signatures as described in [RFC8017 § 8.2].
@@ -149,6 +152,18 @@ where
 impl From<GenericSignature<BoxedUint>> for Box<[u8]> {
     fn from(signature: GenericSignature<BoxedUint>) -> Box<[u8]> {
         SignatureBytes::<BoxedUint>::from(signature).0
+    }
+}
+
+#[cfg(feature = "encoding")]
+impl<T> TryFrom<BitStringRef<'_>> for GenericSignature<T>
+where
+    T: UnsignedModularInt,
+{
+    type Error = signature::Error;
+
+    fn try_from(bit_string: BitStringRef<'_>) -> signature::Result<Self> {
+        Self::try_from(bit_string.as_bytes().ok_or_else(signature::Error::new)?)
     }
 }
 
