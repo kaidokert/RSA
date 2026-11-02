@@ -654,6 +654,7 @@ impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
         e: BoxedUint,
         d: BoxedUint,
         mut primes: Vec<BoxedUint>,
+        wide_primes: bool,
     ) -> Result<RsaPrivateKey> {
         let n = CryptoOdd::new(n)
             .into_option()
@@ -698,12 +699,23 @@ impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
             }
         }
 
-        // The primes may come in padded with zeros too, so we need to shorten them as well.
+        // The caller's public policy and the public modulus determine every prime's width.
+        // Do not automatically select a wider policy based on the secret values of the primes.
+        // Multiprime operations use the non-CRT path and retain modulus-width factors.
+        let prime_bits = if wide_primes || primes.len() > 2 {
+            n_bits
+        } else {
+            n_bits.div_ceil(2)
+        };
+
         let primes = primes
             .into_iter()
             .map(|p| {
-                let p_bits = p.bits();
-                CryptoOdd::new(p.resize_unchecked(p_bits))
+                if p.bits() > prime_bits {
+                    return Err(Error::InvalidPrime);
+                }
+
+                CryptoOdd::new(p.resize_unchecked(prime_bits))
                     .into_option()
                     .ok_or(Error::InvalidPrime)
             })
@@ -747,7 +759,7 @@ impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
         d: BoxedUint,
         primes: Vec<BoxedUint>,
     ) -> Result<RsaPrivateKey> {
-        let mut k = Self::from_components_inner(n, e, d, primes)?;
+        let mut k = Self::from_components_inner(n, e, d, primes, false)?;
 
         // Validate everything except exponent size bounds (to ensure precompute can't fail)
         validate_skip_exponent_size(&k)?;
@@ -770,6 +782,11 @@ impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
     ///   works if there are just two prime factors `p` and `q` (as opposed to multiprime), and `e`
     ///   is between 2^16 and 2^256.
     ///
+    /// For two-prime keys, each prime must fit in `ceil(bit_length(n) / 2)` bits. Both primes
+    /// and their CRT exponents use this public-derived storage width, rounded up to whole limbs.
+    /// Use [`Self::from_components_with_wide_primes`] to explicitly import unbalanced factors.
+    /// Multiprime keys use modulus-width factors and the non-CRT private operation.
+    ///
     ///  [NIST SP 800-56B Revision 2]: https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-56Br2.pdf
     pub fn from_components(
         n: BoxedUint,
@@ -777,7 +794,7 @@ impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
         d: BoxedUint,
         primes: Vec<BoxedUint>,
     ) -> Result<RsaPrivateKey> {
-        let mut k = Self::from_components_inner(n, e, d, primes)?;
+        let mut k = Self::from_components_inner(n, e, d, primes, false)?;
 
         // Always validate the key, to ensure precompute can't fail
         k.validate()?;
@@ -788,7 +805,31 @@ impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
         Ok(k)
     }
 
+    /// Constructs a key using public-modulus-width storage for every prime and CRT exponent.
+    ///
+    /// This explicitly supports unbalanced prime factors which do not fit the half-modulus bit
+    /// bound of [`Self::from_components`]. It is slower than ordinary two-prime CRT arithmetic.
+    /// The width policy must be chosen as public configuration, not by inspecting secret factor
+    /// sizes or retrying a failed half-width import with this constructor.
+    ///
+    /// Encoded-key decoding uses the ordinary half-width policy. For unbalanced encoded keys,
+    /// decode the components and pass them to this constructor explicitly.
+    #[allow(clippy::missing_errors_doc, reason = "TODO")]
+    pub fn from_components_with_wide_primes(
+        n: BoxedUint,
+        e: BoxedUint,
+        d: BoxedUint,
+        primes: Vec<BoxedUint>,
+    ) -> Result<RsaPrivateKey> {
+        let mut k = Self::from_components_inner(n, e, d, primes, true)?;
+        k.validate()?;
+        k.precompute()?;
+        Ok(k)
+    }
+
     /// Constructs an RSA key pair from its two primes p and q.
+    ///
+    /// The half-modulus factor bound of [`Self::from_components`] applies.
     ///
     /// This will rebuild the private exponent and the modulus.
     ///
@@ -811,6 +852,8 @@ impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
     }
 
     /// Constructs an RSA key pair from its primes.
+    ///
+    /// The factor-width policy of [`Self::from_components`] applies.
     ///
     /// This will rebuild the private exponent and the modulus.
     pub fn from_primes(
@@ -1176,6 +1219,12 @@ mod tests {
             private_key.n_bits_precision()
         );
 
+        if private_key.primes().len() > 2 {
+            for prime in private_key.primes() {
+                assert_eq!(prime.bits_precision(), private_key.n_bits_precision());
+            }
+        }
+
         assert!(
             PrivateKeyParts::d(private_key) < PublicKeyParts::n(private_key).as_ref(),
             "private exponent too large"
@@ -1223,6 +1272,14 @@ mod tests {
                 )
                 .unwrap();
                 assert_eq!(key.d(), &d);
+                let prime_precision =
+                    BoxedUint::zero_with_precision(key.n().bits().div_ceil(2)).bits_precision();
+                for prime in key.primes() {
+                    assert_eq!(prime.bits_precision(), prime_precision);
+                }
+                assert_eq!(key.dp().expect("dp").bits_precision(), prime_precision);
+                assert_eq!(key.dq().expect("dq").bits_precision(), prime_precision);
+                assert_eq!(key.qinv().expect("qinv").bits_precision(), prime_precision);
 
                 for clear_precomputed in [false, true] {
                     if clear_precomputed {

@@ -75,6 +75,11 @@ pub trait PublicKeyParts<T: UnsignedModularInt> {
 /// The base surface is `d()`; the CRT accessors (`p`/`q`/`dp`/`dq`/
 /// `qinv`) are `alloc`-gated and default to `None`, so a
 /// key without CRT precompute satisfies the trait with just `d()`.
+///
+/// Implementations used for private operations must choose all storage precisions from public
+/// parameters, not from the significant bits of secret components. In particular, `d`, `dp`, and
+/// `dq` are processed for their full storage precision. Prime and Montgomery-parameter precisions
+/// must follow the same public policy. `RsaPrivateKey` enforces this during construction.
 pub trait PrivateKeyParts<T>: PublicKeyParts<T>
 where
     T: UnsignedModularInt,
