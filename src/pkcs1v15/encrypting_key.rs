@@ -1,7 +1,7 @@
 use super::encrypt_into;
 use crate::{
     Result,
-    key::GenericRsaPublicKey,
+    private_key::GenericRsaPublicKey,
     traits::{
         PublicKeyParts, RandomizedEncryptor, UnsignedModularInt,
         modular::{CtModulusParams, ModulusParams},

@@ -246,9 +246,9 @@ pub mod traits;
 #[cfg(not(feature = "getrandom"))]
 mod dummy_rng;
 mod encoding;
-mod key;
 #[cfg(feature = "modmath")]
 pub mod modmath_support;
+mod private_key;
 
 #[cfg(feature = "modmath")]
 pub use crate::modmath_support::{
@@ -263,16 +263,16 @@ pub use pkcs8;
 pub use sha2;
 
 #[cfg(feature = "alloc")]
-pub use crate::key::RsaPublicKey;
+pub use crate::private_key::RsaPublicKey;
 pub use crate::{
     errors::{Error, Result},
-    key::GenericRsaPublicKey,
     pkcs1v15::{Pkcs1v15Encrypt, Pkcs1v15Sign},
+    private_key::GenericRsaPublicKey,
 };
 
-pub use crate::key::GenericRsaPrivateKey;
+pub use crate::private_key::GenericRsaPrivateKey;
 #[cfg(feature = "alloc")]
-pub use crate::key::RsaPrivateKey;
+pub use crate::private_key::RsaPrivateKey;
 
 #[cfg(feature = "alloc")]
 pub use crate::oaep::Oaep;

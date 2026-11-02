@@ -14,7 +14,7 @@ use super::{GenericVerifyingKey, sign_into, sign_with_rng_into};
 use super::{Prefix, pkcs1v15_generate_prefix_helper};
 use crate::{
     errors::Result,
-    key::GenericRsaPrivateKey,
+    private_key::GenericRsaPrivateKey,
     traits::{
         PublicKeyParts, UnsignedModularInt,
         modular::{ModulusParams, Pow, PowBoundedExp},
@@ -318,7 +318,7 @@ where
     /// method-call syntax.
     pub fn to_verifying_key(&self) -> GenericVerifyingKey<D, T, M>
     where
-        crate::key::GenericRsaPublicKey<T, M>: Clone,
+        crate::private_key::GenericRsaPublicKey<T, M>: Clone,
     {
         GenericVerifyingKey {
             inner: self.inner.as_public().clone(),

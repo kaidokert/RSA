@@ -11,7 +11,7 @@
 use crate::{
     algorithms::pss::{sign_into, sign_with_rng_into},
     errors::{Error, Result},
-    key::GenericRsaPrivateKey,
+    private_key::GenericRsaPrivateKey,
     traits::{
         PublicKeyParts, UnsignedModularInt,
         modular::{ModulusParams, Pow, PowBoundedExp},
