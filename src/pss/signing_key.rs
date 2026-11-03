@@ -84,9 +84,10 @@ where
     ) -> signature::Result<Signature> {
         let mut digest = D::new();
         f(&mut digest)?;
-        sign_digest::<_, D>(rng, true, &self.inner, &digest.finalize(), self.salt_len)?
-            .as_slice()
-            .try_into()
+        Signature::from_bytes_with_max_len(
+            &sign_digest::<_, D>(rng, true, &self.inner, &digest.finalize(), self.salt_len)?,
+            usize::MAX,
+        )
     }
 }
 
@@ -131,9 +132,10 @@ where
         rng: &mut R,
         prehash: &[u8],
     ) -> signature::Result<Signature> {
-        sign_digest::<_, D>(rng, true, &self.inner, prehash, self.salt_len)?
-            .as_slice()
-            .try_into()
+        Signature::from_bytes_with_max_len(
+            &sign_digest::<_, D>(rng, true, &self.inner, prehash, self.salt_len)?,
+            usize::MAX,
+        )
     }
 }
 

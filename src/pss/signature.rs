@@ -1,6 +1,8 @@
 //! `RSASSA-PSS` signatures.
 
 #[cfg(feature = "alloc")]
+use crate::RsaPublicKey;
+#[cfg(feature = "alloc")]
 use alloc::boxed::Box;
 use core::fmt::{Debug, Display, Formatter, LowerHex, UpperHex};
 #[cfg(feature = "alloc")]
@@ -21,6 +23,10 @@ use spki::{
 };
 
 /// `RSASSA-PSS` signatures as described in [RFC8017 § 8.1].
+///
+/// Decoding with `TryFrom` or serde accepts at most [`Self::MAX_LEN`] bytes.
+/// Use [`Self::from_bytes_with_max_len`] to explicitly allow larger signatures.
+/// A signature's exact length and value are checked during verification.
 ///
 /// [RFC8017 § 8.1]: https://datatracker.ietf.org/doc/html/rfc8017#section-8.1
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -56,6 +62,34 @@ impl<T> GenericSignature<T>
 where
     T: UnsignedModularInt,
 {
+    /// Default maximum encoded signature length in bytes.
+    ///
+    /// Corresponds to the default maximum modulus size, [`RsaPublicKey::MAX_SIZE`].
+    #[cfg(feature = "alloc")]
+    pub const MAX_LEN: usize = RsaPublicKey::MAX_SIZE.div_ceil(8);
+
+    /// Decode a signature with an explicit maximum encoded length in bytes.
+    ///
+    /// The length is checked before allocating. This can be used to accept signatures
+    /// for keys larger than [`RsaPublicKey::MAX_SIZE`], or to impose a smaller limit.
+    /// The exact length and value are checked against the key during verification.
+    ///
+    /// Signatures larger than [`Self::MAX_LEN`] must also use this method when
+    /// decoding their serialized bytes again. `TryFrom` and serde use the default limit.
+    ///
+    /// # Errors
+    /// Returns an error if `bytes.len()` exceeds `max_len`.
+    #[cfg(feature = "alloc")]
+    pub fn from_bytes_with_max_len(bytes: &[u8], max_len: usize) -> signature::Result<Self> {
+        if bytes.len() > max_len {
+            return Err(signature::Error::new());
+        }
+
+        Ok(Self {
+            inner: T::try_from_be_bytes_vartime(bytes).map_err(signature::Error::from_source)?,
+        })
+    }
+
     /// Construct a signature from its underlying integer representation.
     pub fn from_inner(inner: T) -> Self {
         Self { inner }
@@ -122,9 +156,7 @@ where
     type Error = signature::Error;
 
     fn try_from(bytes: &[u8]) -> signature::Result<Self> {
-        Ok(Self {
-            inner: T::try_from_be_bytes_vartime(bytes).map_err(signature::Error::from_source)?,
-        })
+        Self::from_bytes_with_max_len(bytes, Self::MAX_LEN)
     }
 }
 
@@ -222,8 +254,8 @@ impl<'de> Deserialize<'de> for GenericSignature<BoxedUint> {
     where
         D: serde::Deserializer<'de>,
     {
-        serdect::slice::deserialize_hex_or_bin_vec(deserializer)?
-            .as_slice()
+        let mut buffer = [0u8; Self::MAX_LEN];
+        serdect::slice::deserialize_hex_or_bin(&mut buffer, deserializer)?
             .try_into()
             .map_err(de::Error::custom)
     }
