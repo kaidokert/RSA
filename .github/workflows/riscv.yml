@@ -19,8 +19,10 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - uses: dtolnay/rust-toolchain@stable
+    # riscv-rt 0.13 no longer assembles on Rust 1.99+ (`.cfi_endproc` outside a frame).
+    - uses: dtolnay/rust-toolchain@master
       with:
+        toolchain: 1.98.1
         targets: riscv32imac-unknown-none-elf
         components: llvm-tools
 
