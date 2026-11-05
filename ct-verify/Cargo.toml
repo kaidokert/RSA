@@ -4,7 +4,7 @@
 # to every harness build without affecting `rsa_heapless`'s own
 # `--release` builds. Same isolation pattern as `footprint/*`.
 [workspace]
-resolver = "2"
+resolver = "3"
 members = [
     "ct-fixtures",
     "ct-driver",
