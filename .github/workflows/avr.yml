@@ -17,7 +17,7 @@ jobs:
   avr:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
 
     # AVR pin comes from footprint/avr/rust-toolchain.toml (nightly with
     # build-std support). Listing it here too keeps the action self-explanatory.
