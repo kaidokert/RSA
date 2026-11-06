@@ -1,4 +1,5 @@
-//! PKCS#1 v1.5 support as described in [RFC8017 § 8.2].
+//! RSAES-PKCS1-v1_5 encryption ([RFC8017 § 7.2]) and RSASSA-PKCS1-v1_5 signatures
+//! ([RFC8017 § 8.2]).
 //!
 //! <div class="warning">
 //! <b>Warning</b>
@@ -24,6 +25,7 @@
 //!
 //! See [code example in the toplevel rustdoc](../index.html#pkcs1-v15-signatures).
 //!
+//! [RFC8017 § 7.2]: https://datatracker.ietf.org/doc/html/rfc8017#section-7.2
 //! [RFC8017 § 8.2]: https://datatracker.ietf.org/doc/html/rfc8017#section-8.2
 
 #[cfg(feature = "alloc")]
@@ -63,9 +65,9 @@ use crypto_bigint::BoxedUint;
 use digest::Digest;
 use rand_core::TryCryptoRng;
 
-use crate::algorithms::pad::uint_to_be_pad_into;
+use crate::algorithms::pad::i2osp_into;
 #[cfg(feature = "alloc")]
-use crate::algorithms::pad::uint_to_zeroizing_be_pad;
+use crate::algorithms::pad::{i2osp, i2osp_zeroizing, os2ip};
 use crate::algorithms::pkcs1v15::*;
 #[cfg(not(feature = "alloc"))]
 use crate::algorithms::rsa::rsa_encrypt;
@@ -101,7 +103,7 @@ impl Pkcs1v15Encrypt {
         let em = pkcs1v15_encrypt_pad_into(rng, msg, padded_len, storage)?;
         let int = T::try_from_be_bytes_vartime(em)?;
 
-        uint_to_be_pad_into(rsa_encrypt(pub_key, &int)?, padded_len, storage)
+        i2osp_into(rsa_encrypt(pub_key, &int)?, padded_len, storage)
     }
 }
 
@@ -328,11 +330,16 @@ fn decrypt<R: TryCryptoRng + ?Sized>(
 ) -> Result<Vec<u8>> {
     key::check_public(priv_key)?;
 
-    let ciphertext = BoxedUint::from_be_slice(ciphertext, priv_key.n_bits_precision())?;
-    let em = rsa_decrypt_and_check(priv_key, rng, &ciphertext)?;
-    let em = uint_to_zeroizing_be_pad(em, priv_key.size())?;
+    // RFC8017 § 7.2.2 step 1
+    if priv_key.size() < 11 || ciphertext.len() != priv_key.size() {
+        return Err(Error::Decryption);
+    }
 
-    pkcs1v15_encrypt_unpad(em, priv_key.size())
+    let ciphertext = os2ip(ciphertext, priv_key.n_bits_precision())?;
+    let em = rsa_decrypt_and_check(priv_key, rng, &ciphertext)?;
+    let em = i2osp_zeroizing(em, priv_key.size());
+
+    pkcs1v15_encrypt_unpad(&em, priv_key.size())
 }
 
 /// Calculates the signature of hashed using
@@ -359,7 +366,11 @@ fn sign<R: TryCryptoRng + ?Sized>(
     let em = pkcs1v15_sign_pad(prefix, hashed, priv_key.size())?;
 
     let em = BoxedUint::from_be_slice(&em, priv_key.n_bits_precision())?;
-    uint_to_zeroizing_be_pad(rsa_decrypt_and_check(priv_key, rng, &em)?, priv_key.size())
+    // The signature itself is public; only the computation is secret
+    Ok(i2osp(
+        rsa_decrypt_and_check(priv_key, rng, &em)?,
+        priv_key.size(),
+    ))
 }
 
 /// Verifies an RSA PKCS#1 v1.5 signature.
@@ -380,7 +391,7 @@ where
         return Err(Error::Verification);
     }
 
-    let em = uint_to_be_pad_into(rsa_encrypt(pub_key, sig)?, pub_key.size(), storage)?;
+    let em = i2osp_into(rsa_encrypt(pub_key, sig)?, pub_key.size(), storage)?;
 
     pkcs1v15_sign_unpad(prefix, hashed, em, pub_key.size())
 }
@@ -548,6 +559,30 @@ mod tests {
             .decrypt(&Base64::decode_vec(ciphertext).unwrap())
             .unwrap();
         assert_eq!(out, plaintext.as_bytes());
+    }
+
+    #[test]
+    fn test_decrypt_pkcs1v15_rejects_wrong_length() {
+        let priv_key = get_private_key();
+        // The leading zero is part of the valid k-byte encoding. Dropping it preserves
+        // the ciphertext integer, so only the length check can reject the short form.
+        let ct = hex!(
+            "00a40774c6e201e41714d1ab89c245116ff8f0baada675f22a50c7b6c1210e"
+            "3d2c3b7c595462aa8cb9447c43ef7d50ebcf544789b19ca5c2a26daea72cf9dbde"
+        );
+        assert_eq!(priv_key.decrypt(Pkcs1v15Encrypt, &ct).unwrap(), b"x");
+
+        // RFC8017 § 7.2.2 step 1: a ciphertext shorter than `k` must be rejected.
+        assert_eq!(
+            priv_key.decrypt(Pkcs1v15Encrypt, &ct[1..]),
+            Err(Error::Decryption)
+        );
+        let mut long = vec![0u8];
+        long.extend_from_slice(&ct);
+        assert_eq!(
+            priv_key.decrypt(Pkcs1v15Encrypt, &long),
+            Err(Error::Decryption)
+        );
     }
 
     #[test]

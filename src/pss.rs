@@ -38,7 +38,7 @@ use digest::{Digest, FixedOutputReset};
 use rand_core::TryCryptoRng;
 
 #[cfg(feature = "alloc")]
-use crate::algorithms::pad::{uint_to_be_pad, uint_to_be_pad_into, uint_to_zeroizing_be_pad};
+use crate::algorithms::pad::{i2osp, i2osp_into};
 use crate::algorithms::pss::*;
 #[cfg(feature = "alloc")]
 use crate::algorithms::rsa::rsa_decrypt_and_check;
@@ -153,8 +153,7 @@ where
         }
 
         let mut em = vec![0u8; pub_key.size()];
-        let em_len =
-            uint_to_be_pad_into(rsa_encrypt(pub_key, &sig)?, pub_key.size(), &mut em)?.len();
+        let em_len = i2osp_into(rsa_encrypt(pub_key, &sig)?, pub_key.size(), &mut em)?.len();
 
         emsa_pss_verify(
             hashed,
@@ -189,12 +188,7 @@ pub(crate) fn verify<D>(
 where
     D: Digest + FixedOutputReset,
 {
-    if sig_len != pub_key.size() {
-        return Err(Error::Verification);
-    }
-    let raw = rsa_encrypt(pub_key, sig)?;
-    let mut em = uint_to_be_pad(raw, pub_key.size())?;
-
+    let mut em = decode_signature(pub_key, sig, sig_len)?;
     emsa_pss_verify(hashed, &mut em, salt_len, digest, pub_key.n().bits() as _)
 }
 
@@ -230,12 +224,12 @@ where
         return Err(crate::Error::Verification);
     }
     let padded_len = pub_key.size();
-    let em = crate::algorithms::pad::uint_to_be_pad_into(
+    let em = crate::algorithms::pad::i2osp_into(
         crate::algorithms::rsa::rsa_encrypt(pub_key, sig)?,
         padded_len,
         storage,
     )?;
-    // `uint_to_be_pad_into` returns an immutable slice into `storage`; PSS
+    // `i2osp_into` returns an immutable slice into `storage`; PSS
     // verify wants `&mut [u8]`. Drop the borrow and re-slice mutably.
     let em_len = em.len();
     emsa_pss_verify_digest::<D>(
@@ -244,6 +238,23 @@ where
         salt_len,
         pub_key.n().bits() as _,
     )
+}
+
+/// Checks signature length and range before applying the public-key operation.
+#[cfg(feature = "alloc")]
+fn decode_signature(pub_key: &RsaPublicKey, sig: &BoxedUint, sig_len: usize) -> Result<Vec<u8>> {
+    // Step 1: S must be exactly k octets, independently of integer storage precision.
+    if sig_len != pub_key.size() {
+        return Err(Error::Verification);
+    }
+
+    // Steps 2a and 2b: s = OS2IP(S), m = RSAVP1((n, e), s). `sig` arrives already decoded.
+    if sig >= pub_key.n().as_ref() || sig.bits_precision() != pub_key.n_bits_precision() {
+        return Err(Error::Verification);
+    }
+    let m = rsa_encrypt(pub_key, sig)?;
+
+    Ok(i2osp(m, pub_key.size()))
 }
 
 /// SignPSS calculates the signature of hashed using RSASSA-PSS.
@@ -311,7 +322,7 @@ where
 
     let em = BoxedUint::from_be_slice(&em, priv_key.n_bits_precision())?;
     let raw = rsa_decrypt_and_check(priv_key, blind_rng, &em)?;
-    uint_to_zeroizing_be_pad(raw, priv_key.size())
+    Ok(i2osp(raw, priv_key.size()))
 }
 
 #[cfg(feature = "alloc")]
@@ -329,10 +340,10 @@ where
     let em = emsa_pss_encode_digest::<D>(hashed, em_bits as _, salt)?;
 
     let em = BoxedUint::from_be_slice(&em, priv_key.n_bits_precision())?;
-    uint_to_zeroizing_be_pad(
+    Ok(i2osp(
         rsa_decrypt_and_check(priv_key, blind_rng, &em)?,
         priv_key.size(),
-    )
+    ))
 }
 
 /// Returns the [`AlgorithmIdentifierOwned`] associated with PSS signature using a given digest.

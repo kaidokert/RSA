@@ -1,4 +1,8 @@
-//! Generic RSA implementation
+//! Shared integer arithmetic for RSAEP/RSAVP1 and RSADP/RSASP1 (RFC8017 §5).
+//!
+//! These functions do not implement octet-string conversion or scheme encoding. In particular,
+//! `rsa_encrypt` performs modular exponentiation without checking the representative's range;
+//! callers implementing RSAEP or RSAVP1 must establish that the input is less than `n`.
 
 #[cfg(feature = "alloc")]
 use core::cmp::Ordering;
@@ -29,7 +33,11 @@ use crate::{
     },
 };
 
-/// ⚠️ Raw RSA encryption of m with the public key. No padding is performed.
+/// ⚠️ Raw RSA public-key operation on the integer representative `m`, without padding.
+///
+/// Computes the exponentiation shared by RSAEP (RFC8017 §5.1.1) and RSAVP1 (§5.2.2).
+/// The caller must check that the representative is less than `n` to implement either primitive;
+/// this function reduces out-of-range inputs modulo `n`.
 ///
 /// # ☢️️ WARNING: HAZARDOUS API ☢️
 ///
@@ -46,7 +54,10 @@ where
     Ok(res)
 }
 
-/// ⚠️ Performs raw RSA decryption with no padding or error checking.
+/// ⚠️ Performs the raw RSA private-key operation without padding or a CRT fault check.
+///
+/// Implements the integer arithmetic shared by RSADP (RFC8017 §5.1.2) and RSASP1 (§5.2.1).
+/// Checks that `c < n` and that `c` has the modulus's storage precision.
 ///
 /// Returns a plaintext `BoxedUint`. Performs RSA blinding if an `Rng` is passed.
 ///
@@ -301,9 +312,8 @@ where
     M::MontgomeryForm: Pow<M> + PowBoundedExp<M>,
 {
     let mut m = rsa_private_op(c, d, n_params);
-    // `m < n` by construction, so use `from_reduced` to skip the
-    // variable-time reduction `from_value` (→ `rem_vartime`) would do on
-    // BoxedUint and leak `m` via timing.
+    // `m < n` by construction, so `from_reduced` skips the reduction
+    // `from_value` would do.
     let m_sized = m.clone().resize_unchecked(n_params.bits_precision());
     let m_mont = M::MontgomeryForm::from_reduced(m_sized, n_params);
     let check = m_mont.pow_bounded_exp(e, e.bits()).retrieve();
@@ -318,14 +328,15 @@ where
 }
 
 /// Computes `base.pow_mod(exp, n)` with precomputed `n_params`.
+///
+/// Constant-time with respect to `base` and `exp`
 fn pow_mod_params<T, M>(base: &T, exp: &T, n_params: &M) -> T
 where
     T: UnsignedModularInt,
     M: ModulusParams<Modulus = T>,
     M::MontgomeryForm: Pow<M>,
 {
-    let base = reduce_vartime(base, n_params);
-    base.pow(exp).retrieve()
+    to_monty(base, n_params).pow(exp).retrieve()
 }
 
 /// ⚠️ Raw RSA private op with base-blinding: `m = ((c · r^e)^d · r⁻¹) mod n`.
@@ -339,9 +350,8 @@ where
 ///
 /// - **`blinding_r < n`** — the blinding factor must already be
 ///   reduced modulo `n`. The primitive uses `from_reduced` to convert
-///   to Montgomery form and would leak `r`'s value on the
-///   `BoxedMontyForm` backend via `rem_vartime` if we accepted
-///   unreduced input. Callers should sample `r` from `[1, n)` via
+///   to Montgomery form, which performs no reduction and gives wrong
+///   results on unreduced input. Callers should sample `r` from `[1, n)` via
 ///   `crate::traits::modular::TryRandomMod` — see
 ///   [`rsa_private_op_and_check_blinded`].
 /// - **`c < n`** — same reason applied to the (secret) message. The
@@ -370,12 +380,8 @@ where
     M: ModulusParams<Modulus = T> + crate::traits::modular::CtModulusParams,
     M::MontgomeryForm: Pow<M> + PowBoundedExp<M> + InvertCt<M> + MulCt<M>,
 {
-    // `blinding_r < n` and `c < n` are caller preconditions — use
-    // `from_reduced` on both to skip the variable-time `rem_vartime`
-    // that `from_value` (via `reduce_vartime`) would do on the
-    // `BoxedMontyForm` backend. Vartime on `r` in particular would
-    // leak the very value that's meant to *defend* against timing
-    // analysis of `c` and `d`.
+    // `blinding_r < n` and `c < n` are caller preconditions, so
+    // `from_reduced` on both skips the reduction `from_value` would do.
     let r_sized = blinding_r
         .clone()
         .resize_unchecked(n_params.bits_precision());
@@ -454,7 +460,7 @@ where
         };
         // Verify-back integrity check — same shape as
         // `rsa_private_op_and_check`. `m < n` by construction, so
-        // `from_reduced` is safe (skips vartime rem).
+        // `from_reduced` is safe.
         let m_sized = m.clone().resize_unchecked(n_params.bits_precision());
         let m_mont = M::MontgomeryForm::from_reduced(m_sized, n_params);
         let check = m_mont.pow_bounded_exp(e, e.bits()).retrieve();
@@ -473,23 +479,39 @@ where
 
 /// Computes `base.pow_mod(exp, n)` with a bounded exponent and precomputed `n_params`.
 ///
-/// The exponent bit length `exp_bits` may be leaked in the time pattern.
+/// Constant-time with respect to `base`. The exponent bit length `exp_bits` may be leaked in the
+/// time pattern
 fn pow_mod_params_vartime_exp_bits<T, M>(base: &T, exp: &T, exp_bits: u32, n_params: &M) -> T
 where
     T: UnsignedModularInt,
     M: ModulusParams<Modulus = T>,
 {
-    let base = reduce_vartime(base, n_params);
-    base.pow_bounded_exp(exp, exp_bits).retrieve()
+    to_monty(base, n_params)
+        .pow_bounded_exp(exp, exp_bits)
+        .retrieve()
 }
 
-fn reduce_vartime<T, M>(n: &T, p: &M) -> M::MontgomeryForm
+// Converts `x` into Montgomery form modulo `p` in constant time with respect to `x`
+///
+/// This is on the private-key path: `rsa_decrypt_and_check` re-encrypts the unblinded plaintext
+/// to detect CRT faults, and the non-CRT decrypt path feeds the ciphertext through here. A
+/// variable-time remainder at this point leaks information about the plaintext (Marvin attack,
+/// CVE-2023-49092 / RUSTSEC-2023-0071)
+///
+/// Inputs wider than the modulus are passed through unresized, so `from_value` can reduce them
+/// instead of having them truncated.
+fn to_monty<T, M>(x: &T, p: &M) -> M::MontgomeryForm
 where
     T: UnsignedModularInt,
     M: ModulusParams<Modulus = T>,
 {
-    let n_sized = n.clone().resize_unchecked(p.bits_precision());
-    M::MontgomeryForm::from_value(n_sized, p)
+    let bits = p.bits_precision();
+    let x = if x.bits_precision() <= bits {
+        x.clone().resize_unchecked(bits)
+    } else {
+        x.clone()
+    };
+    M::MontgomeryForm::from_value(x, p)
 }
 
 /// The following (deterministic) algorithm also recovers the prime factors `p` and `q` of a modulus `n`, given the
@@ -702,5 +724,48 @@ mod tests {
         }
         assert_eq!(p, p1);
         assert_eq!(q, q1);
+    }
+
+    #[test]
+    fn to_monty_matches_reference_reduction() {
+        use crypto_bigint::{Odd, Resize};
+
+        let n = Odd::new(
+            BoxedUint::from_be_hex(
+                concat!(
+                    "d397b84d98a4c26138ed1b695a8106ead91d553bf06041b62d3fdc50a041e222",
+                    "b8f4529689c1b82c5e71554f5dd69fa2f4b6158cf0dbeb57811a0fc327e1f28e",
+                    "74fe74d3bc166c1eabdc1b8b57b934ca8be5b00b4f29975bcc99acaf415b59bb",
+                    "28a6782bb41a2c3c2976b3c18dbadef62f00c6bb226640095096c0cc60d22fe7",
+                    "ef987d75c6a81b10d96bf292028af110dc7cc1bbc43d22adab379a0cd5d8078c",
+                    "c780ff5cd6209dea34c922cf784f7717e428d75b5aec8ff30e5f0141510766e2",
+                    "e0ab8d473c84e8710b2b98227c3db095337ad3452f19e2b9bfbccdd8148abf67",
+                    "76fa552775e6e75956e45229ae5a9c46949bab1e622f0e48f56524a84ed3483b"
+                ),
+                2048,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let params = BoxedMontyParams::new(n.clone());
+        let nz = n.as_nz_ref();
+
+        let candidates = [
+            BoxedUint::zero_with_precision(2048),
+            BoxedUint::one_with_precision(2048),
+            n.as_ref() - &BoxedUint::one(),
+            n.as_ref().clone(),
+            n.as_ref().wrapping_add(BoxedUint::one()),
+            BoxedUint::max(2048),
+            BoxedUint::from(12345u64),
+            BoxedUint::max(4096),
+            BoxedUint::max(2048)
+                .resize(4096)
+                .wrapping_add(BoxedUint::one()),
+        ];
+        for x in candidates {
+            let expected = x.rem_vartime(nz).resize_unchecked(2048);
+            assert_eq!(to_monty(&x, &params).retrieve(), expected);
+        }
     }
 }

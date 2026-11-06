@@ -90,9 +90,9 @@ where
 /// `decrypt_session_key` for a way of solving this problem.
 #[cfg(feature = "alloc")]
 #[inline]
-pub(crate) fn pkcs1v15_encrypt_unpad(em: Vec<u8>, k: usize) -> Result<Vec<u8>> {
+pub(crate) fn pkcs1v15_encrypt_unpad(em: &[u8], k: usize) -> Result<Vec<u8>> {
     let mut out = vec![0u8; k];
-    let out = pkcs1v15_encrypt_unpad_into(&em, k, &mut out)?;
+    let out = pkcs1v15_encrypt_unpad_into(em, k, &mut out)?;
     Ok(out.to_vec())
 }
 
@@ -119,7 +119,7 @@ pub fn pkcs1v15_encrypt_unpad_into<'a>(
 /// valid then index contains the index of the original message in em.
 #[inline]
 fn decrypt_inner(em: &[u8], k: usize) -> Result<(u8, u32)> {
-    if k < 11 {
+    if k < 11 || em.len() != k {
         return Err(Error::Decryption);
     }
 
@@ -247,7 +247,7 @@ where
     let em_slice = pkcs1v15_sign_pad_into(prefix, hashed, k, em_storage)?;
     let em = T::try_from_be_bytes_vartime(em_slice)?;
     let s = crate::algorithms::rsa::rsa_private_op_and_check(&em, d, e, n_params)?;
-    crate::algorithms::pad::uint_to_zeroizing_be_pad_into(s, k, sig_storage)
+    crate::algorithms::pad::i2osp_zeroizing_into(s, k, sig_storage)
 }
 
 /// ⚠️ Raw PKCS#1 v1.5 sign with RNG-driven base-blinding. Same shape
@@ -296,7 +296,7 @@ where
     let em_slice = pkcs1v15_sign_pad_into(prefix, hashed, k, em_storage)?;
     let em = T::try_from_be_bytes_vartime(em_slice)?;
     let s = crate::algorithms::rsa::rsa_private_op_and_check_blinded(rng, &em, d, e, n_params)?;
-    crate::algorithms::pad::uint_to_zeroizing_be_pad_into(s, k, sig_storage)
+    crate::algorithms::pad::i2osp_zeroizing_into(s, k, sig_storage)
 }
 
 #[inline]

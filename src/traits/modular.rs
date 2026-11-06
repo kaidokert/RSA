@@ -374,11 +374,17 @@ impl IntoMontyForm<BoxedMontyParams> for BoxedMontyForm {
         BoxedMontyForm::new(integer, params)
     }
 
+    /// Constant-time with respect to `integer`.
     fn from_value(integer: BoxedUint, params: &BoxedMontyParams) -> Self {
-        let modulus =
-            CryptoNonZero::new(params.modulus().as_ref().clone()).expect("modulus is non-zero");
-        let reduced = integer.rem_vartime(&modulus);
-        Self::from_reduced(reduced, params)
+        let bits = params.bits_precision();
+        let x = if integer.bits_precision() <= bits {
+            // Montgomery conversion computes REDC(x * R^2 mod N). For any x < R = 2^bits the product
+            // is < R * N, so REDC already yields a fully reduced result and no division is needed
+            CryptoResize::resize_unchecked(integer, bits)
+        } else {
+            CryptoResize::resize_unchecked(integer.rem(params.modulus().as_nz_ref()), bits)
+        };
+        Self::from_reduced(x, params)
     }
 }
 
@@ -511,14 +517,8 @@ pub(crate) mod sealed {
 ///
 /// - Under `feature = "alloc"`, `crypto_bigint::modular::BoxedMontyParams`
 ///   opts in. Its `BoxedMontyForm::pow_bounded_exp` is CT in the
-///   base. **Caveat:** the pre-exponentiation conversion (see
-///   `IntoMontyForm::from_value` for `BoxedMontyForm`) still uses a
-///   vartime reduction (`BoxedUint::rem_vartime`) inherited from
-///   upstream `RustCrypto/RSA`. Callers requiring rigorous CT
-///   guarantees over the whole encrypt chain should use the no-alloc
-///   modmath backend at the `Ct` personality (below). The alloc
-///   impl is included primarily for API-surface compatibility with
-///   upstream and to keep the default alloc encrypt path functional.
+///   base, and so is the pre-exponentiation conversion
+///   (`IntoMontyForm::from_value` for `BoxedMontyForm`).
 /// - Under `feature = "modmath"`, `ModMathParams<T, Ct>` opts in —
 ///   the no-alloc CT-personality substitution, honestly CT top to
 ///   bottom.

@@ -1,117 +1,184 @@
-//! Special handling for converting the BigUint to u8 vectors
+//! Conversion between integers and octet strings.
 
 #[cfg(feature = "alloc")]
 use alloc::vec::Vec;
 #[cfg(feature = "alloc")]
-use crypto_bigint::BoxedUint;
-use zeroize::Zeroizing;
+use crypto_bigint::{BoxedUint, Choice, CtEq};
+use zeroize::{Zeroize, Zeroizing};
 
 use crate::errors::{Error, Result};
 use crate::traits::UnsignedModularInt;
 use core::borrow::Borrow;
 
-/// Returns a new vector of the given length, with 0s left padded.
-#[cfg(test)]
+/// Writes the big-endian encoding of `bytes` into `out`.
+///
+/// The value must fit in `out`: any bytes truncated from the front must be zero.
+/// In release builds, the amount of data copied depends only on the slice lengths.
 #[cfg(feature = "alloc")]
 #[inline]
-fn left_pad(input: &[u8], padded_len: usize) -> Result<Vec<u8>> {
-    let mut out = vec![0u8; padded_len];
-    left_pad_into(input, padded_len, &mut out)?;
-    Ok(out)
+fn be_pad_into(bytes: &[u8], out: &mut [u8]) {
+    let excess = bytes.len().saturating_sub(out.len());
+    debug_assert!(
+        !bytes[..excess]
+            .iter()
+            .fold(Choice::FALSE, |overflow, byte| overflow | !byte.ct_eq(&0u8))
+            .to_bool(),
+        "integer exceeds output width"
+    );
+
+    out.fill(0);
+    let tail = &bytes[excess..];
+    let start = out.len() - tail.len();
+    out[start..].copy_from_slice(tail);
 }
 
+/// Fallible, panic-free form of [`be_pad_into`] for the no-alloc `*_into` functions.
+///
+/// Returns [`Error::InvalidPadLen`] and zeroizes `out` if the value does not fit. Constant-time
+/// with respect to the *value*: the only branches depend on the public lengths. Uses checked
+/// splits and byte-copy loops instead of `split_at` / `copy_from_slice`, so no panic path is
+/// synthesized into the embedded sign binary.
 #[inline]
-pub fn left_pad_into<'a>(
-    input: &[u8],
-    padded_len: usize,
-    storage: &'a mut [u8],
-) -> Result<&'a [u8]> {
-    if input.len() > padded_len {
-        return Err(Error::InvalidPadLen);
-    }
-
-    let start = padded_len - input.len();
-    {
-        // Fallible slicing (`get_mut`/`split_at_mut_checked`) and a
-        // byte-copy loop instead of `[..]` indexing + `copy_from_slice`,
-        // so no `slice_index_fail` / `copy_from_slice` panic path is
-        // synthesized into the (embedded) sign binary. `tail.len()` ==
-        // `padded_len - start` == `input.len()`, so the zip copies all
-        // of `input`.
-        let region = storage
-            .get_mut(..padded_len)
-            .ok_or(Error::OutputBufferTooSmall)?;
-        let (zeros, tail) = region
-            .split_at_mut_checked(start)
-            .ok_or(Error::InvalidPadLen)?;
-        zeros.fill(0);
-        for (dst, src) in tail.iter_mut().zip(input.iter()) {
+fn try_be_pad_into(bytes: &[u8], out: &mut [u8]) -> Result<()> {
+    let padded_len = out.len();
+    if bytes.len() >= padded_len {
+        let (hi, lo) = bytes
+            .split_at_checked(bytes.len() - padded_len)
+            .ok_or(Error::Internal)?;
+        let overflow = hi.iter().fold(0u8, |acc, b| acc | b);
+        for (dst, src) in out.iter_mut().zip(lo) {
+            *dst = *src;
+        }
+        if core::hint::black_box(overflow) != 0 {
+            out.zeroize();
+            return Err(Error::InvalidPadLen);
+        }
+    } else {
+        let (zero, tail) = out
+            .split_at_mut_checked(padded_len - bytes.len())
+            .ok_or(Error::Internal)?;
+        zero.fill(0);
+        for (dst, src) in tail.iter_mut().zip(bytes) {
             *dst = *src;
         }
     }
-    storage.get(..padded_len).ok_or(Error::OutputBufferTooSmall)
+    Ok(())
 }
 
-/// Converts input to the new vector of the given length, using BE and with 0s left padded.
-/// In some cases BoxedUint might already have leading zeroes, this function removes them
-/// before padding again.
+/// Integer-to-Octet-String Primitive (I2OSP) from [RFC8017 §4.1].
+///
+/// Converts `input` to exactly `padded_len` big-endian bytes, left-padded with zeros.
+/// `input` must fit in `padded_len` bytes. This is a caller-established precondition, checked by a
+/// debug assertion. Unlike the general RFC primitive, this internal helper does not return an
+/// "integer too large" error: callers must establish `input < 256^padded_len` before calling it.
+///
+/// Use [`i2osp_zeroizing`] when encoding secret values.
+///
+/// [RFC8017 §4.1]: https://www.rfc-editor.org/rfc/rfc8017.html#section-4.1
 #[cfg(feature = "alloc")]
 #[inline]
-pub(crate) fn uint_to_be_pad(input: BoxedUint, padded_len: usize) -> Result<Vec<u8>> {
+pub(crate) fn i2osp(input: BoxedUint, padded_len: usize) -> Vec<u8> {
     let mut out = vec![0u8; padded_len];
-    uint_to_be_pad_into(input, padded_len, &mut out)?;
-    Ok(out)
+    be_pad_into(&input.to_be_bytes(), &mut out);
+    out
 }
 
+/// Fallible no-alloc form of [`i2osp`]: writes `I2OSP(input, padded_len)` into the first
+/// `padded_len` bytes of `storage`.
 #[inline]
-pub fn uint_to_be_pad_into<T>(input: T, padded_len: usize, storage: &mut [u8]) -> Result<&[u8]>
+pub fn i2osp_into<T>(input: T, padded_len: usize, storage: &mut [u8]) -> Result<&[u8]>
 where
     T: UnsignedModularInt,
 {
-    // Trim to the value's own bytes via its bit length — value-defined,
-    // so it holds for runtime-length carriers where a "leading zeros of
-    // the container" notion would be ambiguous.
-    let used_bytes = (input.bits() as usize).div_ceil(8);
     let bytes = input.to_be_bytes();
-    let borrow: &[u8] = bytes.borrow();
-    let start = borrow
-        .len()
-        .checked_sub(used_bytes)
-        .ok_or(Error::Internal)?;
-    let trimmed = borrow.get(start..).ok_or(Error::Internal)?;
-    left_pad_into(trimmed, padded_len, storage)
-}
-
-/// Converts input to the new vector of the given length, using BE and with 0s left padded.
-/// In some cases BoxedUint might already have leading zeroes, this function removes them
-/// before padding again.
-#[inline]
-#[cfg(feature = "alloc")]
-pub(crate) fn uint_to_zeroizing_be_pad(input: BoxedUint, padded_len: usize) -> Result<Vec<u8>> {
-    let mut out = vec![0u8; padded_len];
-    uint_to_zeroizing_be_pad_into(input, padded_len, &mut out)?;
+    let out = storage
+        .get_mut(..padded_len)
+        .ok_or(Error::OutputBufferTooSmall)?;
+    try_be_pad_into(bytes.borrow(), out)?;
     Ok(out)
 }
 
+/// Computes [`i2osp`] (Integer-to-Octet-String Primitive) with zeroization of the input and output
+/// buffers.
+///
+/// The input integer, temporary byte buffer, and returned vector are each zeroized on drop.
+/// The same input-width precondition as [`i2osp`] applies.
+///
+/// For RSA decryption, this computes `EM = I2OSP(m, k)`, where `padded_len` is `k`, the public
+/// modulus length in octets.
+///
+/// [draft-irtf-cfrg-rsa-guidance-10 §7.2] requires this conversion to be constant-time with respect
+/// to `m`. Serialization and copying in this function depend only on `padded_len` and the input's
+/// storage precision. To satisfy that requirement, callers must ensure that both widths are
+/// independent of `m`'s value.
+///
+/// [draft-irtf-cfrg-rsa-guidance-10 §7.2]: https://www.ietf.org/archive/id/draft-irtf-cfrg-rsa-guidance-10.html#section-7.2
+#[cfg(feature = "alloc")]
 #[inline]
-pub fn uint_to_zeroizing_be_pad_into<T>(
-    input: T,
-    padded_len: usize,
-    storage: &mut [u8],
-) -> Result<&[u8]>
+pub(crate) fn i2osp_zeroizing(input: BoxedUint, padded_len: usize) -> Zeroizing<Vec<u8>> {
+    let input = Zeroizing::new(input);
+    let bytes = Zeroizing::new(input.to_be_bytes());
+    let mut out = Zeroizing::new(vec![0u8; padded_len]);
+    be_pad_into(&bytes, &mut out);
+    out
+}
+
+/// Fallible no-alloc form of [`i2osp_zeroizing`]: as [`i2osp_into`], with the input integer and
+/// temporary byte buffer zeroized on drop.
+#[inline]
+pub fn i2osp_zeroizing_into<T>(input: T, padded_len: usize, storage: &mut [u8]) -> Result<&[u8]>
 where
     T: UnsignedModularInt,
     T::Bytes: zeroize::Zeroize,
 {
-    // Same value-defined trim as `uint_to_be_pad_into`; computed before
-    // `input` moves into the `Zeroizing` wrapper.
-    let used_bytes = (input.bits() as usize).div_ceil(8);
-    let m = Zeroizing::new(input);
-    let m = Zeroizing::new(m.to_be_bytes());
-    let bytes: &[u8] = m.as_ref();
-    let start = bytes.len().checked_sub(used_bytes).ok_or(Error::Internal)?;
-    let trimmed = bytes.get(start..).ok_or(Error::Internal)?;
-    left_pad_into(trimmed, padded_len, storage)
+    let input = Zeroizing::new(input);
+    let bytes = Zeroizing::new(input.to_be_bytes());
+    let out = storage
+        .get_mut(..padded_len)
+        .ok_or(Error::OutputBufferTooSmall)?;
+    try_be_pad_into(bytes.as_ref(), out)?;
+    Ok(out)
+}
+
+/// Octet-String-to-Integer Primitive (OS2IP) from [RFC8017 §4.2].
+///
+/// Interprets `input` as a big-endian nonnegative integer with `bits_precision` bits of storage
+/// precision. `bits_precision` must be a multiple of [`Limb::BITS`]. This is a caller-established
+/// precondition, checked by a debug assertion. Returns an error if `input` exceeds that storage
+/// width, even if the excess bytes are zero.
+///
+/// For RSA operations, use the public modulus's storage precision. Ciphertext length and
+/// representative range checks remain the caller's responsibility.
+///
+/// Use [`os2ip_zeroizing`] when decoding secret values.
+///
+/// [RFC8017 §4.2]: https://www.rfc-editor.org/rfc/rfc8017.html#section-4.2
+#[cfg(feature = "alloc")]
+#[inline]
+pub(crate) fn os2ip(input: &[u8], bits_precision: u32) -> Result<BoxedUint> {
+    debug_assert_eq!(bits_precision % crypto_bigint::Limb::BITS, 0);
+    Ok(BoxedUint::from_be_slice(input, bits_precision)?)
+}
+
+/// Computes [`os2ip`] (Octet-String-to-Integer Primitive) with zeroization of the input and output
+/// buffers.
+///
+/// Takes ownership of the input buffer, which is zeroized on drop, including on error. The
+/// returned integer is also zeroized on drop. The same storage-width precondition and errors as
+/// [`os2ip`] apply.
+///
+/// [draft-irtf-cfrg-rsa-guidance-10 §6.1] requires operations on secret values to be constant-time.
+/// Decoding in this function depends only on `input.len()` and `bits_precision`. To satisfy that
+/// requirement, callers must ensure that both widths are independent of the input's value.
+///
+/// [draft-irtf-cfrg-rsa-guidance-10 §6.1]: https://www.ietf.org/archive/id/draft-irtf-cfrg-rsa-guidance-10.html#section-6.1
+#[cfg(feature = "alloc")]
+#[inline]
+pub(crate) fn os2ip_zeroizing(
+    input: Zeroizing<Vec<u8>>,
+    bits_precision: u32,
+) -> Result<Zeroizing<BoxedUint>> {
+    os2ip(&input, bits_precision).map(Zeroizing::new)
 }
 
 #[cfg(test)]
@@ -119,20 +186,82 @@ where
 mod tests {
     use super::*;
     #[test]
-    fn test_left_pad() {
-        const INPUT_LEN: usize = 3;
-        let input = vec![0u8; INPUT_LEN];
+    fn be_pad() {
+        let x = BoxedUint::from(0x0102u64);
+        let p = i2osp(x.clone(), 16);
+        assert_eq!(&p[..14], &[0u8; 14]);
+        assert_eq!(&p[14..], &[1, 2]);
 
-        // input len < padded len
-        let padded = left_pad(&input, INPUT_LEN + 1).unwrap();
-        assert_eq!(padded.len(), INPUT_LEN + 1);
+        let p = i2osp_zeroizing(x.clone(), 3);
+        assert_eq!(&p[..], &[0, 1, 2]);
 
-        // input len == padded len
-        let padded = left_pad(&input, INPUT_LEN).unwrap();
-        assert_eq!(padded.len(), INPUT_LEN);
+        let p = i2osp(x.clone(), 8);
+        assert_eq!(&p[..], &[0, 0, 0, 0, 0, 0, 1, 2]);
 
-        // input len > padded len
-        let padded = left_pad(&input, INPUT_LEN - 1);
-        assert!(padded.is_err());
+        let p = i2osp(BoxedUint::zero_with_precision(128), 4);
+        assert_eq!(&p[..], &[0u8; 4]);
+    }
+
+    #[test]
+    fn try_be_pad() {
+        let x = BoxedUint::from(0x0102u64);
+        let mut storage = [0xffu8; 16];
+        let p = i2osp_into(x.clone(), 3, &mut storage).unwrap();
+        assert_eq!(p, &[0, 1, 2]);
+
+        let p = i2osp_zeroizing_into(x.clone(), 8, &mut storage).unwrap();
+        assert_eq!(p, &[0, 0, 0, 0, 0, 0, 1, 2]);
+
+        assert_eq!(
+            i2osp_into(x.clone(), 1, &mut storage),
+            Err(Error::InvalidPadLen)
+        );
+        assert_eq!(storage[0], 0);
+        assert_eq!(
+            i2osp_zeroizing_into(x.clone(), 17, &mut storage),
+            Err(Error::OutputBufferTooSmall)
+        );
+    }
+
+    #[cfg(debug_assertions)]
+    #[test]
+    #[should_panic(expected = "integer exceeds output width")]
+    fn be_pad_rejects_broken_precondition() {
+        i2osp_zeroizing(BoxedUint::from(0x0102u64), 1);
+    }
+
+    #[test]
+    fn os2ip_round_trip() {
+        // A 2049-bit modulus uses 257 octets but has a larger, limb-aligned storage precision.
+        let bits_precision = BoxedUint::zero_with_precision(2049).bits_precision();
+        for first_byte in [0, 1, 0xff] {
+            let mut input = vec![0xff; 257];
+            input[0] = first_byte;
+
+            let integer = os2ip(&input, bits_precision).unwrap();
+            assert_eq!(integer.bits_precision(), bits_precision);
+            assert_eq!(i2osp(integer, input.len()), input);
+
+            let integer = os2ip_zeroizing(Zeroizing::new(input.clone()), bits_precision).unwrap();
+            assert_eq!(integer.bits_precision(), bits_precision);
+            let output = i2osp_zeroizing((*integer).clone(), input.len());
+            assert_eq!(*output, input);
+        }
+
+        let zero = os2ip(&[], 128).unwrap();
+        assert_eq!(zero.bits_precision(), 128);
+        assert_eq!(i2osp(zero, 16), [0u8; 16]);
+    }
+
+    #[test]
+    fn os2ip_rejects_oversized_input() {
+        // Leading zeros do not make an encoding fit the requested storage width.
+        let input = vec![0; 17];
+        let expected = crate::errors::Error::Decode(crypto_bigint::DecodeError::InputSize);
+        assert_eq!(os2ip(&input, 128).unwrap_err(), expected);
+        assert_eq!(
+            os2ip_zeroizing(Zeroizing::new(input), 128).unwrap_err(),
+            expected
+        );
     }
 }
