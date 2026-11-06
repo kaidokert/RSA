@@ -8,7 +8,7 @@ use core::ops::RangeInclusive;
 
 #[cfg(feature = "alloc")]
 use crypto_bigint::{BoxedUint, Integer, Odd as CryptoOdd, modular::BoxedMontyParams};
-use rand_core::CryptoRng;
+use rand_core::TryCryptoRng;
 #[cfg(feature = "serde")]
 use {
     serdect::serde::{Deserialize, Serialize, de, ser},
@@ -142,7 +142,7 @@ where
     /// Encrypt the given message.
     #[cfg(feature = "alloc")]
     #[allow(clippy::missing_errors_doc, reason = "TODO")]
-    pub fn encrypt<R: CryptoRng + ?Sized, P: PaddingScheme>(
+    pub fn encrypt<R: TryCryptoRng + ?Sized, P: PaddingScheme>(
         &self,
         rng: &mut R,
         padding: P,

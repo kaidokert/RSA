@@ -12,7 +12,7 @@ use core::marker::PhantomData;
 #[cfg(feature = "alloc")]
 use crypto_bigint::{BoxedUint, modular::BoxedMontyParams};
 use digest::{Digest, FixedOutputReset};
-use rand_core::{CryptoRng, TryCryptoRng};
+use rand_core::TryCryptoRng;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -102,7 +102,11 @@ where
     }
 
     #[cfg(feature = "alloc")]
-    fn encrypt_with_rng<R: CryptoRng + ?Sized>(&self, rng: &mut R, msg: &[u8]) -> Result<Vec<u8>> {
+    fn encrypt_with_rng<R: TryCryptoRng + ?Sized>(
+        &self,
+        rng: &mut R,
+        msg: &[u8],
+    ) -> Result<Vec<u8>> {
         let mut storage = vec![0u8; self.inner.size()];
         let ciphertext = self.encrypt_with_rng_into(rng, msg, &mut storage)?;
         Ok(ciphertext.to_vec())

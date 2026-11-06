@@ -5,7 +5,7 @@ use crate::{Result, RsaPrivateKey};
 use const_oid::AssociatedOid;
 use crypto_bigint::{BoxedUint, modular::BoxedMontyParams};
 use digest::{Digest, FixedOutput, HashMarker, Update};
-use rand_core::{CryptoRng, TryCryptoRng};
+use rand_core::TryCryptoRng;
 use signature::{
     DigestSigner, Keypair, MultipartSigner, RandomizedDigestSigner, RandomizedMultipartSigner,
     RandomizedSigner, Signer, hazmat::PrehashSigner,
@@ -43,7 +43,7 @@ where
     /// Generate a new signing key with a prefix for the digest `D`.
     #[cfg(feature = "keygen")]
     #[allow(clippy::missing_errors_doc, reason = "TODO")]
-    pub fn random<R: CryptoRng + ?Sized>(rng: &mut R, bit_size: usize) -> Result<Self> {
+    pub fn random<R: TryCryptoRng + ?Sized>(rng: &mut R, bit_size: usize) -> Result<Self> {
         Ok(Self::new(RsaPrivateKey::new(rng, bit_size)?))
     }
 }
@@ -55,7 +55,10 @@ where
     /// Generate a new signing key with an empty prefix.
     #[cfg(feature = "keygen")]
     #[allow(clippy::missing_errors_doc, reason = "TODO")]
-    pub fn random_unprefixed<R: CryptoRng + ?Sized>(rng: &mut R, bit_size: usize) -> Result<Self> {
+    pub fn random_unprefixed<R: TryCryptoRng + ?Sized>(
+        rng: &mut R,
+        bit_size: usize,
+    ) -> Result<Self> {
         Ok(Self::new_unprefixed(RsaPrivateKey::new(rng, bit_size)?))
     }
 }
