@@ -23,6 +23,13 @@ use fixed_bigint::HeaplessBigInt;
 
 /// 2048-bit capacity carrier (`u32` limbs × 64) — the RSA deployment shape.
 type H = HeaplessBigInt<u32, 64>;
+#[cfg_attr(
+    not(feature = "pkcs1v15"),
+    allow(
+        dead_code,
+        reason = "only named inside `assert_impl_all!` without pkcs1v15"
+    )
+)]
 type HCt = HeaplessBigInt<u32, 64, Ct>;
 
 // Real 2048-bit RSA keypair fixture.
@@ -97,7 +104,9 @@ fn arithmetic_smoke() {
 
 /// Deterministic infallible RNG for the salt/blinding draw — the
 /// stream only needs to be stable, not cryptographic, for a smoke test.
+#[cfg(feature = "pkcs1v15")]
 use rand::rngs::ChaCha12Rng;
+#[cfg(feature = "pkcs1v15")]
 use rand_core::SeedableRng;
 
 /// A full 2048-bit blinded PKCS#1 v1.5 sign on the runtime-length carrier
@@ -106,6 +115,7 @@ use rand_core::SeedableRng;
 /// exponent and compares), so a passing sign also exercises the verify
 /// math on this carrier.
 #[test]
+#[cfg(feature = "pkcs1v15")]
 fn pkcs1v15_blinded_sign_2048() {
     use rsa::GenericRsaPrivateKey;
     use rsa::modmath_support::public_key_ct_from_be_bytes;
