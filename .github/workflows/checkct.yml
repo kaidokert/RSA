@@ -23,4 +23,4 @@ jobs:
         with:
           directory: .
           timeout: 120
-          checks: control-flow,memory-access
+          checks: control-flow,memory-access,dividend,divisor
