@@ -95,6 +95,10 @@ where
     }
 }
 
+/// Type we use for representing secret prime values.
+#[cfg(feature = "alloc")]
+pub(crate) type SecretPrime = crypto_bigint::modular::MontyParams<BoxedUint>;
+
 /// Generic RSA private key — heapless-compatible value type.
 ///
 /// Holds the public components plus the secret exponent `d` — the raw
@@ -255,13 +259,13 @@ where
     }
 
     #[cfg(feature = "alloc")]
-    fn p_params(&self) -> Option<&Self::MontyParams> {
-        self.precomputed.as_ref().map(|p| &p.p_params)
+    fn p(&self) -> Option<&SecretPrime> {
+        self.precomputed.as_ref().map(|p| &p.p)
     }
 
     #[cfg(feature = "alloc")]
-    fn q_params(&self) -> Option<&Self::MontyParams> {
-        self.precomputed.as_ref().map(|p| &p.q_params)
+    fn q(&self) -> Option<&SecretPrime> {
+        self.precomputed.as_ref().map(|p| &p.q)
     }
 }
 
@@ -346,17 +350,16 @@ where
     T: UnsignedModularInt,
     M: ModulusParams<Modulus = T>,
 {
+    /// Montgomery params for `p`
+    pub(crate) p: SecretPrime,
+    /// Montgomery params for `q`
+    pub(crate) q: SecretPrime,
     /// D mod (P-1)
     pub(crate) dp: T,
     /// D mod (Q-1)
     pub(crate) dq: T,
     /// Q^-1 mod P
     pub(crate) qinv: M::MontgomeryForm,
-
-    /// Montgomery params for `p`
-    pub(crate) p_params: M,
-    /// Montgomery params for `q`
-    pub(crate) q_params: M,
 }
 
 // Manual `Clone` — `#[derive]` wouldn't add the `M::MontgomeryForm: Clone`
@@ -370,11 +373,11 @@ where
 {
     fn clone(&self) -> Self {
         Self {
+            p: self.p.clone(),
+            q: self.q.clone(),
             dp: self.dp.clone(),
             dq: self.dq.clone(),
             qinv: self.qinv.clone(),
-            p_params: self.p_params.clone(),
-            q_params: self.q_params.clone(),
         }
     }
 }
@@ -394,14 +397,12 @@ where
     M: ModulusParams<Modulus = T>,
 {
     fn zeroize(&mut self) {
+        self.p.zeroize();
+        self.q.zeroize();
         self.dp.zeroize();
         self.dq.zeroize();
-        // KNOWN GAP: `qinv`/`p_params`/`q_params` aren't wiped — the trait
-        // doesn't require `Zeroize` and upstream `BoxedMontyForm` /
-        // `BoxedMontyParams` don't impl it yet. Enable when they do:
-        // self.qinv.zeroize();
-        // self.p_params.zeroize();
-        // self.q_params.zeroize();
+        // KNOWN GAP: `qinv` isn't wiped — the trait doesn't require
+        // `Zeroize` on `M::MontgomeryForm`.
     }
 }
 
@@ -896,14 +897,10 @@ impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
         debug_assert_eq!(p_params.bits_precision(), p.bits_precision());
         debug_assert_eq!(q_params.bits_precision(), q.bits_precision());
 
-        self.precomputed = Some(PrecomputedValues {
-            dp,
-            dq,
-            qinv,
-            p_params,
-            q_params,
-        });
-
+        // TODO(tarcieri): zeroize intermediate parameters
+        let p = p_params.as_ref().clone();
+        let q = q_params.as_ref().clone();
+        self.precomputed = Some(PrecomputedValues { p, q, dp, dq, qinv });
         Ok(())
     }
 

@@ -1,6 +1,8 @@
 //! Traits related to the key components
 
 #[cfg(feature = "alloc")]
+use crate::key::SecretPrime;
+#[cfg(feature = "alloc")]
 use alloc::boxed::Box;
 
 use crate::traits::{modular::ModulusParams, NonZero, UnsignedModularInt};
@@ -70,8 +72,8 @@ pub trait PublicKeyParts<T: UnsignedModularInt> {
 /// Components of an RSA private key — generic over the integer /
 /// Montgomery-parameter backend.
 ///
-/// The base surface is `d()`; the CRT accessors (`dp`/`dq`/`qinv`/
-/// `p_params`/`q_params`) are `alloc`-gated and default to `None`, so a
+/// The base surface is `d()`; the CRT accessors (`p`/`q`/`dp`/`dq`/
+/// `qinv`) are `alloc`-gated and default to `None`, so a
 /// key without CRT precompute satisfies the trait with just `d()`.
 pub trait PrivateKeyParts<T>: PublicKeyParts<T>
 where
@@ -85,6 +87,18 @@ where
     #[cfg(feature = "alloc")]
     fn primes(&self) -> &[T] {
         &[]
+    }
+
+    /// Returns prime `p` if precomputed.
+    #[cfg(feature = "alloc")]
+    fn p(&self) -> Option<&SecretPrime> {
+        None
+    }
+
+    /// Returns prime `q` if precomputed.
+    #[cfg(feature = "alloc")]
+    fn q(&self) -> Option<&SecretPrime> {
+        None
     }
 
     /// Returns the precomputed `dp = d mod (p - 1)` value, if available.
@@ -103,18 +117,6 @@ where
     /// Returns the precomputed `qinv = q^-1 mod p` value, if available.
     #[cfg(feature = "alloc")]
     fn qinv(&self) -> Option<&<Self::MontyParams as ModulusParams>::MontgomeryForm> {
-        None
-    }
-
-    /// Returns the Montgomery parameters for `p`, if available.
-    #[cfg(feature = "alloc")]
-    fn p_params(&self) -> Option<&Self::MontyParams> {
-        None
-    }
-
-    /// Returns the Montgomery parameters for `q`, if available.
-    #[cfg(feature = "alloc")]
-    fn q_params(&self) -> Option<&Self::MontyParams> {
         None
     }
 }
