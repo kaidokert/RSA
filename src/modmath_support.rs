@@ -1494,7 +1494,7 @@ mod private_op_tests {
             &mut em_copy,
             Some(salt.len()),
             &mut verify_hash,
-            KEY_BITS,
+            KEY_BITS - 1,
         )
         .unwrap();
     }
@@ -1849,7 +1849,14 @@ mod private_op_tests {
         let mut em_copy = [0u8; K];
         em_copy.copy_from_slice(recovered.as_ref());
         let mut verify_hash = Sha1::new();
-        emsa_pss_verify(&digest, &mut em_copy, Some(0), &mut verify_hash, KEY_BITS).unwrap();
+        emsa_pss_verify(
+            &digest,
+            &mut em_copy,
+            Some(0),
+            &mut verify_hash,
+            KEY_BITS - 1,
+        )
+        .unwrap();
     }
 
     // Exact-width blinded sign round trip on the modmath backend:
@@ -1900,7 +1907,14 @@ mod private_op_tests {
         let mut em_copy = [0u8; K];
         em_copy.copy_from_slice(recovered.as_ref());
         let mut verify_hash = Sha1::new();
-        emsa_pss_verify(&digest, &mut em_copy, Some(0), &mut verify_hash, KEY_BITS).unwrap();
+        emsa_pss_verify(
+            &digest,
+            &mut em_copy,
+            Some(0),
+            &mut verify_hash,
+            KEY_BITS - 1,
+        )
+        .unwrap();
     }
 
     #[test]
@@ -2034,5 +2048,49 @@ mod private_op_tests {
         // Round-trip: accessors return the values we constructed it with.
         assert_eq!(PrivateKeyParts::d(&key), &wrap_value(SmallUCt::from(29u8)));
         assert_eq!(key.as_public().e(), &wrap_value(SmallUCt::from(5u8)));
+    }
+
+    // A 512-bit key with SHA-512 leaves a 64-octet EM, shorter than the 66 octets
+    // `hLen + sLen + 2` needs even with an empty salt. Verification must reject it,
+    // including with salt-length auto-detection, instead of underflowing. The
+    // signature is built so the recovered EM passes the leading-bits and trailer
+    // checks that come first.
+    #[test]
+    fn pss_verify_rejects_em_shorter_than_digest() {
+        mod keys {
+            #![allow(dead_code)]
+            include!("../tests/fixtures/test_keys.rs");
+        }
+        type U512 = FixedUInt<u8, 64>;
+        type U512Ct = FixedUInt<u8, 64, Ct>;
+
+        let mut em = [0u8; 64];
+        em[63] = 0xbc;
+        let signer = public_key_ct_from_be_bytes::<U512Ct>(&keys::N_512_B, 65537).unwrap();
+        let d = wrap_value(U512Ct::from_be_bytes(&keys::D_512_B));
+        let em = wrap_value(U512Ct::from_be_bytes(&em));
+        let sig = crate::algorithms::rsa::rsa_private_op(
+            &em,
+            &d,
+            crate::traits::PublicKeyParts::n_params(&signer),
+        );
+        let sig_bytes = UnsignedModularInt::to_be_bytes(&sig);
+        let sig = wrap_value(U512::from_be_bytes(sig_bytes.as_ref()));
+
+        let key = public_key_from_be_bytes::<U512>(&keys::N_512_B, 65537).unwrap();
+        let digest = [0u8; 64];
+        let mut storage = [0u8; 64];
+        for salt_len in [None, Some(0)] {
+            assert_eq!(
+                crate::pss::verify_digest_into::<sha2::Sha512, _, _>(
+                    &key,
+                    &digest,
+                    &sig,
+                    salt_len,
+                    &mut storage,
+                ),
+                Err(crate::Error::Verification)
+            );
+        }
     }
 }
