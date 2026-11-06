@@ -1,6 +1,8 @@
 use super::{
     GenericSigningKey, GenericVerifyingKey, Signature, VerifyingKey, sign, sign_with_default_rng,
 };
+#[cfg(feature = "keygen")]
+use crate::Generate;
 use crate::{Result, RsaPrivateKey};
 use const_oid::AssociatedOid;
 use crypto_bigint::{BoxedUint, modular::BoxedMontyParams};
@@ -60,6 +62,21 @@ where
         bit_size: usize,
     ) -> Result<Self> {
         Ok(Self::new_unprefixed(RsaPrivateKey::new(rng, bit_size)?))
+    }
+}
+
+/// Generate a key with the default RSA parameters and a prefix for the digest `D`.
+///
+/// See [`RsaPrivateKey::DEFAULT_BITS`] for the default modulus size.
+#[cfg(feature = "keygen")]
+impl<D> Generate for SigningKey<D>
+where
+    D: Digest + AssociatedOid,
+{
+    fn try_generate_from_rng<R: TryCryptoRng + ?Sized>(
+        rng: &mut R,
+    ) -> core::result::Result<Self, R::Error> {
+        RsaPrivateKey::try_generate_from_rng(rng).map(Self::new)
     }
 }
 

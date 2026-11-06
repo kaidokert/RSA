@@ -21,7 +21,9 @@ use {
 };
 
 #[cfg(feature = "keygen")]
-use crate::algorithms::generate::generate_multi_prime_key_with_exp;
+use crate::Generate;
+#[cfg(feature = "keygen")]
+use crate::algorithms::generate::{generate_multi_prime_key_with_exp, generate_prime_with_rng};
 #[cfg(feature = "alloc")]
 use crate::algorithms::rsa::{
     compute_modulus, compute_private_exponent_carmicheal, compute_private_exponent_euler_totient,
@@ -369,6 +371,13 @@ where
 
 #[cfg(feature = "alloc")]
 impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
+    /// Default modulus size in bits used by [`Generate`].
+    ///
+    /// A 3072-bit RSA modulus provides an estimated 128-bit security strength according to
+    /// [NIST SP 800-57 Part 1 Rev. 5, Table 2](https://doi.org/10.6028/NIST.SP.800-57pt1r5).
+    #[cfg(feature = "keygen")]
+    pub const DEFAULT_BITS: usize = 3072;
+
     /// Default exponent for RSA keys.
     const EXP: u64 = 65537;
 
@@ -845,6 +854,31 @@ impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
         digest_in: &[u8],
     ) -> Result<Vec<u8>> {
         padding.sign(Some(rng), self, digest_in)
+    }
+}
+
+#[cfg(feature = "keygen")]
+/// Generate a key with a [`Self::DEFAULT_BITS`]-bit modulus and public exponent 65537.
+impl Generate for RsaPrivateKey {
+    fn try_generate_from_rng<R: TryCryptoRng + ?Sized>(
+        rng: &mut R,
+    ) -> core::result::Result<Self, R::Error> {
+        let Ok(prime_bits) = u32::try_from(Self::DEFAULT_BITS.div_euclid(2)) else {
+            unreachable!("default prime size fits in u32");
+        };
+
+        loop {
+            // Setting the top two bits of both primes ensures a full-size modulus.
+            let p = generate_prime_with_rng(rng, prime_bits)?;
+            let q = generate_prime_with_rng(rng, prime_bits)?;
+
+            match Self::from_primes(vec![p, q], Self::EXP.into()) {
+                Ok(key) => return Ok(key),
+                // Retry if the primes coincide or the public exponent is not invertible.
+                Err(Error::InvalidPrime) => continue,
+                Err(err) => unreachable!("invalid generated RSA key: {err}"),
+            }
+        }
     }
 }
 
