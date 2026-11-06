@@ -51,46 +51,44 @@
 }
 
 # ---------------------------------------------------------------------
-# (2) Leading-zero-trim serialization of the PUBLIC RSA signature.
+# (2) Serialization of the PUBLIC RSA signature.
 #
-# The sign path serializes the signature with `i2osp_zeroizing`,
-# which trims the value's leading zero bytes (`&buf[leading_zeros..]`)
-# then left-pads to the modulus width — variable-time in the signature's
-# leading-zero count. The RSA signature is secret-*derived* but
-# public-by-design (it is what the caller publishes), so this branch
-# leaks nothing: the whole signature, and hence its leading-zero count,
-# is published. Taint can't see through the "now public" declassification
-# because we can't untaint mid-operation without instrumenting the sign.
+# The sign path serializes the signature with `i2osp_zeroizing_into`,
+# which copies the carrier's full-width bytes into the modulus width and
+# branches once on whether any byte above that width is non-zero
+# (`try_be_pad_into`). For a valid signature (`s < n`) those bytes are
+# always zero. The RSA signature is secret-*derived* but public-by-design
+# (it is what the caller publishes), so this branch leaks nothing. Taint
+# can't see through the "now public" declassification because we can't
+# untaint mid-operation without instrumenting the sign.
 #
-# The serialization path (fallible `get`/`get_mut` slicing + byte-copy
-# loops) surfaces in one of two shapes depending on inlining: fully
-# inlined into a fixture (innermost frame = the fixture symbol), or as
-# a shared `left_pad_into` symbol when several fixture widths call it
-# (innermost frame = `left_pad_into`, direct caller = a fixture). The
-# trim's bounds branch is a Cond, the tainted-offset copy a Value8;
-# entries below cover both kinds for both shapes. Every entry requires
-# a sign-fixture frame, so slice indexing anywhere else — in particular
-# inside any crypto primitive, all separate symbols — stays fully
-# checked.
+# The serialization path surfaces in one of two shapes depending on
+# inlining: fully inlined into a fixture (innermost frame = the fixture
+# symbol), or as a shared `try_be_pad_into` symbol when several fixture
+# widths call it (innermost frame = `try_be_pad_into`, direct caller = a
+# fixture). Entries below cover Cond and Value8 for both shapes. Every
+# entry requires a sign-fixture frame, so slice indexing anywhere else —
+# in particular inside any crypto primitive, all separate symbols — stays
+# fully checked.
 {
-   sig-serialize-trim-inlined-cond
+   sig-serialize-inlined-cond
    Memcheck:Cond
    fun:ct_fix__pkcs1v15_blinded_sign*
 }
 {
-   sig-serialize-trim-inlined-value
+   sig-serialize-inlined-value
    Memcheck:Value8
    fun:ct_fix__pkcs1v15_blinded_sign*
 }
 {
-   sig-serialize-trim-left_pad_into-cond
+   sig-serialize-try_be_pad_into-cond
    Memcheck:Cond
-   fun:*left_pad_into*
+   fun:*try_be_pad_into*
    fun:ct_fix__pkcs1v15_blinded_sign*
 }
 {
-   sig-serialize-trim-left_pad_into-value
+   sig-serialize-try_be_pad_into-value
    Memcheck:Value8
-   fun:*left_pad_into*
+   fun:*try_be_pad_into*
    fun:ct_fix__pkcs1v15_blinded_sign*
 }
