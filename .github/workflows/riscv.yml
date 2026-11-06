@@ -17,7 +17,7 @@ jobs:
   riscv:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v7
 
     # riscv-rt 0.13 no longer assembles on Rust 1.99+ (`.cfi_endproc` outside a frame).
     - uses: dtolnay/rust-toolchain@master
