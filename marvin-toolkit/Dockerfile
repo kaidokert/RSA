@@ -19,13 +19,15 @@ RUN git clone https://github.com/tomato42/marvin-toolkit.git "$MARVIN_TOOLKIT" \
 
 RUN mkdir /home/rustcrypto/RSA
 WORKDIR /home/rustcrypto/RSA
-COPY --chown=rustcrypto Cargo.toml Cargo.lock README.md ./
+COPY --chown=rustcrypto Cargo.toml README.md ./
 COPY --chown=rustcrypto src ./src
 COPY --chown=rustcrypto benches ./benches
+COPY --chown=rustcrypto examples ./examples
 COPY --chown=rustcrypto checkct ./checkct
 COPY --chown=rustcrypto marvin-toolkit/Cargo.toml ./marvin-toolkit/
 COPY --chown=rustcrypto marvin-toolkit/src ./marvin-toolkit/src
 COPY --chown=rustcrypto --chmod=755 marvin-toolkit/entrypoint.sh ./marvin-toolkit/entrypoint.sh
-RUN cargo build --release --locked -p rsa-marvin
+# The fork does not track Cargo.lock; resolve one so the run records exact versions.
+RUN cargo generate-lockfile && cargo build --release --locked -p rsa-marvin
 ENV MARVIN_OUTPUT_ROOT=/outputs
 ENTRYPOINT ["/home/rustcrypto/RSA/marvin-toolkit/entrypoint.sh"]

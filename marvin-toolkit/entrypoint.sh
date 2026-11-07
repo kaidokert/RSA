@@ -51,6 +51,8 @@ export PYTHONPATH="$toolkit/tlsfuzzer"
 # Keep numerical libraries from multiplying the requested analysis worker count.
 export OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1
 
+# The fork does not track Cargo.lock; resolve one so the run records exact versions.
+[[ -f "$repo_dir/Cargo.lock" ]] || cargo generate-lockfile --manifest-path "$repo_dir/Cargo.toml"
 cargo build --release --locked --manifest-path "$repo_dir/Cargo.toml" \
   -p rsa-marvin --target-dir "$repo_dir/target"
 # Refuse reuse so a previous report can never be mistaken for this run's result.
