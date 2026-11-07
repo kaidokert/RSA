@@ -89,6 +89,8 @@ where
 
     /// Returns the prime factors as [`Odd`](crypto_bigint::Odd). Returns `&[]` for
     /// keys that don't store factors.
+    ///
+    /// Blinded non-CRT private operations require all factors to compute φ(n).
     #[cfg(feature = "alloc")]
     fn primes(&self) -> &[crypto_bigint::Odd<crypto_bigint::BoxedUint>] {
         &[]

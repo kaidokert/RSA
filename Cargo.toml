@@ -31,8 +31,10 @@ zeroize = { version = "1.8", default-features = false }
 const-oid = { version = "0.10", default-features = false }
 crypto-primes = { version = "0.7", optional = true, default-features = false }
 digest = { version = "0.11", default-features = false, features = ["oid"] }
+hmac = { version = "0.13", default-features = false, features = ["zeroize"] }
 rand_core = { workspace = true }
 rand_chacha = { version = "0.10", default-features = false }
+sha2 = { version = "0.11", default-features = false, features = ["oid", "zeroize"] }
 signature = { version = "3", default-features = false, features = ["digest", "rand_core"] }
 zeroize = { workspace = true }
 ctutils = { version = "0.4", default-features = false }
@@ -44,7 +46,6 @@ pkcs1 = { version = "0.8", optional = true, default-features = false, features =
 pkcs8 = { version = "0.11", optional = true, default-features = false, features = ["alloc", "pem"] }
 serdect = { version = "0.4", optional = true }
 sha1 = { version = "0.11", optional = true, default-features = false, features = ["oid"] }
-sha2 = { version = "0.11", optional = true, default-features = false, features = ["oid"] }
 spki = { version = "0.8", optional = true, default-features = false, features = ["alloc"] }
 serde = { version = "1.0.184", optional = true, default-features = false, features = ["derive"] }
 
@@ -64,7 +65,6 @@ serde_test = "1.0.89"
 rand = { version = "0.10", features = ["chacha"] }
 rand_core = { workspace = true }
 sha1 = { version = "0.11", default-features = false, features = ["oid"] }
-sha2 = { version = "0.11", default-features = false, features = ["oid"] }
 sha3 = { version = "0.12", default-features = false, features = ["oid"] }
 hex = { version = "0.4.3", features = ["serde"] }
 serde_json = "1.0.138"
@@ -97,7 +97,7 @@ name = "rsa_decrypt"
 required-features = ["modmath", "alloc"]
 
 [features]
-default = ["std", "encoding", "modmath", "keygen"]
+default = ["std", "encoding", "modmath", "keygen", "getrandom"]
 encoding = ["alloc", "dep:pkcs1", "dep:pkcs8", "dep:spki"]
 hazmat = []
 getrandom = ["dep:crypto-bigint", "crypto-bigint/getrandom", "crypto-common"]
@@ -118,7 +118,7 @@ modmath = ["dep:modmath", "dep:modmath-cios"]
 ct-cycle-probe = []
 
 [package.metadata.docs.rs]
-features = ["std", "serde", "hazmat", "sha2"]
+features = ["std", "serde", "hazmat"]
 
 [profile.dev]
 opt-level = 2

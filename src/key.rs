@@ -956,13 +956,35 @@ impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
     }
 
     /// Decrypt the given message.
+    ///
+    /// With the `getrandom` feature (enabled by default), uses the operating system RNG for
+    /// RSA blinding. Without this feature, decryption is unblinded; use [`Self::decrypt_blinded`]
+    /// to supply an RNG explicitly.
+    ///
+    /// [`Pkcs1v15Encrypt`][crate::Pkcs1v15Encrypt] uses implicit rejection: invalid padding returns
+    /// deterministic synthetic plaintext, not an error. The enclosing protocol must authenticate
+    /// the returned message.
     pub fn decrypt<P: PaddingScheme>(&self, padding: P, ciphertext: &[u8]) -> Result<Vec<u8>> {
-        padding.decrypt(Option::<&mut DummyRng>::None, self, ciphertext)
+        #[cfg(feature = "getrandom")]
+        {
+            padding.decrypt(
+                Some(&mut crypto_common::getrandom::SysRng),
+                self,
+                ciphertext,
+            )
+        }
+        #[cfg(not(feature = "getrandom"))]
+        {
+            padding.decrypt(Option::<&mut DummyRng>::None, self, ciphertext)
+        }
     }
 
     /// Decrypt the given message.
     ///
     /// Uses `rng` to blind the decryption process.
+    ///
+    /// [`Pkcs1v15Encrypt`][crate::Pkcs1v15Encrypt] has the same implicit-rejection
+    /// behavior as [`Self::decrypt`], independently of the blinding randomness.
     pub fn decrypt_blinded<R: CryptoRng + ?Sized, P: PaddingScheme>(
         &self,
         rng: &mut R,

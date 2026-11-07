@@ -5,6 +5,8 @@
 //! callers implementing RSAEP or RSAVP1 must establish that the input is less than `n`.
 
 #[cfg(feature = "alloc")]
+use super::blinding::{blind_exponent, pow_mod_blinded, totient};
+#[cfg(feature = "alloc")]
 use crypto_bigint::Resize as _;
 #[cfg(feature = "alloc")]
 use crypto_bigint::{
@@ -14,6 +16,8 @@ use crypto_bigint::{
 use crypto_bigint::{NonZero as CryptoNonZero, Odd as CryptoOdd};
 use rand_core::TryCryptoRng;
 use zeroize::Zeroize;
+#[cfg(feature = "alloc")]
+use zeroize::Zeroizing;
 
 #[cfg(not(feature = "alloc"))]
 use crate::traits::keys::PublicKeyParts;
@@ -55,7 +59,9 @@ where
 /// Implements the integer arithmetic shared by RSADP (RFC8017 §5.1.2) and RSASP1 (§5.2.1).
 /// Checks that `c < n` and that `c` has the modulus's storage precision.
 ///
-/// Returns a plaintext `BoxedUint`. Performs RSA blinding if an `Rng` is passed.
+/// Returns a plaintext `BoxedUint`. Performs base, exponent, and CRT modulus blinding if an `Rng`
+/// is passed, using fresh factors for each private operation.
+/// Blinded non-CRT operations require the prime factors in [`PrivateKeyParts::primes`].
 ///
 /// # ☢️️ WARNING: HAZARDOUS API ☢️
 ///
@@ -64,7 +70,7 @@ where
 #[cfg(feature = "alloc")]
 #[inline]
 pub fn rsa_decrypt<R: TryCryptoRng + ?Sized>(
-    rng: Option<&mut R>,
+    mut rng: Option<&mut R>,
     priv_key: &impl PrivateKeyParts<BoxedUint, MontyParams = BoxedMontyParams>,
     c: &BoxedUint,
 ) -> Result<BoxedUint> {
@@ -82,7 +88,7 @@ pub fn rsa_decrypt<R: TryCryptoRng + ?Sized>(
     let mut ir = None;
 
     let n_params = priv_key.n_params();
-    let c = if let Some(rng) = rng {
+    let c = if let Some(rng) = rng.as_deref_mut() {
         let (blinded, unblinder) = blind(rng, priv_key, c, n_params)?;
         ir = Some(unblinder);
         blinded
@@ -107,7 +113,6 @@ pub fn rsa_decrypt<R: TryCryptoRng + ?Sized>(
             if !is_multiprime && primes.len() >= 2 =>
         {
             // We have the precalculated values needed for the CRT.
-
             // precomputed: dP = (1/e) mod (p-1) = d mod (p-1)
             // precomputed: dQ = (1/e) mod (q-1) = d mod (q-1)
 
@@ -115,12 +120,34 @@ pub fn rsa_decrypt<R: TryCryptoRng + ?Sized>(
             let p_params = BoxedMontyParams::from(p.clone());
             let q_params = BoxedMontyParams::from(q.clone());
 
-            // m1 = c^dP mod p
-            let cp = to_monty(&c, &p_params);
-            let mut m1 = cp.pow(dp);
-            // m2 = c^dQ mod q
-            let cq = to_monty(&c, &q_params);
-            let m2 = cq.pow(dq).retrieve();
+            let blinded_exponents = if let Some(rng) = rng.as_deref_mut() {
+                let pm1 = Zeroizing::new(p.modulus().wrapping_sub(BoxedUint::one()));
+                let qm1 = Zeroizing::new(q.modulus().wrapping_sub(BoxedUint::one()));
+                Some((
+                    blind_exponent(rng, dp, &pm1)?,
+                    blind_exponent(rng, dq, &qm1)?,
+                ))
+            } else {
+                None
+            };
+
+            let (dp, dq) = blinded_exponents
+                .as_ref()
+                .map_or((dp, dq), |(dp, dq)| (&**dp, &**dq));
+
+            // Exponentiate modulo independently blinded primes, then reduce both residues back
+            // to the original primes before using the precomputed qInv for CRT recombination.
+            let (mut m1, m2) = if let Some(rng) = rng {
+                (
+                    pow_mod_blinded(rng, &c, dp, &p_params)?,
+                    pow_mod_blinded(rng, &c, dq, &q_params)?.retrieve(),
+                )
+            } else {
+                (
+                    to_monty(&c, &p_params).pow(dp),
+                    to_monty(&c, &q_params).pow(dq).retrieve(),
+                )
+            };
 
             // (m1 - m2) mod p, also supporting custom keys with unequal public widths.
             let m2r = to_monty(&m2, &p_params);
@@ -132,6 +159,7 @@ pub fn rsa_decrypt<R: TryCryptoRng + ?Sized>(
             let h = (qinv * m1).retrieve();
 
             // m = m2 + h.q
+            // With m2 < q and h < p, m < n even when the exponentiations used blinded moduli.
             let m2 = m2.try_resize(n.bits_precision()).ok_or(Error::Internal)?;
             let hq = h
                 .concatenating_mul(primes[1].as_ref())
@@ -141,7 +169,14 @@ pub fn rsa_decrypt<R: TryCryptoRng + ?Sized>(
         }
         _ => {
             // c^d (mod n)
-            pow_mod_params(&c, d, n_params)
+            let blinded_d = if let Some(rng) = rng {
+                let phi = totient(priv_key.primes(), n.bits_precision())?;
+                Some(blind_exponent(rng, d, &phi)?)
+            } else {
+                None
+            };
+
+            pow_mod_params(&c, blinded_d.as_deref().unwrap_or(d), n_params)
         }
     };
 
@@ -157,8 +192,9 @@ pub fn rsa_decrypt<R: TryCryptoRng + ?Sized>(
 
 /// ⚠️ Performs raw RSA decryption with no padding.
 ///
-/// Returns a plaintext `BoxedUint`. Performs RSA blinding if an `Rng` is passed.  This will also
-/// check for errors in the CRT computation.
+/// Returns a plaintext `BoxedUint`. Performs base, exponent, and CRT modulus blinding if an `Rng`
+/// is passed, using fresh factors for each private operation.
+/// Blinded non-CRT operations require the prime factors in [`PrivateKeyParts::primes`].
 ///
 /// `c` must have the same `bits_precision` as the RSA key modulus.
 ///

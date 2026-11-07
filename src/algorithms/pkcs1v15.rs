@@ -9,7 +9,7 @@
 #[cfg(feature = "alloc")]
 use alloc::vec::Vec;
 use const_oid::AssociatedOid;
-use ctutils::{Choice, CtAssign, CtEq, CtSelect};
+use ctutils::CtEq;
 use digest::Digest;
 use rand_core::TryCryptoRng;
 use zeroize::Zeroizing;
@@ -19,6 +19,14 @@ use crate::traits::{
     modular::{ModulusParams, Pow, PowBoundedExp},
     UnsignedModularInt,
 };
+
+#[cfg(feature = "alloc")]
+pub(crate) mod implicit_rejection;
+#[cfg(feature = "alloc")]
+mod selection;
+
+#[cfg(feature = "alloc")]
+pub(crate) use selection::{eme_pkcs1v15_decode, select_message};
 
 /// Fills the provided slice with random values, which are guaranteed
 /// to not be zero.
@@ -79,77 +87,6 @@ where
     em[k - msg.len() - 1] = 0;
     em[k - msg.len()..].copy_from_slice(msg);
     Ok(em)
-}
-
-/// Removes the encryption padding scheme from PKCS#1 v1.5.
-///
-/// Note that whether this function returns an error or not discloses secret
-/// information. If an attacker can cause this function to run repeatedly and
-/// learn whether each instance returned an error then they can decrypt and
-/// forge signatures as if they had the private key. See
-/// `decrypt_session_key` for a way of solving this problem.
-#[cfg(feature = "alloc")]
-#[inline]
-pub(crate) fn pkcs1v15_encrypt_unpad(em: &[u8], k: usize) -> Result<Vec<u8>> {
-    let mut out = vec![0u8; k];
-    let out = pkcs1v15_encrypt_unpad_into(em, k, &mut out)?;
-    Ok(out.to_vec())
-}
-
-#[inline]
-pub fn pkcs1v15_encrypt_unpad_into<'a>(
-    em: &[u8],
-    k: usize,
-    storage: &'a mut [u8],
-) -> Result<&'a [u8]> {
-    let (valid, index) = decrypt_inner(em, k)?;
-    if valid == 0 {
-        return Err(Error::Decryption);
-    }
-
-    let out = storage.get_mut(..k).ok_or(Error::OutputBufferTooSmall)?;
-    out.copy_from_slice(em);
-    Ok(&out[index as usize..])
-}
-
-/// Removes the PKCS1v15 padding It returns one or zero in valid that indicates whether the
-/// plaintext was correctly structured. In either case, the plaintext is
-/// returned in em so that it may be read independently of whether it was valid
-/// in order to maintain constant memory access patterns. If the plaintext was
-/// valid then index contains the index of the original message in em.
-#[inline]
-fn decrypt_inner(em: &[u8], k: usize) -> Result<(u8, u32)> {
-    if k < 11 || em.len() != k {
-        return Err(Error::Decryption);
-    }
-
-    let first_byte_is_zero = em[0].ct_eq(&0u8);
-    let second_byte_is_two = em[1].ct_eq(&2u8);
-
-    // The remainder of the plaintext must be a string of non-zero random
-    // octets, followed by a 0, followed by the message.
-    //   looking_for_index: 1 iff we are still looking for the zero.
-    //   index: the offset of the first zero byte.
-    let mut looking_for_index = Choice::TRUE;
-    let mut index = 0u32;
-
-    for (i, el) in em.iter().enumerate().skip(2) {
-        let equals0 = el.ct_eq(&0u8);
-        index.ct_assign(&(i as u32), looking_for_index & equals0);
-        looking_for_index &= !equals0;
-    }
-
-    // The PS padding must be at least 8 bytes long, and it starts two
-    // bytes into em.
-    // TODO: WARNING: THIS MUST BE CONSTANT TIME CHECK:
-    // Ref: https://github.com/dalek-cryptography/subtle/issues/20
-    // This is currently copy & paste from the constant time impl in
-    // go, but very likely not sufficient.
-    let valid_ps = Choice::from_u8_lsb((((2i32 + 8i32 - index as i32 - 1i32) >> 31) & 1) as u8);
-    let valid = first_byte_is_zero & second_byte_is_two & !looking_for_index & valid_ps;
-    index = u32::ct_select(&0, &(index + 1), valid);
-
-    Ok((valid.to_u8(), index))
 }
 
 #[cfg(feature = "alloc")]

@@ -14,6 +14,8 @@
 
 mod mgf;
 
+#[cfg(feature = "alloc")]
+pub(crate) mod blinding;
 #[cfg(feature = "keygen")]
 pub(crate) mod generate;
 pub(crate) mod oaep;
