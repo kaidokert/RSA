@@ -9,8 +9,6 @@
 //! [Probabilistic Signature Scheme]: https://en.wikipedia.org/wiki/Probabilistic_signature_scheme
 //! [RFC8017 § 8.1]: https://datatracker.ietf.org/doc/html/rfc8017#section-8.1
 
-#[cfg(feature = "alloc")]
-mod blinded_signing_key;
 mod generic_signing_key;
 mod signature;
 #[cfg(feature = "alloc")]
@@ -19,7 +17,7 @@ mod verifying_key;
 
 pub use self::generic_signing_key::GenericSigningKey;
 #[cfg(feature = "alloc")]
-pub use self::{blinded_signing_key::BlindedSigningKey, signing_key::SigningKey};
+pub use self::signing_key::SigningKey;
 
 #[cfg(feature = "alloc")]
 pub use self::{signature::Signature, verifying_key::VerifyingKey};
@@ -50,6 +48,15 @@ use crate::algorithms::rsa::rsa_encrypt;
 use crate::errors::{Error, Result};
 use crate::traits::{PublicKeyParts, SignatureScheme, UnsignedModularInt};
 
+/// DEPRECATED: type alias for legacy blinded signing key. Blinding is now applied automatically
+/// when available.
+#[cfg(feature = "alloc")]
+#[deprecated(
+    since = "0.10.0",
+    note = "use `SigningKey` which is blinded automatically"
+)]
+pub type BlindedSigningKey<D> = SigningKey<D>;
+
 #[cfg(feature = "encoding")]
 use {
     crate::encoding::ID_RSASSA_PSS,
@@ -63,7 +70,8 @@ use {
 
 /// Digital signatures using PSS padding.
 pub struct Pss<D> {
-    /// Create blinded signatures.
+    /// Enable RSA base blinding for the private operation (enabled by default).
+    /// This does not change the RSASSA-PSS signature format.
     pub blinded: bool,
 
     /// Digest type to use.
@@ -98,20 +106,20 @@ where
     #[must_use]
     pub fn new_with_salt(len: usize) -> Self {
         Self {
-            blinded: false,
+            blinded: true,
             digest: D::new(),
             salt_len: Some(len),
         }
     }
 
-    /// New PSS padding for blinded signatures (RSA-BSSA) for the given digest.
+    /// New PSS padding with RSA base blinding for the given digest.
     /// Digest output size is used as a salt length.
     #[must_use]
     pub fn new_blinded() -> Self {
         Self::new_blinded_with_salt(<D as Digest>::output_size())
     }
 
-    /// New PSS padding for blinded signatures (RSA-BSSA) for the given digest
+    /// New PSS padding with RSA base blinding for the given digest
     /// with a salt value of the given length.
     #[must_use]
     pub fn new_blinded_with_salt(len: usize) -> Self {
@@ -395,7 +403,7 @@ where
 
 #[cfg(all(test, feature = "encoding"))]
 mod test {
-    use crate::pss::{BlindedSigningKey, Pss, Signature, SigningKey, VerifyingKey};
+    use crate::pss::{Pss, Signature, SigningKey, VerifyingKey};
     use crate::{RsaPrivateKey, RsaPublicKey};
 
     use crate::traits::PublicKeyParts;
@@ -597,49 +605,11 @@ tAboUGBxTDq3ZroNism3DaMIbKPyYrAqhKov1h5V
 
     #[rstest]
     #[case("test\n")]
-    fn test_sign_and_verify_roundtrip_blinded_signer(#[case] test: &str) {
-        let priv_key = get_private_key();
-
-        let mut rng = ChaCha8Rng::from_seed([42; 32]);
-        let signing_key = BlindedSigningKey::<Sha1>::new(priv_key);
-        let verifying_key = signing_key.verifying_key();
-
-        let sig = signing_key.sign_with_rng(&mut rng, test.as_bytes());
-        verifying_key
-            .verify(test.as_bytes(), &sig)
-            .expect("failed to verify");
-    }
-
-    #[rstest]
-    #[case("test\n")]
     fn test_sign_and_verify_roundtrip_digest_signer(#[case] test: &str) {
         let priv_key = get_private_key();
 
         let mut rng = ChaCha8Rng::from_seed([42; 32]);
         let signing_key = SigningKey::new(priv_key);
-        let verifying_key = signing_key.verifying_key();
-
-        let sig = signing_key
-            .sign_digest_with_rng(&mut rng, |digest: &mut Sha1| digest.update(test.as_bytes()));
-
-        verifying_key
-            .verify_digest(
-                |digest: &mut Sha1| {
-                    digest.update(test.as_bytes());
-                    Ok(())
-                },
-                &sig,
-            )
-            .expect("failed to verify");
-    }
-
-    #[rstest]
-    #[case("test\n")]
-    fn test_sign_and_verify_roundtrip_blinded_digest_signer(#[case] test: &str) {
-        let priv_key = get_private_key();
-
-        let mut rng = ChaCha8Rng::from_seed([42; 32]);
-        let signing_key = BlindedSigningKey::<Sha1>::new(priv_key);
         let verifying_key = signing_key.verifying_key();
 
         let sig = signing_key
@@ -698,24 +668,6 @@ tAboUGBxTDq3ZroNism3DaMIbKPyYrAqhKov1h5V
 
         let mut rng = ChaCha8Rng::from_seed([42; 32]);
         let signing_key = SigningKey::<Sha1>::new(priv_key);
-        let verifying_key = signing_key.verifying_key();
-
-        let sig = signing_key
-            .sign_prehash_with_rng(&mut rng, test)
-            .expect("failed to sign");
-        verifying_key
-            .verify_prehash(test, &sig)
-            .expect("failed to verify");
-    }
-
-    #[rstest]
-    #[case("test\n")]
-    fn test_sign_and_verify_pss_blinded_hazmat(#[case] test: &str) {
-        let priv_key = get_private_key();
-
-        let test = &Sha1::digest(test);
-        let mut rng = ChaCha8Rng::from_seed([42; 32]);
-        let signing_key = BlindedSigningKey::<Sha1>::new(priv_key);
         let verifying_key = signing_key.verifying_key();
 
         let sig = signing_key
@@ -795,10 +747,6 @@ tAboUGBxTDq3ZroNism3DaMIbKPyYrAqhKov1h5V
         // would wrap to 0
         let bad_key = SigningKey::<Sha1>::new_with_salt_len(priv_key.clone(), 256);
         assert!(bad_key.signature_algorithm_identifier().is_err());
-
-        // blinded key uses the same path
-        let bad_blinded = BlindedSigningKey::<Sha1>::new_with_salt_len(priv_key, 256);
-        assert!(bad_blinded.signature_algorithm_identifier().is_err());
     }
 
     /// `signature_algorithm_identifier()` must advertise the configured salt length
@@ -813,29 +761,20 @@ tAboUGBxTDq3ZroNism3DaMIbKPyYrAqhKov1h5V
         let priv_key = get_private_key();
 
         let signing_key = SigningKey::<Sha1>::new_with_salt_len(priv_key.clone(), salt_len);
-        let blinded_signing_key =
-            BlindedSigningKey::<Sha1>::new_with_salt_len(priv_key.clone(), salt_len);
 
-        let algo_ids = [
-            signing_key
-                .signature_algorithm_identifier()
-                .expect("salt_len fits in a u8, so encoding must succeed"),
-            blinded_signing_key
-                .signature_algorithm_identifier()
-                .expect("salt_len fits in a u8, so encoding must succeed"),
-        ];
-        for algo_id in &algo_ids {
-            let params_bytes = algo_id
-                .parameters
-                .as_ref()
-                .expect("RSA-PSS AlgorithmIdentifier carries parameters")
-                .to_der()
-                .expect("parameters are DER-encodable");
-            let pss_params =
-                <pkcs1::RsaPssParamsOwned as spki::der::Decode>::from_der(&params_bytes)
-                    .expect("RSA-PSS parameters are DER-decodable");
-            assert_eq!(pss_params.salt_len as usize, salt_len);
-        }
+        let algo_id = signing_key
+            .signature_algorithm_identifier()
+            .expect("salt_len fits in a u8, so encoding must succeed");
+
+        let params_bytes = algo_id
+            .parameters
+            .as_ref()
+            .expect("RSA-PSS AlgorithmIdentifier carries parameters")
+            .to_der()
+            .expect("parameters are DER-encodable");
+        let pss_params = <pkcs1::RsaPssParamsOwned as spki::der::Decode>::from_der(&params_bytes)
+            .expect("RSA-PSS parameters are DER-decodable");
+        assert_eq!(pss_params.salt_len as usize, salt_len);
     }
 
     #[rstest]
@@ -844,14 +783,9 @@ tAboUGBxTDq3ZroNism3DaMIbKPyYrAqhKov1h5V
     #[case(usize::MAX)]
     fn test_pss_algo_id_salt_len_out_of_range(#[case] salt_len: usize) {
         let priv_key = get_private_key();
-
         let signing_key = SigningKey::<Sha1>::new_with_salt_len(priv_key.clone(), salt_len);
-        let blinded_signing_key = BlindedSigningKey::<Sha1>::new_with_salt_len(priv_key, salt_len);
 
         signing_key
-            .signature_algorithm_identifier()
-            .expect_err("salt_len overflows the u8 in RsaPssParams, so encoding must fail");
-        blinded_signing_key
             .signature_algorithm_identifier()
             .expect_err("salt_len overflows the u8 in RsaPssParams, so encoding must fail");
     }

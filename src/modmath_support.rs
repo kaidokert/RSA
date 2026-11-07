@@ -956,9 +956,10 @@ mod tests {
         let msg = b"hello world!";
 
         let modmath_key = public_key_ct_from_be_bytes::<U512>(&modulus, 3).unwrap();
-        let boxed_key = RsaPublicKey::new(
+        let boxed_key = RsaPublicKey::new_with_size_limits(
             BoxedUint::from_be_slice(&modulus, 512).unwrap(),
             3u64.into(),
+            512..=512,
         )
         .unwrap();
 
