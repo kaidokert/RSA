@@ -26,8 +26,12 @@ jobs:
         targets: riscv32imac-unknown-none-elf
         components: llvm-tools
 
+    # Ubuntu 26.04 (qemu 10) ships RISC-V in its own package; 24.04 has it in -misc.
     - name: Install QEMU
-      run: sudo apt-get update && sudo apt-get install -y qemu-system-misc
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y qemu-system-riscv || sudo apt-get install -y qemu-system-misc
+        command -v qemu-system-riscv32
 
     - name: Install krabi-caliper host tooling
       run: cargo install krabi-caliper --version 0.1.0 --features cli,campaign
