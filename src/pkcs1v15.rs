@@ -74,11 +74,11 @@ use crate::algorithms::rsa::rsa_encrypt;
 #[cfg(feature = "alloc")]
 use crate::algorithms::rsa::{rsa_decrypt_and_check, rsa_encrypt};
 use crate::errors::{Error, Result};
-#[cfg(feature = "alloc")]
-use crate::key::{self, RsaPrivateKey};
 use crate::traits::{
     PaddingScheme, PrivateKeyParts, PublicKeyParts, SignatureScheme, UnsignedModularInt,
 };
+#[cfg(feature = "alloc")]
+use crate::{private_key::RsaPrivateKey, public_key};
 
 /// Encryption using PKCS#1 v1.5 padding. Decryption uses implicit rejection from
 /// [draft-irtf-cfrg-rsa-guidance-10 §7.2].
@@ -341,7 +341,7 @@ fn decrypt<R: TryCryptoRng + ?Sized>(
     priv_key: &RsaPrivateKey,
     ciphertext: &[u8],
 ) -> Result<Vec<u8>> {
-    key::check_public(priv_key)?;
+    public_key::check_public(priv_key)?;
     let k = priv_key.size();
 
     // RFC8017 §7.2.2 and draft-irtf-cfrg-rsa-guidance-10 §7.2, step 1.

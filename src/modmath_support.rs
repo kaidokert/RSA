@@ -20,7 +20,7 @@ use zeroize::Zeroize;
 use crate::{
     algorithms::rsa::rsa_encrypt,
     errors::{Error, Result},
-    key::GenericRsaPublicKey,
+    public_key::GenericRsaPublicKey,
     traits::modular::{
         FixedWidthUnsignedInt, IntegerResize, IntoMontyForm, ModulusParams, NonZero, Odd, Pow,
         PowBoundedExp, TryFromBeBytes, UnsignedModularInt,
@@ -809,8 +809,8 @@ mod tests {
         ModMathForm, ModMathParams, ModMathValue, public_key_ct_from_be_bytes,
         public_key_from_be_bytes,
     };
-    use crate::key::GenericRsaPublicKey;
     use crate::pkcs1v15::{GenericEncryptingKey, GenericSignature, GenericVerifyingKey};
+    use crate::public_key::GenericRsaPublicKey;
     use crate::{BoxedUint, Pkcs1v15Encrypt, RsaPublicKey, traits::RandomizedEncryptor};
 
     type SmallU = FixedUInt<u8, 64>;
@@ -1757,8 +1757,8 @@ mod private_op_tests {
 
     #[test]
     fn pkcs1v15_signing_key_round_trip_2048_sha1() {
-        use crate::key::{GenericRsaPrivateKey, GenericRsaPublicKey};
         use crate::pkcs1v15::{GenericSignature, GenericSigningKey, GenericVerifyingKey};
+        use crate::{private_key::GenericRsaPrivateKey, public_key::GenericRsaPublicKey};
         use digest::Digest;
         use sha1::Sha1;
         use signature::hazmat::PrehashVerifier;
@@ -1796,8 +1796,8 @@ mod private_op_tests {
 
     #[test]
     fn pkcs1v15_signing_key_rejects_wrong_prehash_length() {
-        use crate::key::GenericRsaPrivateKey;
         use crate::pkcs1v15::GenericSigningKey;
+        use crate::private_key::GenericRsaPrivateKey;
         use sha1::Sha1;
 
         type U2048 = FixedUInt<u8, 256, Ct>;
@@ -1821,7 +1821,7 @@ mod private_op_tests {
     #[test]
     fn pss_signing_key_round_trip_2048_sha1() {
         use crate::algorithms::pss::emsa_pss_verify;
-        use crate::key::GenericRsaPrivateKey;
+        use crate::private_key::GenericRsaPrivateKey;
         use crate::pss::GenericSigningKey;
         use digest::Digest;
         use sha1::Sha1;
@@ -1871,7 +1871,7 @@ mod private_op_tests {
     #[test]
     fn pss_signing_key_try_sign_prehash_with_rng_into_round_trip_2048_sha1() {
         use crate::algorithms::pss::emsa_pss_verify;
-        use crate::key::GenericRsaPrivateKey;
+        use crate::private_key::GenericRsaPrivateKey;
         use crate::pss::GenericSigningKey;
         use digest::Digest;
         use rand::rngs::ChaCha8Rng;
@@ -1923,7 +1923,7 @@ mod private_op_tests {
 
     #[test]
     fn pss_signing_key_rejects_wrong_prehash_length() {
-        use crate::key::GenericRsaPrivateKey;
+        use crate::private_key::GenericRsaPrivateKey;
         use crate::pss::GenericSigningKey;
         use sha1::Sha1;
 
@@ -1951,7 +1951,7 @@ mod private_op_tests {
 
     #[test]
     fn pss_signing_key_rejects_salt_len_mismatch() {
-        use crate::key::GenericRsaPrivateKey;
+        use crate::private_key::GenericRsaPrivateKey;
         use crate::pss::GenericSigningKey;
         use sha1::Sha1;
 
@@ -1981,7 +1981,7 @@ mod private_op_tests {
 
     #[test]
     fn pss_signing_key_satisfies_zeroize() {
-        use crate::key::GenericRsaPrivateKey;
+        use crate::private_key::GenericRsaPrivateKey;
         use crate::pss::GenericSigningKey;
         use sha1::Sha1;
         fn assert_zeroize<Z: Zeroize>() {}
@@ -1998,8 +1998,8 @@ mod private_op_tests {
 
     #[test]
     fn pkcs1v15_signing_key_satisfies_zeroize() {
-        use crate::key::GenericRsaPrivateKey;
         use crate::pkcs1v15::GenericSigningKey;
+        use crate::private_key::GenericRsaPrivateKey;
         use sha1::Sha1;
         fn assert_zeroize<Z: Zeroize>() {}
         assert_zeroize::<
@@ -2021,7 +2021,7 @@ mod private_op_tests {
         // satisfies both PublicKeyParts and PrivateKeyParts at the
         // matching (T, M) substitution. The fn-bound dance below is the
         // standard "type-satisfies-trait" check.
-        use crate::key::GenericRsaPrivateKey;
+        use crate::private_key::GenericRsaPrivateKey;
         use crate::traits::keys::{PrivateKeyParts, PublicKeyParts};
         fn assert_pub_parts<K, T>(_: &K)
         where

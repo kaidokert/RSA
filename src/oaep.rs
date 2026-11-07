@@ -36,9 +36,9 @@ use crate::algorithms::rsa::rsa_decrypt_and_check;
 use crate::algorithms::rsa::rsa_encrypt;
 use crate::errors::{Error, Result};
 #[cfg(feature = "alloc")]
-use crate::key::RsaPrivateKey;
+use crate::private_key::RsaPrivateKey;
 #[cfg(feature = "alloc")]
-use crate::key::{self, RsaPublicKey};
+use crate::public_key::{self, RsaPublicKey};
 use crate::traits::{PaddingScheme, PublicKeyParts, UnsignedModularInt};
 
 /// Encryption and Decryption using [OAEP padding](https://datatracker.ietf.org/doc/html/rfc8017#section-7.1).
@@ -243,7 +243,7 @@ where
     D: Digest + FixedOutputReset,
     MGD: Digest + FixedOutputReset,
 {
-    key::check_public(pub_key)?;
+    public_key::check_public(pub_key)?;
 
     let em = oaep_encrypt(rng, msg, digest, mgf_digest, label, pub_key.size())?;
 
@@ -271,7 +271,7 @@ where
     D: Digest,
     MGD: Digest + FixedOutputReset,
 {
-    key::check_public(pub_key)?;
+    public_key::check_public(pub_key)?;
 
     let em = oaep_encrypt_digest::<_, D, MGD>(rng, msg, label, pub_key.size())?;
 
@@ -279,7 +279,7 @@ where
     Ok(i2osp(rsa_encrypt(pub_key, &int)?, pub_key.size()))
 }
 
-/// Does not call `key::check_public` — that validator is `alloc`-only.
+/// Does not call `public_key::check_public` — that validator is `alloc`-only.
 #[allow(clippy::missing_errors_doc, reason = "TODO")]
 pub fn encrypt_digest_into<'a, R, D, MGD, K, T>(
     rng: &mut R,
@@ -366,7 +366,7 @@ where
     D: Digest,
     MGD: Digest + FixedOutputReset,
 {
-    key::check_public(priv_key)?;
+    public_key::check_public(priv_key)?;
 
     if ciphertext.len() != priv_key.size() {
         return Err(Error::Decryption);
@@ -382,10 +382,10 @@ where
 #[cfg(test)]
 #[cfg(feature = "alloc")]
 mod tests {
-    use crate::key::{RsaPrivateKey, RsaPublicKey};
     use crate::oaep::{DecryptingKey, EncryptingKey, Oaep};
     use crate::traits::PublicKeyParts;
     use crate::traits::{Decryptor, RandomizedDecryptor, RandomizedEncryptor};
+    use crate::{private_key::RsaPrivateKey, public_key::RsaPublicKey};
 
     use crypto_bigint::BoxedUint;
     use digest::{Digest, FixedOutputReset};

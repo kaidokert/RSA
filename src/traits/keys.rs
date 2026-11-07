@@ -1,14 +1,14 @@
 //! Traits related to the key components
 
 #[cfg(feature = "alloc")]
-use crate::key::SecretPrime;
+use crate::private_key::SecretPrime;
 #[cfg(feature = "alloc")]
 use alloc::boxed::Box;
 
 use crate::traits::{NonZero, UnsignedModularInt, modular::ModulusParams};
 
 /// Marker trait gating the raw `(public_key, d)` constructor
-/// [`crate::key::GenericRsaPrivateKey::from_public_and_d`]. Backends opt
+/// [`crate::private_key::GenericRsaPrivateKey::from_public_and_d`]. Backends opt
 /// in to building private keys without `primes` or CRT precompute — the
 /// heapless path, where the caller already holds validated `(n, e, d)`.
 ///

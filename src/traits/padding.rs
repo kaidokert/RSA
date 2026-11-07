@@ -7,7 +7,7 @@ use rand_core::TryCryptoRng;
 
 use crate::errors::Result;
 #[cfg(feature = "alloc")]
-use crate::key::RsaPrivateKey;
+use crate::private_key::RsaPrivateKey;
 use crate::traits::modular::CtModulusParams;
 use crate::traits::{PublicKeyParts, UnsignedModularInt};
 
