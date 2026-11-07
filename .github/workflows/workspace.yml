@@ -26,7 +26,7 @@ jobs:
         with:
           toolchain: 1.87.0
           components: clippy
-      - run: cargo clippy -p rsa_heapless -- -D warnings
+      - run: cargo clippy -p rsa_heapless -p rsa-marvin -- -D warnings
 
   fmt:
     runs-on: ubuntu-latest
@@ -37,7 +37,7 @@ jobs:
         with:
           toolchain: stable
           components: rustfmt
-      - run: cargo fmt -p rsa_heapless -- --check
+      - run: cargo fmt -p rsa_heapless -p rsa-marvin -- --check
 
   doc:
     runs-on: ubuntu-latest
