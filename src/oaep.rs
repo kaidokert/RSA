@@ -41,6 +41,87 @@ use crate::private_key::PrivateKey;
 use crate::public_key::{self, PublicKey};
 use crate::traits::{PaddingScheme, PublicKeyParts, UnsignedModularInt};
 
+#[cfg(feature = "getrandom")]
+use crypto_common::getrandom::SysRng;
+
+#[cfg(feature = "alloc")]
+impl PublicKey {
+    /// Encrypt `plaintext` using OAEP and the operating system RNG.
+    ///
+    /// Uses `D` for both OAEP and MGF1, with an empty label. For a different MGF1
+    /// digest or a nonempty label, use [`EncryptingKey`].
+    ///
+    /// # Errors
+    /// Returns an error if the key is invalid, the plaintext is too long, or the RNG fails.
+    #[cfg(feature = "getrandom")]
+    pub fn oaep_encrypt<D>(&self, plaintext: &[u8]) -> Result<Vec<u8>>
+    where
+        D: Digest + FixedOutputReset,
+    {
+        self.oaep_encrypt_with_rng::<D, _>(&mut SysRng, plaintext)
+    }
+
+    /// Encrypt `plaintext` using OAEP and the provided RNG.
+    ///
+    /// Uses `D` for both OAEP and MGF1, with an empty label. For a different MGF1
+    /// digest or a nonempty label, use [`EncryptingKey`].
+    ///
+    /// # Errors
+    /// Returns an error if the key is invalid, the plaintext is too long, or the RNG fails.
+    pub fn oaep_encrypt_with_rng<D, R>(&self, rng: &mut R, plaintext: &[u8]) -> Result<Vec<u8>>
+    where
+        D: Digest + FixedOutputReset,
+        R: TryCryptoRng + ?Sized,
+    {
+        encrypt_digest::<_, D, D>(rng, self, plaintext, None)
+    }
+}
+
+#[cfg(feature = "alloc")]
+impl PrivateKey {
+    /// Decrypt `ciphertext` using OAEP.
+    ///
+    /// Uses `D` for both OAEP and MGF1, with an empty label. For a different MGF1
+    /// digest or a nonempty label, use [`DecryptingKey`].
+    ///
+    /// Uses the operating system RNG for blinding when `getrandom` is enabled.
+    /// Otherwise, this operation is unblinded; use [`Self::oaep_decrypt_with_rng`]
+    /// to provide blinding randomness.
+    ///
+    /// # Errors
+    /// Returns an error if the key or ciphertext is invalid or the private operation
+    /// fails, including RNG failures.
+    pub fn oaep_decrypt<D>(&self, ciphertext: &[u8]) -> Result<Vec<u8>>
+    where
+        D: Digest + FixedOutputReset,
+    {
+        #[cfg(feature = "getrandom")]
+        {
+            self.oaep_decrypt_with_rng::<D, _>(&mut SysRng, ciphertext)
+        }
+        #[cfg(not(feature = "getrandom"))]
+        {
+            decrypt_digest::<crate::dummy_rng::DummyRng, D, D>(None, self, ciphertext, None)
+        }
+    }
+
+    /// Decrypt `ciphertext` using OAEP, using the provided RNG for blinding.
+    ///
+    /// Uses `D` for both OAEP and MGF1, with an empty label. For a different MGF1
+    /// digest or a nonempty label, use [`DecryptingKey`].
+    ///
+    /// # Errors
+    /// Returns an error if the key or ciphertext is invalid or the private operation
+    /// fails, including RNG failures.
+    pub fn oaep_decrypt_with_rng<D, R>(&self, rng: &mut R, ciphertext: &[u8]) -> Result<Vec<u8>>
+    where
+        D: Digest + FixedOutputReset,
+        R: TryCryptoRng + ?Sized,
+    {
+        decrypt_digest::<_, D, D>(Some(rng), self, ciphertext, None)
+    }
+}
+
 /// Encryption and Decryption using [OAEP padding](https://datatracker.ietf.org/doc/html/rfc8017#section-7.1).
 ///
 /// - `digest` is used to hash the label. The maximum possible plaintext length is `m = k - 2 * h_len - 2`,
