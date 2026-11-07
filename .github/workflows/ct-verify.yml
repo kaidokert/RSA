@@ -38,7 +38,7 @@ jobs:
           - riscv32imc-unknown-none-elf
           - riscv32imac-unknown-none-elf
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@master
         with:
           # Pinned so codegen — and the calibrated per-ISA ladder branch
@@ -67,7 +67,7 @@ jobs:
           - thumbv7m-none-eabi
           - riscv32imc-unknown-none-elf
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.87.0

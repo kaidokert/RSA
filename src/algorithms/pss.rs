@@ -17,8 +17,8 @@ use digest::{Digest, FixedOutputReset};
 use super::mgf::{mgf1_xor, mgf1_xor_digest};
 use crate::errors::{Error, Result};
 use crate::traits::{
-    modular::{ModulusParams, Pow, PowBoundedExp},
     UnsignedModularInt,
+    modular::{ModulusParams, Pow, PowBoundedExp},
 };
 
 #[cfg(feature = "alloc")]
@@ -257,7 +257,7 @@ where
     let em_slice = emsa_pss_encode_into(m_hash, em_bits, salt, hash, em_storage)?;
     let em = T::try_from_be_bytes_vartime(em_slice)?;
     let s = crate::algorithms::rsa::rsa_private_op_and_check(&em, d, e, n_params)?;
-    crate::algorithms::pad::uint_to_zeroizing_be_pad_into(s, k, sig_storage)
+    crate::algorithms::pad::i2osp_zeroizing_into(s, k, sig_storage)
 }
 
 /// ⚠️ Raw PSS sign with RNG-driven base-blinding. Same shape and
@@ -318,7 +318,7 @@ where
     let em_slice = emsa_pss_encode_into(m_hash, em_bits, salt, hash, em_storage)?;
     let em = T::try_from_be_bytes_vartime(em_slice)?;
     let s = crate::algorithms::rsa::rsa_private_op_and_check_blinded(rng, &em, d, e, n_params)?;
-    crate::algorithms::pad::uint_to_zeroizing_be_pad_into(s, k, sig_storage)
+    crate::algorithms::pad::i2osp_zeroizing_into(s, k, sig_storage)
 }
 
 fn emsa_pss_verify_pre<'a>(
@@ -338,11 +338,16 @@ fn emsa_pss_verify_pre<'a>(
     }
 
     let em_len = em.len(); //(em_bits + 7) / 8;
-    if let Some(s_len) = s_len {
-        // 3. If emLen < hLen + sLen + 2, output "inconsistent" and stop.
-        if em_len < h_len + s_len + 2 {
-            return Err(Error::Verification);
-        }
+
+    // 3. If `emLen < hLen + sLen + 2`, output "inconsistent" and stop.
+    // Auto-detection still requires room for the digest, separator, and trailer.
+    let min_em_len = h_len
+        .checked_add(s_len.unwrap_or(0))
+        .and_then(|len| len.checked_add(2))
+        .ok_or(Error::Verification)?;
+
+    if em_len < min_em_len {
+        return Err(Error::Verification);
     }
 
     // 4. If the rightmost octet of EM does not have hexadecimal value
@@ -359,6 +364,7 @@ fn emsa_pss_verify_pre<'a>(
     // 6. If the leftmost 8 * em_len - em_bits bits of the leftmost octet in
     //    maskedDB are not all equal to zero, output "inconsistent" and
     //    stop.
+    #[allow(clippy::cast_possible_truncation, reason = "TODO")]
     if db[0]
         & (0xFF_u8
             .checked_shl(8 - (8 * em_len - em_bits) as u32)
@@ -384,6 +390,7 @@ fn emsa_pss_verify_salt(db: &[u8], em_len: usize, s_len: usize, h_len: usize) ->
 
 /// Detect salt length by scanning DB for the 0x01 separator byte.
 /// Returns (s_len, valid) where s_len is 0 on failure.
+#[allow(clippy::cast_possible_truncation, reason = "TODO")]
 fn emsa_pss_get_salt_len(db: &[u8], em_len: usize, h_len: usize) -> (usize, Choice) {
     let em_len = em_len as u32;
     let h_len = h_len as u32;
@@ -424,17 +431,13 @@ pub(crate) fn emsa_pss_verify<D>(
     em: &mut [u8],
     s_len: Option<usize>,
     hash: &mut D,
-    key_bits: usize,
+    em_bits: usize,
 ) -> Result<()>
 where
     D: Digest + FixedOutputReset,
 {
-    let em_bits = key_bits - 1;
     let em_len = em_bits.div_ceil(8);
-    let key_len = key_bits.div_ceil(8);
     let h_len = <D as Digest>::output_size();
-
-    let em = &mut em[key_len - em_len..];
 
     let (db, h) = emsa_pss_verify_pre(m_hash, em, em_bits, s_len, h_len)?;
 
@@ -480,17 +483,13 @@ pub(crate) fn emsa_pss_verify_digest<D>(
     m_hash: &[u8],
     em: &mut [u8],
     s_len: Option<usize>,
-    key_bits: usize,
+    em_bits: usize,
 ) -> Result<()>
 where
     D: Digest + FixedOutputReset,
 {
-    let em_bits = key_bits - 1;
     let em_len = em_bits.div_ceil(8);
-    let key_len = key_bits.div_ceil(8);
     let h_len = <D as Digest>::output_size();
-
-    let em = &mut em[key_len - em_len..];
 
     let (db, h) = emsa_pss_verify_pre(m_hash, em, em_bits, s_len, h_len)?;
 
@@ -531,5 +530,57 @@ where
         Ok(())
     } else {
         Err(Error::Verification)
+    }
+}
+
+#[cfg(test)]
+#[cfg(feature = "alloc")]
+mod tests {
+    use super::*;
+    use sha2::Sha512;
+
+    #[test]
+    fn verify_rejects_short_em() {
+        let digest = Sha512::digest(b"test");
+        for em_len in 0usize..66 {
+            let em_bits = (em_len * 8).saturating_sub(1);
+            for salt_len in [None, Some(0)] {
+                let mut em = vec![0; em_len];
+                if let Some(trailer) = em.last_mut() {
+                    *trailer = 0xbc;
+                }
+                assert_eq!(
+                    emsa_pss_verify(&digest, &mut em, salt_len, &mut Sha512::new(), em_bits),
+                    Err(Error::Verification)
+                );
+                assert_eq!(
+                    emsa_pss_verify_digest::<Sha512>(&digest, &mut em, salt_len, em_bits),
+                    Err(Error::Verification)
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn verify_minimum_em_with_empty_salt() {
+        let digest = Sha512::digest(b"test");
+        let em_bits = 66 * 8 - 1;
+        let em = emsa_pss_encode_digest::<Sha512>(&digest, em_bits, &[]).unwrap();
+        for salt_len in [None, Some(0)] {
+            assert_eq!(
+                emsa_pss_verify(
+                    &digest,
+                    &mut em.clone(),
+                    salt_len,
+                    &mut Sha512::new(),
+                    em_bits
+                ),
+                Ok(())
+            );
+            assert_eq!(
+                emsa_pss_verify_digest::<Sha512>(&digest, &mut em.clone(), salt_len, em_bits),
+                Ok(())
+            );
+        }
     }
 }

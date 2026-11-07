@@ -1,10 +1,13 @@
 //! Generate prime components for the RSA Private Key
 
+#![allow(clippy::integer_division_remainder_used, reason = "TODO")]
+
 use alloc::vec::Vec;
 use crypto_bigint::{BoxedUint, Odd};
 use crypto_primes::{
+    Flavor,
     hazmat::{SetBits, SmallFactorsSieveFactory},
-    is_prime, sieve_and_find, Flavor,
+    is_prime, sieve_and_find,
 };
 use rand_core::CryptoRng;
 
@@ -13,6 +16,7 @@ use crate::{
     errors::{Error, Result},
 };
 
+/// Raw generated components, which must be subsequently validated by the private key constructor.
 pub struct RsaPrivateKeyComponents {
     pub n: Odd<BoxedUint>,
     pub e: BoxedUint,
@@ -41,6 +45,7 @@ pub(crate) fn generate_multi_prime_key_with_exp<R: CryptoRng + ?Sized>(
         return Err(Error::NprimesTooSmall);
     }
 
+    #[allow(clippy::cast_precision_loss, reason = "TODO")]
     if bit_size < 64 {
         let prime_limit = (1u64 << (bit_size / nprimes) as u64) as f64;
 
@@ -64,7 +69,7 @@ pub(crate) fn generate_multi_prime_key_with_exp<R: CryptoRng + ?Sized>(
     let n_final: Odd<BoxedUint>;
     let d_final: BoxedUint;
 
-    'next: loop {
+    loop {
         let mut todo = bit_size;
         // `generate_prime_with_rng` should set the top two bits in each prime.
         // Thus each prime has the form
@@ -81,19 +86,11 @@ pub(crate) fn generate_multi_prime_key_with_exp<R: CryptoRng + ?Sized>(
             todo += (nprimes - 2) / 5;
         }
 
+        #[allow(clippy::cast_possible_truncation, reason = "TODO")]
         for (i, prime) in primes.iter_mut().enumerate() {
             let bits = (todo / (nprimes - i)) as u32;
             *prime = generate_prime_with_rng(rng, bits);
             todo -= prime.bits() as usize;
-        }
-
-        // Makes sure that primes is pairwise unequal.
-        for (i, prime1) in primes.iter().enumerate() {
-            for prime2 in primes.iter().take(i) {
-                if prime1 == prime2 {
-                    continue 'next;
-                }
-            }
         }
 
         let n = compute_modulus(&primes);
@@ -102,7 +99,7 @@ pub(crate) fn generate_multi_prime_key_with_exp<R: CryptoRng + ?Sized>(
             // This should never happen for nprimes == 2 because
             // generate_prime_with_rng should set the top two bits in each prime.
             // For nprimes > 2 we hope it does not happen often.
-            continue 'next;
+            continue;
         }
 
         if let Ok(d) = compute_private_exponent_euler_totient(&primes, &exp) {

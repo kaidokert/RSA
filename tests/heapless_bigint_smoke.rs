@@ -107,10 +107,10 @@ use rand_core::SeedableRng;
 /// math on this carrier.
 #[test]
 fn pkcs1v15_blinded_sign_2048() {
+    use rsa::GenericRsaPrivateKey;
     use rsa::modmath_support::public_key_ct_from_be_bytes;
     use rsa::pkcs1v15::GenericSigningKey;
     use rsa::traits::FixedWidthUnsignedInt;
-    use rsa::GenericRsaPrivateKey;
     use sha2::Sha256;
 
     let pubkey = public_key_ct_from_be_bytes::<HCt>(&N_2048, 65537).unwrap();

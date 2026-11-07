@@ -1,12 +1,14 @@
-use super::{sign, GenericSigningKey, GenericVerifyingKey, Signature, VerifyingKey};
-use crate::{dummy_rng::DummyRng, Result, RsaPrivateKey};
+use super::{
+    GenericSigningKey, GenericVerifyingKey, Signature, VerifyingKey, sign, sign_with_default_rng,
+};
+use crate::{Result, RsaPrivateKey};
 use const_oid::AssociatedOid;
-use crypto_bigint::{modular::BoxedMontyParams, BoxedUint};
+use crypto_bigint::{BoxedUint, modular::BoxedMontyParams};
 use digest::{Digest, FixedOutput, HashMarker, Update};
 use rand_core::{CryptoRng, TryCryptoRng};
 use signature::{
-    hazmat::PrehashSigner, DigestSigner, Keypair, MultipartSigner, RandomizedDigestSigner,
-    RandomizedMultipartSigner, RandomizedSigner, Signer,
+    DigestSigner, Keypair, MultipartSigner, RandomizedDigestSigner, RandomizedMultipartSigner,
+    RandomizedSigner, Signer, hazmat::PrehashSigner,
 };
 use zeroize::ZeroizeOnDrop;
 
@@ -15,17 +17,21 @@ use {
     super::oid,
     pkcs8::{EncodePrivateKey, SecretDocument},
     spki::{
-        der::AnyRef, AlgorithmIdentifierRef, AssociatedAlgorithmIdentifier,
-        SignatureAlgorithmIdentifier,
+        AlgorithmIdentifierRef, AssociatedAlgorithmIdentifier, SignatureAlgorithmIdentifier,
+        der::AnyRef,
     },
 };
 #[cfg(feature = "serde")]
 use {
     pkcs8::DecodePrivateKey,
-    serdect::serde::{de, ser, Deserialize, Serialize},
+    serdect::serde::{Deserialize, Serialize, de, ser},
 };
 
 /// Signing key for `RSASSA-PKCS1-v1_5` signatures as described in [RFC8017 § 8.2].
+///
+/// With the `getrandom` feature (enabled by default), signing uses the operating system RNG for
+/// RSA blinding. Without this feature, use the randomized signing traits to supply an RNG.
+/// Blinding does not change the deterministic signature value.
 ///
 /// [RFC8017 § 8.2]: https://datatracker.ietf.org/doc/html/rfc8017#section-8.2
 pub type SigningKey<D> = GenericSigningKey<D, BoxedUint, BoxedMontyParams>;
@@ -36,6 +42,7 @@ where
 {
     /// Generate a new signing key with a prefix for the digest `D`.
     #[cfg(feature = "keygen")]
+    #[allow(clippy::missing_errors_doc, reason = "TODO")]
     pub fn random<R: CryptoRng + ?Sized>(rng: &mut R, bit_size: usize) -> Result<Self> {
         Ok(Self::new(RsaPrivateKey::new(rng, bit_size)?))
     }
@@ -47,6 +54,7 @@ where
 {
     /// Generate a new signing key with an empty prefix.
     #[cfg(feature = "keygen")]
+    #[allow(clippy::missing_errors_doc, reason = "TODO")]
     pub fn random_unprefixed<R: CryptoRng + ?Sized>(rng: &mut R, bit_size: usize) -> Result<Self> {
         Ok(Self::new_unprefixed(RsaPrivateKey::new(rng, bit_size)?))
     }
@@ -66,9 +74,10 @@ where
     ) -> signature::Result<Signature> {
         let mut digest = D::default();
         f(&mut digest)?;
-        sign::<DummyRng>(None, &self.inner, &self.prefix, &digest.finalize_fixed())?
-            .as_slice()
-            .try_into()
+        Signature::from_bytes_with_max_len(
+            &sign_with_default_rng(&self.inner, &self.prefix, &digest.finalize_fixed())?,
+            usize::MAX,
+        )
     }
 }
 
@@ -77,9 +86,10 @@ where
     D: Digest,
 {
     fn sign_prehash(&self, prehash: &[u8]) -> signature::Result<Signature> {
-        sign::<DummyRng>(None, &self.inner, &self.prefix, prehash)?
-            .as_slice()
-            .try_into()
+        Signature::from_bytes_with_max_len(
+            &sign_with_default_rng(&self.inner, &self.prefix, prehash)?,
+            usize::MAX,
+        )
     }
 }
 
@@ -97,14 +107,15 @@ where
     ) -> signature::Result<Signature> {
         let mut digest = D::default();
         f(&mut digest)?;
-        sign(
-            Some(rng),
-            &self.inner,
-            &self.prefix,
-            &digest.finalize_fixed(),
-        )?
-        .as_slice()
-        .try_into()
+        Signature::from_bytes_with_max_len(
+            &sign(
+                Some(rng),
+                &self.inner,
+                &self.prefix,
+                &digest.finalize_fixed(),
+            )?,
+            usize::MAX,
+        )
     }
 }
 
@@ -132,9 +143,10 @@ where
     ) -> signature::Result<Signature> {
         let mut digest = D::new();
         msg.iter().for_each(|slice| digest.update(slice));
-        sign(Some(rng), &self.inner, &self.prefix, &digest.finalize())?
-            .as_slice()
-            .try_into()
+        Signature::from_bytes_with_max_len(
+            &sign(Some(rng), &self.inner, &self.prefix, &digest.finalize())?,
+            usize::MAX,
+        )
     }
 }
 
@@ -154,9 +166,10 @@ where
     fn try_multipart_sign(&self, msg: &[&[u8]]) -> signature::Result<Signature> {
         let mut digest = D::new();
         msg.iter().for_each(|slice| digest.update(slice));
-        sign::<DummyRng>(None, &self.inner, &self.prefix, &digest.finalize())?
-            .as_slice()
-            .try_into()
+        Signature::from_bytes_with_max_len(
+            &sign_with_default_rng(&self.inner, &self.prefix, &digest.finalize())?,
+            usize::MAX,
+        )
     }
 }
 
@@ -264,7 +277,7 @@ where
 {
     fn serialize<S>(&self, serializer: S) -> core::result::Result<S::Ok, S::Error>
     where
-        S: serdect::serde::Serializer,
+        S: serde::Serializer,
     {
         let der = self.to_pkcs8_der().map_err(ser::Error::custom)?;
         serdect::slice::serialize_hex_lower_or_bin(&der.as_bytes(), serializer)
@@ -278,7 +291,7 @@ where
 {
     fn deserialize<De>(deserializer: De) -> core::result::Result<Self, De::Error>
     where
-        De: serdect::serde::Deserializer<'de>,
+        De: serde::Deserializer<'de>,
     {
         let der_bytes = serdect::slice::deserialize_hex_or_bin_vec(deserializer)?;
         Self::from_pkcs8_der(&der_bytes).map_err(de::Error::custom)
@@ -293,7 +306,7 @@ mod tests {
         use super::*;
         use rand::rngs::ChaCha8Rng;
         use rand_core::SeedableRng;
-        use serde_test::{assert_tokens, Configure, Token};
+        use serde_test::{Configure, Token, assert_tokens};
         use sha2::Sha256;
 
         let mut rng = ChaCha8Rng::from_seed([42; 32]);
