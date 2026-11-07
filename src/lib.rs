@@ -1,4 +1,4 @@
-#![cfg_attr(not(test), no_std)]
+#![no_std]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(not(all(feature = "alloc", feature = "keygen")), allow(unused))]
 #![doc = include_str!("../README.md")]
@@ -181,10 +181,9 @@
 //!
 //! ### Example
 //!
-//! ```
-//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! # #[cfg(all(feature = "encoding", feature = "std"))]
-//! # {
+#![cfg_attr(feature = "encoding", doc = "```")]
+#![cfg_attr(not(feature = "encoding"), doc = "```ignore")]
+//! # fn main() -> Result<(), rsa::Error> {
 //! use rsa::{PublicKey, pkcs1::DecodeRsaPublicKey};
 //!
 //! let pem = "-----BEGIN RSA PUBLIC KEY-----
@@ -197,7 +196,6 @@
 //! -----END RSA PUBLIC KEY-----";
 //!
 //! let public_key = PublicKey::from_pkcs1_pem(pem)?;
-//! # }
 //! # Ok(())
 //! # }
 //! ```
@@ -225,10 +223,9 @@
 //!
 //! ### Example
 //!
-//! ```
-//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! # #[cfg(all(feature = "encoding", feature = "std"))]
-//! # {
+#![cfg_attr(feature = "encoding", doc = "```")]
+#![cfg_attr(not(feature = "encoding"), doc = "```ignore")]
+//! # fn main() -> Result<(), rsa::pkcs8::Error> {
 //! use rsa::{PublicKey, pkcs8::DecodePublicKey};
 //!
 //! let pem = "-----BEGIN PUBLIC KEY-----
@@ -242,7 +239,6 @@
 //! -----END PUBLIC KEY-----";
 //!
 //! let public_key = PublicKey::from_public_key_pem(pem)?;
-//! # }
 //! # Ok(())
 //! # }
 //! ```
