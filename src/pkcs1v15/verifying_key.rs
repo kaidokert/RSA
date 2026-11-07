@@ -4,7 +4,7 @@ use super::{GenericSignature, verify_generic};
 #[cfg(not(feature = "alloc"))]
 use super::{Prefix, pkcs1v15_generate_prefix_helper};
 use crate::{
-    public_key::GenericRsaPublicKey,
+    public_key::GenericPublicKey,
     traits::{PublicKeyParts, UnsignedModularInt, modular::ModulusParams},
 };
 #[cfg(feature = "alloc")]
@@ -17,7 +17,7 @@ use digest::{Digest, FixedOutput, HashMarker, Update};
 use signature::{DigestVerifier, Verifier, hazmat::PrehashVerifier};
 
 #[cfg(all(feature = "alloc", feature = "encoding"))]
-use crate::public_key::RsaPublicKey;
+use crate::public_key::PublicKey;
 #[cfg(feature = "encoding")]
 use {
     super::oid,
@@ -42,7 +42,7 @@ where
     T: UnsignedModularInt,
     M: ModulusParams<Modulus = T>,
 {
-    pub(super) inner: GenericRsaPublicKey<T, M>,
+    pub(super) inner: GenericPublicKey<T, M>,
     #[cfg(feature = "alloc")]
     pub(super) prefix: Vec<u8>,
     #[cfg(not(feature = "alloc"))]
@@ -61,7 +61,7 @@ where
     M: ModulusParams<Modulus = T>,
 {
     /// Create a new verifying key with a prefix for the digest `D`.
-    pub fn new(key: GenericRsaPublicKey<T, M>) -> Self {
+    pub fn new(key: GenericPublicKey<T, M>) -> Self {
         Self {
             inner: key,
             #[cfg(feature = "alloc")]
@@ -84,7 +84,7 @@ where
     /// ## Note: unprefixed signatures are uncommon
     ///
     /// In most cases you'll want to use [`GenericVerifyingKey::new`] instead.
-    pub fn new_unprefixed(key: GenericRsaPublicKey<T, M>) -> Self {
+    pub fn new_unprefixed(key: GenericPublicKey<T, M>) -> Self {
         Self {
             inner: key,
             #[cfg(feature = "alloc")]
@@ -163,13 +163,13 @@ where
 // Other trait impls
 //
 
-impl<D, T, M> AsRef<GenericRsaPublicKey<T, M>> for GenericVerifyingKey<D, T, M>
+impl<D, T, M> AsRef<GenericPublicKey<T, M>> for GenericVerifyingKey<D, T, M>
 where
     D: Digest,
     T: UnsignedModularInt,
     M: ModulusParams<Modulus = T>,
 {
-    fn as_ref(&self) -> &GenericRsaPublicKey<T, M> {
+    fn as_ref(&self) -> &GenericPublicKey<T, M> {
         &self.inner
     }
 }
@@ -212,18 +212,18 @@ where
     }
 }
 
-impl<D, T, M> From<GenericRsaPublicKey<T, M>> for GenericVerifyingKey<D, T, M>
+impl<D, T, M> From<GenericPublicKey<T, M>> for GenericVerifyingKey<D, T, M>
 where
     D: Digest + AssociatedOid,
     T: UnsignedModularInt,
     M: ModulusParams<Modulus = T>,
 {
-    fn from(key: GenericRsaPublicKey<T, M>) -> Self {
+    fn from(key: GenericPublicKey<T, M>) -> Self {
         Self::new(key)
     }
 }
 
-impl<D, T, M> From<GenericVerifyingKey<D, T, M>> for GenericRsaPublicKey<T, M>
+impl<D, T, M> From<GenericVerifyingKey<D, T, M>> for GenericPublicKey<T, M>
 where
     D: Digest,
     T: UnsignedModularInt,
@@ -260,7 +260,7 @@ where
     fn try_from(spki: pkcs8::SubjectPublicKeyInfoRef<'_>) -> spki::Result<Self> {
         spki.algorithm.assert_algorithm_oid(pkcs1::ALGORITHM_OID)?;
 
-        RsaPublicKey::try_from(spki).map(Self::new)
+        PublicKey::try_from(spki).map(Self::new)
     }
 }
 
@@ -316,7 +316,7 @@ mod tests {
         use sha2::Sha256;
 
         let der = include_bytes!("../../tests/examples/pkcs8/rsa2048-pub.der");
-        let pub_key = RsaPublicKey::from_public_key_der(der).unwrap();
+        let pub_key = PublicKey::from_public_key_der(der).unwrap();
         let encoded = include_str!("../../tests/examples/pkcs8/rsa2048-pub.hex").trim();
         let verifying_key = GenericVerifyingKey::<Sha256, _, _>::new(pub_key);
 

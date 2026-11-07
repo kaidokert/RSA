@@ -1,7 +1,7 @@
 use super::{GenericSigningKey, Signature, VerifyingKey, sign_digest};
 #[cfg(feature = "keygen")]
 use crate::Generate;
-use crate::{Result, RsaPrivateKey};
+use crate::{PrivateKey, Result};
 use crypto_bigint::{BoxedUint, modular::BoxedMontyParams};
 use digest::{Digest, FixedOutputReset, Update};
 use rand_core::TryCryptoRng;
@@ -62,7 +62,7 @@ where
         salt_len: usize,
     ) -> Result<Self> {
         Ok(Self::new_with_salt_len(
-            RsaPrivateKey::new(rng, bit_size)?,
+            PrivateKey::new(rng, bit_size)?,
             salt_len,
         ))
     }
@@ -70,7 +70,7 @@ where
 
 /// Generate a key with the default RSA parameters and a salt length equal to the digest output size.
 ///
-/// See [`RsaPrivateKey::DEFAULT_BITS`] for the default modulus size.
+/// See [`PrivateKey::DEFAULT_BITS`] for the default modulus size.
 #[cfg(feature = "keygen")]
 impl<D> Generate for SigningKey<D>
 where
@@ -79,7 +79,7 @@ where
     fn try_generate_from_rng<R: TryCryptoRng + ?Sized>(
         rng: &mut R,
     ) -> core::result::Result<Self, R::Error> {
-        RsaPrivateKey::try_generate_from_rng(rng).map(Self::new)
+        PrivateKey::try_generate_from_rng(rng).map(Self::new)
     }
 }
 
@@ -220,16 +220,16 @@ where
     }
 }
 
-impl<D> From<RsaPrivateKey> for SigningKey<D>
+impl<D> From<PrivateKey> for SigningKey<D>
 where
     D: Digest,
 {
-    fn from(key: RsaPrivateKey) -> Self {
+    fn from(key: PrivateKey) -> Self {
         Self::new(key)
     }
 }
 
-impl<D> From<SigningKey<D>> for RsaPrivateKey
+impl<D> From<SigningKey<D>> for PrivateKey
 where
     D: Digest,
 {
@@ -260,7 +260,7 @@ where
     type Error = pkcs8::Error;
 
     fn try_from(private_key_info: pkcs8::PrivateKeyInfoRef<'_>) -> pkcs8::Result<Self> {
-        RsaPrivateKey::try_from(private_key_info).map(Self::new)
+        PrivateKey::try_from(private_key_info).map(Self::new)
     }
 }
 
@@ -315,7 +315,7 @@ mod tests {
         use sha2::Sha256;
 
         let mut rng = ChaCha8Rng::from_seed([42; 32]);
-        let priv_key = RsaPrivateKey::new_unchecked(&mut rng, 64).expect("failed to generate key");
+        let priv_key = PrivateKey::new_unchecked(&mut rng, 64).expect("failed to generate key");
         let signing_key = SigningKey::<Sha256>::new(priv_key);
 
         let tokens = [Token::Str(concat!(

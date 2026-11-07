@@ -20,7 +20,7 @@ use zeroize::Zeroize;
 use crate::{
     algorithms::rsa::rsa_encrypt,
     errors::{Error, Result},
-    public_key::GenericRsaPublicKey,
+    public_key::GenericPublicKey,
     traits::modular::{
         FixedWidthUnsignedInt, IntegerResize, IntoMontyForm, ModulusParams, NonZero, Odd, Pow,
         PowBoundedExp, TryFromBeBytes, UnsignedModularInt,
@@ -471,7 +471,7 @@ impl<T, P: Personality> ModMathParams<T, P> {
 pub fn public_key_from_be_bytes<T>(
     modulus: &[u8],
     exponent: u32,
-) -> Result<GenericRsaPublicKey<ModMathValue<T>, ModMathParams<T, Nct>>>
+) -> Result<GenericPublicKey<ModMathValue<T>, ModMathParams<T, Nct>>>
 where
     T: ModMathInt + HasPersonality<P = Nct>,
 {
@@ -482,14 +482,14 @@ where
     let e = wrap_value(<T as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(
         &exponent,
     )?);
-    GenericRsaPublicKey::from_components(n, e, ModMathParams::<T, Nct>::new(unwrap_value(&n))?)
+    GenericPublicKey::from_components(n, e, ModMathParams::<T, Nct>::new(unwrap_value(&n))?)
 }
 
 /// Apply the raw RSA public operation to a fixed-width block using the **NCT**
 /// (vartime) Montgomery path. Intended for signature verification.
 #[allow(clippy::missing_errors_doc, reason = "TODO")]
 pub fn rsa_public_op<T>(
-    key: &GenericRsaPublicKey<ModMathValue<T>, ModMathParams<T, Nct>>,
+    key: &GenericPublicKey<ModMathValue<T>, ModMathParams<T, Nct>>,
     input: &[u8],
 ) -> Result<<ModMathValue<T> as UnsignedModularInt>::Bytes>
 where
@@ -509,7 +509,7 @@ where
 pub fn public_key_ct_from_be_bytes<T>(
     modulus: &[u8],
     exponent: u32,
-) -> Result<GenericRsaPublicKey<ModMathValue<T>, ModMathParams<T, Ct>>>
+) -> Result<GenericPublicKey<ModMathValue<T>, ModMathParams<T, Ct>>>
 where
     T: ModMathIntCt + HasPersonality<P = Ct>,
 {
@@ -520,12 +520,12 @@ where
     let e = wrap_value(<T as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(
         &exponent,
     )?);
-    GenericRsaPublicKey::from_components(n, e, ModMathParams::<T, Ct>::new(unwrap_value(&n))?)
+    GenericPublicKey::from_components(n, e, ModMathParams::<T, Ct>::new(unwrap_value(&n))?)
 }
 
 #[allow(clippy::missing_errors_doc, reason = "TODO")]
 pub fn rsa_public_op_ct<T>(
-    key: &GenericRsaPublicKey<ModMathValue<T>, ModMathParams<T, Ct>>,
+    key: &GenericPublicKey<ModMathValue<T>, ModMathParams<T, Ct>>,
     input: &[u8],
 ) -> Result<<ModMathValue<T> as UnsignedModularInt>::Bytes>
 where
@@ -806,8 +806,8 @@ mod tests {
     use {
         super::{ModMathValue, public_key_ct_from_be_bytes, public_key_from_be_bytes},
         crate::pkcs1v15::{GenericEncryptingKey, GenericSignature, GenericVerifyingKey},
-        crate::public_key::GenericRsaPublicKey,
-        crate::{BoxedUint, Pkcs1v15Encrypt, RsaPublicKey, traits::RandomizedEncryptor},
+        crate::public_key::GenericPublicKey,
+        crate::{BoxedUint, Pkcs1v15Encrypt, PublicKey, traits::RandomizedEncryptor},
         rand::rngs::ChaCha8Rng,
         rand_core::SeedableRng,
         sha1::Sha1,
@@ -930,7 +930,7 @@ mod tests {
         // Turbofish the personality: `ModMathParams::new` is ambiguous
         // between the Nct and Ct impl blocks (the `P = Nct` default doesn't
         // fire in inference contexts). Pin Nct explicitly.
-        let key = GenericRsaPublicKey::from_components(
+        let key = GenericPublicKey::from_components(
             ModMathValue::from_inner(n),
             ModMathValue::from_inner(e),
             ModMathParams::<U512, const_num_traits::Nct>::new(n).unwrap(),
@@ -960,7 +960,7 @@ mod tests {
         let msg = b"hello world!";
 
         let modmath_key = public_key_ct_from_be_bytes::<U512>(&modulus, 3).unwrap();
-        let boxed_key = RsaPublicKey::new_with_size_limits(
+        let boxed_key = PublicKey::new_with_size_limits(
             BoxedUint::from_be_slice(&modulus, 512).unwrap(),
             3u64.into(),
             512..=512,
@@ -1514,7 +1514,7 @@ mod private_op_tests {
 
     // Local alias for `rsa_public_op_ct` — keeps the test's call-site short.
     fn public_key_op_ct<T>(
-        key: &GenericRsaPublicKey<ModMathValue<T>, ModMathParams<T, Ct>>,
+        key: &GenericPublicKey<ModMathValue<T>, ModMathParams<T, Ct>>,
         input: &[u8],
     ) -> Result<<ModMathValue<T> as UnsignedModularInt>::Bytes>
     where
@@ -1768,7 +1768,7 @@ mod private_op_tests {
     #[test]
     fn pkcs1v15_signing_key_round_trip_2048_sha1() {
         use crate::pkcs1v15::{GenericSignature, GenericSigningKey, GenericVerifyingKey};
-        use crate::{private_key::GenericRsaPrivateKey, public_key::GenericRsaPublicKey};
+        use crate::{private_key::GenericPrivateKey, public_key::GenericPublicKey};
         use digest::Digest;
         use sha1::Sha1;
         use signature::hazmat::PrehashVerifier;
@@ -1777,12 +1777,12 @@ mod private_op_tests {
         const K: usize = 256;
 
         let public = public_key_ct_from_be_bytes::<U2048>(&N_2048, 65537).unwrap();
-        let public_clone: GenericRsaPublicKey<ModMathValue<U2048>, ModMathParams<U2048, Ct>> =
+        let public_clone: GenericPublicKey<ModMathValue<U2048>, ModMathParams<U2048, Ct>> =
             public.clone();
         let d = wrap_value(
             <U2048 as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(&D_2048).unwrap(),
         );
-        let priv_key = GenericRsaPrivateKey::from_public_and_d(public, d);
+        let priv_key = GenericPrivateKey::from_public_and_d(public, d);
 
         let signing_key = GenericSigningKey::<Sha1, _, _>::new(priv_key);
         let verifying_key = GenericVerifyingKey::<Sha1, _, _>::new(public_clone);
@@ -1808,7 +1808,7 @@ mod private_op_tests {
     #[test]
     fn pkcs1v15_signing_key_rejects_wrong_prehash_length() {
         use crate::pkcs1v15::GenericSigningKey;
-        use crate::private_key::GenericRsaPrivateKey;
+        use crate::private_key::GenericPrivateKey;
         use sha1::Sha1;
 
         type U2048 = FixedUInt<u8, 256, Ct>;
@@ -1818,7 +1818,7 @@ mod private_op_tests {
         let d = wrap_value(
             <U2048 as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(&D_2048).unwrap(),
         );
-        let priv_key = GenericRsaPrivateKey::from_public_and_d(public, d);
+        let priv_key = GenericPrivateKey::from_public_and_d(public, d);
         let signing_key = GenericSigningKey::<Sha1, _, _>::new(priv_key);
 
         let bad_prehash = [0u8; 21]; // SHA-1 outputs 20 bytes, not 21.
@@ -1832,7 +1832,7 @@ mod private_op_tests {
     #[test]
     fn pss_signing_key_round_trip_2048_sha1() {
         use crate::algorithms::pss::emsa_pss_verify;
-        use crate::private_key::GenericRsaPrivateKey;
+        use crate::private_key::GenericPrivateKey;
         use crate::pss::GenericSigningKey;
         use digest::Digest;
         use sha1::Sha1;
@@ -1845,7 +1845,7 @@ mod private_op_tests {
         let d = wrap_value(
             <U2048 as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(&D_2048).unwrap(),
         );
-        let priv_key = GenericRsaPrivateKey::from_public_and_d(key.clone(), d);
+        let priv_key = GenericPrivateKey::from_public_and_d(key.clone(), d);
         // Salt length = 0 → deterministic encoding, easy roundtrip.
         let signing_key = GenericSigningKey::<Sha1, _, _>::new_with_salt_len(priv_key, 0);
 
@@ -1882,7 +1882,7 @@ mod private_op_tests {
     #[test]
     fn pss_signing_key_try_sign_prehash_with_rng_into_round_trip_2048_sha1() {
         use crate::algorithms::pss::emsa_pss_verify;
-        use crate::private_key::GenericRsaPrivateKey;
+        use crate::private_key::GenericPrivateKey;
         use crate::pss::GenericSigningKey;
         use digest::Digest;
         use rand::rngs::ChaCha8Rng;
@@ -1897,7 +1897,7 @@ mod private_op_tests {
         let d = wrap_value(
             <U2048 as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(&D_2048).unwrap(),
         );
-        let priv_key = GenericRsaPrivateKey::from_public_and_d(key.clone(), d);
+        let priv_key = GenericPrivateKey::from_public_and_d(key.clone(), d);
         // Salt length = 0 → deterministic PSS encoding.
         let signing_key = GenericSigningKey::<Sha1, _, _>::new_with_salt_len(priv_key, 0);
 
@@ -1934,7 +1934,7 @@ mod private_op_tests {
 
     #[test]
     fn pss_signing_key_rejects_wrong_prehash_length() {
-        use crate::private_key::GenericRsaPrivateKey;
+        use crate::private_key::GenericPrivateKey;
         use crate::pss::GenericSigningKey;
         use sha1::Sha1;
 
@@ -1945,7 +1945,7 @@ mod private_op_tests {
         let d = wrap_value(
             <U2048 as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(&D_2048).unwrap(),
         );
-        let priv_key = GenericRsaPrivateKey::from_public_and_d(key, d);
+        let priv_key = GenericPrivateKey::from_public_and_d(key, d);
         let signing_key = GenericSigningKey::<Sha1, _, _>::new_with_salt_len(priv_key, 0);
 
         let bad_prehash = [0u8; 21]; // SHA-1 is 20 bytes.
@@ -1962,7 +1962,7 @@ mod private_op_tests {
 
     #[test]
     fn pss_signing_key_rejects_salt_len_mismatch() {
-        use crate::private_key::GenericRsaPrivateKey;
+        use crate::private_key::GenericPrivateKey;
         use crate::pss::GenericSigningKey;
         use sha1::Sha1;
 
@@ -1973,7 +1973,7 @@ mod private_op_tests {
         let d = wrap_value(
             <U2048 as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(&D_2048).unwrap(),
         );
-        let priv_key = GenericRsaPrivateKey::from_public_and_d(key, d);
+        let priv_key = GenericPrivateKey::from_public_and_d(key, d);
         // salt_len configured to 20; supply 16 -> mismatch.
         let signing_key = GenericSigningKey::<Sha1, _, _>::new_with_salt_len(priv_key, 20);
 
@@ -1992,7 +1992,7 @@ mod private_op_tests {
 
     #[test]
     fn pss_signing_key_satisfies_zeroize() {
-        use crate::private_key::GenericRsaPrivateKey;
+        use crate::private_key::GenericPrivateKey;
         use crate::pss::GenericSigningKey;
         use sha1::Sha1;
         fn assert_zeroize<Z: Zeroize>() {}
@@ -2002,7 +2002,7 @@ mod private_op_tests {
 
         let public = public_key_ct_from_be_bytes::<SmallUCt>(&[35u8], 5).unwrap();
         let priv_key =
-            GenericRsaPrivateKey::from_public_and_d(public, wrap_value(SmallUCt::from(29u8)));
+            GenericPrivateKey::from_public_and_d(public, wrap_value(SmallUCt::from(29u8)));
         let mut signing_key = GenericSigningKey::<Sha1, _, _>::new(priv_key);
         signing_key.zeroize();
     }
@@ -2011,7 +2011,7 @@ mod private_op_tests {
     #[test]
     fn pkcs1v15_signing_key_satisfies_zeroize() {
         use crate::pkcs1v15::GenericSigningKey;
-        use crate::private_key::GenericRsaPrivateKey;
+        use crate::private_key::GenericPrivateKey;
         use sha1::Sha1;
         fn assert_zeroize<Z: Zeroize>() {}
         assert_zeroize::<
@@ -2022,18 +2022,18 @@ mod private_op_tests {
         // delegation compiles end-to-end.
         let public = public_key_ct_from_be_bytes::<SmallUCt>(&[35u8], 5).unwrap();
         let priv_key =
-            GenericRsaPrivateKey::from_public_and_d(public, wrap_value(SmallUCt::from(29u8)));
+            GenericPrivateKey::from_public_and_d(public, wrap_value(SmallUCt::from(29u8)));
         let mut signing_key = GenericSigningKey::<Sha1, _, _>::new(priv_key);
         signing_key.zeroize();
     }
 
     #[test]
     fn generic_rsa_private_key_satisfies_traits() {
-        // Compile-time assertion: GenericRsaPrivateKey<SmallUCt, ModMathParams<SmallUCt, Ct>>
+        // Compile-time assertion: GenericPrivateKey<SmallUCt, ModMathParams<SmallUCt, Ct>>
         // satisfies both PublicKeyParts and PrivateKeyParts at the
         // matching (T, M) substitution. The fn-bound dance below is the
         // standard "type-satisfies-trait" check.
-        use crate::private_key::GenericRsaPrivateKey;
+        use crate::private_key::GenericPrivateKey;
         use crate::traits::keys::{PrivateKeyParts, PublicKeyParts};
         fn assert_pub_parts<K, T>(_: &K)
         where
@@ -2051,7 +2051,7 @@ mod private_op_tests {
         // Use the existing public-key constructor for the pubkey side,
         // then attach a dummy d.
         let public = public_key_ct_from_be_bytes::<SmallUCt>(&[35u8], 5).unwrap();
-        let key = GenericRsaPrivateKey::from_public_and_d(public, wrap_value(SmallUCt::from(29u8)));
+        let key = GenericPrivateKey::from_public_and_d(public, wrap_value(SmallUCt::from(29u8)));
 
         assert_pub_parts::<_, ModMathValue<SmallUCt>>(&key);
         assert_priv_parts::<_, ModMathValue<SmallUCt>>(&key);

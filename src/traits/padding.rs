@@ -7,7 +7,7 @@ use rand_core::TryCryptoRng;
 
 use crate::errors::Result;
 #[cfg(feature = "alloc")]
-use crate::private_key::RsaPrivateKey;
+use crate::private_key::PrivateKey;
 use crate::traits::modular::CtModulusParams;
 use crate::traits::{PublicKeyParts, UnsignedModularInt};
 
@@ -22,7 +22,7 @@ pub trait PaddingScheme {
     fn decrypt<Rng: TryCryptoRng + ?Sized>(
         self,
         rng: Option<&mut Rng>,
-        priv_key: &RsaPrivateKey,
+        priv_key: &PrivateKey,
         ciphertext: &[u8],
     ) -> Result<Vec<u8>>;
 
@@ -45,7 +45,7 @@ pub trait SignatureScheme {
     fn sign<Rng: TryCryptoRng + ?Sized>(
         self,
         rng: Option<&mut Rng>,
-        priv_key: &RsaPrivateKey,
+        priv_key: &PrivateKey,
         hashed: &[u8],
     ) -> Result<Vec<u8>>;
 

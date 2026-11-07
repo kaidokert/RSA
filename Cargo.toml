@@ -108,7 +108,7 @@ pkcs5 = ["pkcs8/encryption"]
 std = ["alloc", "pkcs1?/std", "pkcs8?/std"]
 alloc = ["dep:crypto-bigint", "crypto-bigint/alloc", "pkcs8/alloc", "spki/alloc", "digest/alloc", "signature/alloc", "zeroize/alloc"]
 
-# On-device key generation (`RsaPrivateKey::new` and friends). Pulls the
+# On-device key generation (`PrivateKey::new` and friends). Pulls the
 # heavy `crypto-primes` stack; never available on the no-alloc path —
 # heapless targets get keys from a provisioning path (PEM/HSM/firmware
 # constants), not generated on-device.

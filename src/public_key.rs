@@ -17,7 +17,7 @@ use {
 
 use crate::errors::{Error, Result};
 #[cfg(feature = "alloc")]
-use crate::private_key::RsaPrivateKey;
+use crate::private_key::PrivateKey;
 use crate::traits::keys::PublicKeyParts;
 use crate::traits::{
     NonZero, PaddingScheme, SignatureScheme, UnsignedModularInt, modular::ModulusParams,
@@ -25,7 +25,7 @@ use crate::traits::{
 
 /// Represents the public part of an RSA key.
 #[derive(Debug, Clone)]
-pub struct GenericRsaPublicKey<T, M>
+pub struct GenericPublicKey<T, M>
 where
     T: UnsignedModularInt,
     M: ModulusParams<Modulus = T>,
@@ -42,36 +42,36 @@ where
 }
 
 /// Boxed RSA public key alias used by the `alloc` code path. Equivalent to
-/// `GenericRsaPublicKey<BoxedUint, BoxedMontyParams>`.
+/// `GenericPublicKey<BoxedUint, BoxedMontyParams>`.
 #[cfg(feature = "alloc")]
-pub type RsaPublicKey = GenericRsaPublicKey<BoxedUint, BoxedMontyParams>;
+pub type PublicKey = GenericPublicKey<BoxedUint, BoxedMontyParams>;
 
-impl<T, M> Eq for GenericRsaPublicKey<T, M>
+impl<T, M> Eq for GenericPublicKey<T, M>
 where
     T: UnsignedModularInt + Eq,
     M: ModulusParams<Modulus = T>,
 {
 }
 
-impl<T, M> PartialEq for GenericRsaPublicKey<T, M>
+impl<T, M> PartialEq for GenericPublicKey<T, M>
 where
     T: UnsignedModularInt + PartialEq,
     M: ModulusParams<Modulus = T>,
 {
     #[inline]
-    fn eq(&self, other: &GenericRsaPublicKey<T, M>) -> bool {
+    fn eq(&self, other: &GenericPublicKey<T, M>) -> bool {
         self.n == other.n && self.e == other.e
     }
 }
 
-impl<T, M> Hash for GenericRsaPublicKey<T, M>
+impl<T, M> Hash for GenericPublicKey<T, M>
 where
     T: UnsignedModularInt,
     M: ModulusParams<Modulus = T>,
 {
     fn hash<H: Hasher>(&self, state: &mut H) {
         // Domain separator for RSA private keys
-        state.write(b"RsaPublicKey");
+        state.write(b"PublicKey");
         // TODO(tarcieri): to match the `PartialEq` impl we should strip leading zeros
         state.write(self.n.as_ref().to_be_bytes().as_ref());
         state.write(self.e.to_be_bytes().as_ref());
@@ -79,18 +79,18 @@ where
 }
 
 #[cfg(feature = "alloc")]
-impl From<RsaPrivateKey> for GenericRsaPublicKey<BoxedUint, BoxedMontyParams> {
-    fn from(private_key: RsaPrivateKey) -> Self {
+impl From<PrivateKey> for GenericPublicKey<BoxedUint, BoxedMontyParams> {
+    fn from(private_key: PrivateKey) -> Self {
         (&private_key).into()
     }
 }
 
 #[cfg(feature = "alloc")]
-impl From<&RsaPrivateKey> for GenericRsaPublicKey<BoxedUint, BoxedMontyParams> {
-    fn from(private_key: &RsaPrivateKey) -> Self {
+impl From<&PrivateKey> for GenericPublicKey<BoxedUint, BoxedMontyParams> {
+    fn from(private_key: &PrivateKey) -> Self {
         let public_key: &dyn PublicKeyParts<BoxedUint, MontyParams = BoxedMontyParams> =
             private_key;
-        GenericRsaPublicKey {
+        GenericPublicKey {
             n: public_key.n().clone(),
             e: public_key.e().clone(),
             n_params: public_key.n_params().clone(),
@@ -98,7 +98,7 @@ impl From<&RsaPrivateKey> for GenericRsaPublicKey<BoxedUint, BoxedMontyParams> {
     }
 }
 
-impl<T, M> PublicKeyParts<T> for GenericRsaPublicKey<T, M>
+impl<T, M> PublicKeyParts<T> for GenericPublicKey<T, M>
 where
     T: UnsignedModularInt,
     M: ModulusParams<Modulus = T>,
@@ -118,7 +118,7 @@ where
     }
 }
 
-impl<T, M> GenericRsaPublicKey<T, M>
+impl<T, M> GenericPublicKey<T, M>
 where
     T: UnsignedModularInt,
     M: ModulusParams<Modulus = T>,
@@ -134,7 +134,7 @@ where
     }
 }
 
-impl<T, M> GenericRsaPublicKey<T, M>
+impl<T, M> GenericPublicKey<T, M>
 where
     T: UnsignedModularInt,
     M: ModulusParams<Modulus = T>,
@@ -167,7 +167,7 @@ where
 }
 
 #[cfg(feature = "alloc")]
-impl GenericRsaPublicKey<BoxedUint, BoxedMontyParams> {
+impl GenericPublicKey<BoxedUint, BoxedMontyParams> {
     /// Minimum value of the public exponent `e`.
     pub const MIN_PUB_EXPONENT: u64 = 2;
 
@@ -185,8 +185,8 @@ impl GenericRsaPublicKey<BoxedUint, BoxedMontyParams> {
     /// If for some reason you have a legitimate reason to use keys with public exponents larger
     /// than this value, use the special APIs:
     ///
-    /// - [`RsaPublicKey::new_unchecked`]
-    /// - [`RsaPrivateKey::from_components_with_large_exponent`]
+    /// - [`PublicKey::new_unchecked`]
+    /// - [`PrivateKey::from_components_with_large_exponent`]
     pub const MAX_PUB_EXPONENT: u64 = (1 << 33) - 1;
 
     /// Default minimum size of the modulus `n` in bits.
@@ -251,8 +251,8 @@ impl GenericRsaPublicKey<BoxedUint, BoxedMontyParams> {
     /// exponent size.
     ///
     /// This method is not recommended, and only intended for unusual use cases.
-    /// Most applications should use [`RsaPublicKey::new`] or
-    /// [`RsaPublicKey::new_with_size_limits`] instead.
+    /// Most applications should use [`PublicKey::new`] or
+    /// [`PublicKey::new_with_size_limits`] instead.
     ///
     /// # Panics
     ///
@@ -268,7 +268,7 @@ impl GenericRsaPublicKey<BoxedUint, BoxedMontyParams> {
 }
 
 #[cfg(feature = "serde")]
-impl Serialize for RsaPublicKey {
+impl Serialize for PublicKey {
     fn serialize<S>(&self, serializer: S) -> core::prelude::v1::Result<S::Ok, S::Error>
     where
         S: serde::Serializer,
@@ -279,7 +279,7 @@ impl Serialize for RsaPublicKey {
 }
 
 #[cfg(feature = "serde")]
-impl<'de> Deserialize<'de> for RsaPublicKey {
+impl<'de> Deserialize<'de> for PublicKey {
     fn deserialize<D>(deserializer: D) -> core::prelude::v1::Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
@@ -308,11 +308,11 @@ fn check_public_with_max_size(n: &BoxedUint, e: &BoxedUint, max_size: Option<usi
 
     check_public_skip_exponent_size(n, e)?;
 
-    if e < &BoxedUint::from(RsaPublicKey::MIN_PUB_EXPONENT) {
+    if e < &BoxedUint::from(PublicKey::MIN_PUB_EXPONENT) {
         return Err(Error::PublicExponentTooSmall);
     }
 
-    if e > &BoxedUint::from(RsaPublicKey::MAX_PUB_EXPONENT) {
+    if e > &BoxedUint::from(PublicKey::MAX_PUB_EXPONENT) {
         return Err(Error::PublicExponentTooLarge);
     }
 

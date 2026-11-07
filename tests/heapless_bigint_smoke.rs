@@ -117,7 +117,7 @@ use rand_core::SeedableRng;
 #[test]
 #[cfg(feature = "pkcs1v15")]
 fn pkcs1v15_blinded_sign_2048() {
-    use rsa::GenericRsaPrivateKey;
+    use rsa::GenericPrivateKey;
     use rsa::modmath_support::public_key_ct_from_be_bytes;
     use rsa::pkcs1v15::GenericSigningKey;
     use rsa::traits::FixedWidthUnsignedInt;
@@ -128,7 +128,7 @@ fn pkcs1v15_blinded_sign_2048() {
     // identity under no-alloc — no cfg-gate needed at the call site.
     let d = rsa::modmath_support::wrap(HCt::try_from_be_bytes_vartime(&D_2048).unwrap());
     let signing_key =
-        GenericSigningKey::<Sha256, _, _>::new(GenericRsaPrivateKey::from_public_and_d(pubkey, d));
+        GenericSigningKey::<Sha256, _, _>::new(GenericPrivateKey::from_public_and_d(pubkey, d));
 
     let mut rng = ChaCha12Rng::from_seed([0; 32]);
     let prehash = [0x42u8; 32];

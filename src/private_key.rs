@@ -33,11 +33,11 @@ use crate::algorithms::rsa::{
 #[cfg(all(feature = "alloc", not(feature = "getrandom")))]
 use crate::dummy_rng::DummyRng;
 use crate::errors::{Error, Result};
-use crate::public_key::GenericRsaPublicKey;
+use crate::public_key::GenericPublicKey;
 #[cfg(all(feature = "hazmat", feature = "alloc"))]
 use crate::public_key::check_public_skip_exponent_size;
 #[cfg(feature = "alloc")]
-use crate::public_key::{RsaPublicKey, check_public};
+use crate::public_key::{PublicKey, check_public};
 use crate::traits::keys::PublicKeyParts;
 use crate::traits::keys::{PrivateKeyParts, RawPrivateKeyConstructible};
 use crate::traits::{
@@ -53,13 +53,13 @@ pub(crate) type SecretPrime = crypto_bigint::modular::MontyParams<BoxedUint>;
 /// Holds the public components plus the secret exponent `d` — the raw
 /// `(n, e, d)` form. `primes` and the `precomputed` CRT values are
 /// alloc-gated; key generation is behind the `keygen` feature.
-pub struct GenericRsaPrivateKey<T, M>
+pub struct GenericPrivateKey<T, M>
 where
     T: UnsignedModularInt + Zeroize,
     M: ModulusParams<Modulus = T>,
 {
     /// Public components of the private key.
-    pubkey_components: GenericRsaPublicKey<T, M>,
+    pubkey_components: GenericPublicKey<T, M>,
     /// Private exponent.
     d: T,
     /// Odd prime factors of N (≥ 2 elements when populated), empty when
@@ -76,7 +76,7 @@ where
 // no-alloc variant so backends without a `Clone` MontgomeryForm
 // still build.
 #[cfg(feature = "alloc")]
-impl<T, M> Clone for GenericRsaPrivateKey<T, M>
+impl<T, M> Clone for GenericPrivateKey<T, M>
 where
     T: UnsignedModularInt + Zeroize + Clone,
     M: ModulusParams<Modulus = T> + Clone,
@@ -93,7 +93,7 @@ where
 }
 
 #[cfg(not(feature = "alloc"))]
-impl<T, M> Clone for GenericRsaPrivateKey<T, M>
+impl<T, M> Clone for GenericPrivateKey<T, M>
 where
     T: UnsignedModularInt + Zeroize + Clone,
     M: ModulusParams<Modulus = T> + Clone,
@@ -107,14 +107,14 @@ where
 }
 
 // Manual `Debug` — never print `d`, so `{:?}` can't leak private material.
-impl<T, M> fmt::Debug for GenericRsaPrivateKey<T, M>
+impl<T, M> fmt::Debug for GenericPrivateKey<T, M>
 where
     T: UnsignedModularInt + Zeroize,
     M: ModulusParams<Modulus = T>,
-    GenericRsaPublicKey<T, M>: fmt::Debug,
+    GenericPublicKey<T, M>: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("GenericRsaPrivateKey")
+        f.debug_struct("GenericPrivateKey")
             .field("pubkey_components", &self.pubkey_components)
             .field("d", &"...")
             .finish()
@@ -123,10 +123,10 @@ where
 
 // Raw `(public_key, d)` constructor — gated on
 // [`RawPrivateKeyConstructible`], which `BoxedUint` doesn't impl, so it's
-// unreachable on the `RsaPrivateKey` alias. Alloc callers must use the
+// unreachable on the `PrivateKey` alias. Alloc callers must use the
 // validated `from_components` / `from_p_q` / `from_primes` paths so empty
 // `primes` can't leak into CRT-aware APIs as a `primes[0]` panic.
-impl<T, M> GenericRsaPrivateKey<T, M>
+impl<T, M> GenericPrivateKey<T, M>
 where
     T: UnsignedModularInt + Zeroize + RawPrivateKeyConstructible,
     M: ModulusParams<Modulus = T>,
@@ -134,8 +134,8 @@ where
     /// Construct from an already-built public key and the private
     /// exponent `d`. No validation and no CRT precompute — the caller
     /// owns the `e·d ≡ 1 mod λ(n)` relationship. For validated keys use
-    /// the alloc-side [`RsaPrivateKey::from_components`].
-    pub fn from_public_and_d(pubkey_components: GenericRsaPublicKey<T, M>, d: T) -> Self {
+    /// the alloc-side [`PrivateKey::from_components`].
+    pub fn from_public_and_d(pubkey_components: GenericPublicKey<T, M>, d: T) -> Self {
         Self {
             pubkey_components,
             d,
@@ -147,18 +147,18 @@ where
     }
 }
 
-impl<T, M> GenericRsaPrivateKey<T, M>
+impl<T, M> GenericPrivateKey<T, M>
 where
     T: UnsignedModularInt + Zeroize,
     M: ModulusParams<Modulus = T>,
 {
     /// Borrow the public-key components.
-    pub fn as_public(&self) -> &GenericRsaPublicKey<T, M> {
+    pub fn as_public(&self) -> &GenericPublicKey<T, M> {
         &self.pubkey_components
     }
 }
 
-impl<T, M> PublicKeyParts<T> for GenericRsaPrivateKey<T, M>
+impl<T, M> PublicKeyParts<T> for GenericPrivateKey<T, M>
 where
     T: UnsignedModularInt + Zeroize,
     M: ModulusParams<Modulus = T>,
@@ -178,7 +178,7 @@ where
     }
 }
 
-impl<T, M> PrivateKeyParts<T> for GenericRsaPrivateKey<T, M>
+impl<T, M> PrivateKeyParts<T> for GenericPrivateKey<T, M>
 where
     T: UnsignedModularInt + Zeroize,
     M: ModulusParams<Modulus = T>,
@@ -220,7 +220,7 @@ where
 
 // `Zeroize` on the type; `Drop` delegates so the wipe lives in one place.
 // Everything except the pubkey components is secret.
-impl<T, M> Zeroize for GenericRsaPrivateKey<T, M>
+impl<T, M> Zeroize for GenericPrivateKey<T, M>
 where
     T: UnsignedModularInt + Zeroize,
     M: ModulusParams<Modulus = T>,
@@ -234,7 +234,7 @@ where
     }
 }
 
-impl<T, M> Drop for GenericRsaPrivateKey<T, M>
+impl<T, M> Drop for GenericPrivateKey<T, M>
 where
     T: UnsignedModularInt + Zeroize,
     M: ModulusParams<Modulus = T>,
@@ -244,7 +244,7 @@ where
     }
 }
 
-impl<T, M> ZeroizeOnDrop for GenericRsaPrivateKey<T, M>
+impl<T, M> ZeroizeOnDrop for GenericPrivateKey<T, M>
 where
     T: UnsignedModularInt + Zeroize,
     M: ModulusParams<Modulus = T>,
@@ -257,20 +257,20 @@ where
 /// doesn't impl [`RawPrivateKeyConstructible`]:
 ///
 /// ```compile_fail
-/// use rsa_heapless::RsaPrivateKey;
-/// fn must_not_compile(pub_key: rsa_heapless::RsaPublicKey, d: crypto_bigint::BoxedUint) {
-///     let _: RsaPrivateKey = RsaPrivateKey::from_public_and_d(pub_key, d);
+/// use rsa_heapless::PrivateKey;
+/// fn must_not_compile(pub_key: rsa_heapless::PublicKey, d: crypto_bigint::BoxedUint) {
+///     let _: PrivateKey = PrivateKey::from_public_and_d(pub_key, d);
 /// }
 /// ```
 #[cfg(feature = "alloc")]
-pub type RsaPrivateKey = GenericRsaPrivateKey<BoxedUint, BoxedMontyParams>;
+pub type PrivateKey = GenericPrivateKey<BoxedUint, BoxedMontyParams>;
 
 #[cfg(feature = "alloc")]
-impl Eq for RsaPrivateKey {}
+impl Eq for PrivateKey {}
 #[cfg(feature = "alloc")]
-impl PartialEq for RsaPrivateKey {
+impl PartialEq for PrivateKey {
     #[inline]
-    fn eq(&self, other: &RsaPrivateKey) -> bool {
+    fn eq(&self, other: &PrivateKey) -> bool {
         self.pubkey_components == other.pubkey_components
             && self.d == other.d
             && self.primes == other.primes
@@ -278,17 +278,17 @@ impl PartialEq for RsaPrivateKey {
 }
 
 #[cfg(feature = "alloc")]
-impl AsRef<RsaPublicKey> for RsaPrivateKey {
-    fn as_ref(&self) -> &RsaPublicKey {
+impl AsRef<PublicKey> for PrivateKey {
+    fn as_ref(&self) -> &PublicKey {
         &self.pubkey_components
     }
 }
 
 #[cfg(feature = "alloc")]
-impl Hash for RsaPrivateKey {
+impl Hash for PrivateKey {
     fn hash<H: Hasher>(&self, state: &mut H) {
         // Domain separator for RSA private keys
-        state.write(b"RsaPrivateKey");
+        state.write(b"PrivateKey");
         Hash::hash(&self.pubkey_components, state);
     }
 }
@@ -370,7 +370,7 @@ where
 }
 
 #[cfg(feature = "alloc")]
-impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
+impl GenericPrivateKey<BoxedUint, BoxedMontyParams> {
     /// Default modulus size in bits used by [`Generate`].
     ///
     /// A 3072-bit RSA modulus provides an estimated 128-bit security strength according to
@@ -406,20 +406,20 @@ impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
     /// Generate a new RSA key pair of the given bit size and the public exponent
     /// using the passed in `rng`.
     ///
-    /// Unless you have specific needs, you should use [`RsaPrivateKey::new`] instead.
+    /// Unless you have specific needs, you should use [`PrivateKey::new`] instead.
     #[cfg(feature = "keygen")]
     #[allow(clippy::missing_errors_doc, reason = "TODO")]
     pub fn new_with_exp<R: TryCryptoRng + ?Sized>(
         rng: &mut R,
         bit_size: usize,
         exp: BoxedUint,
-    ) -> Result<RsaPrivateKey> {
-        if bit_size < RsaPublicKey::MIN_SIZE {
+    ) -> Result<PrivateKey> {
+        if bit_size < PublicKey::MIN_SIZE {
             return Err(Error::ModulusTooSmall);
         }
 
         let components = generate_multi_prime_key_with_exp(rng, 2, bit_size, exp)?;
-        RsaPrivateKey::from_components(
+        PrivateKey::from_components(
             components.n.get(),
             components.e,
             components.d,
@@ -430,7 +430,7 @@ impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
     /// Generate a new RSA key pair of the given bit size and the public exponent
     /// using the passed in `rng`.
     ///
-    /// Unless you have specific needs, you should use [`RsaPrivateKey::new`] instead.
+    /// Unless you have specific needs, you should use [`PrivateKey::new`] instead.
     ///
     /// <div class="warning">
     /// <b>⚠️Warning: Hazmat!</b>
@@ -442,9 +442,9 @@ impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
         rng: &mut R,
         bit_size: usize,
         exp: BoxedUint,
-    ) -> Result<RsaPrivateKey> {
+    ) -> Result<PrivateKey> {
         let components = generate_multi_prime_key_with_exp(rng, 2, bit_size, exp)?;
-        RsaPrivateKey::from_components(
+        PrivateKey::from_components(
             components.n.get(),
             components.e,
             components.d,
@@ -467,7 +467,7 @@ impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
         d: BoxedUint,
         mut primes: Vec<BoxedUint>,
         wide_primes: bool,
-    ) -> Result<RsaPrivateKey> {
+    ) -> Result<PrivateKey> {
         let n = CryptoOdd::new(n)
             .into_option()
             .ok_or(Error::InvalidModulus)?;
@@ -533,8 +533,8 @@ impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
             })
             .collect::<Result<Vec<_>>>()?;
 
-        let k = RsaPrivateKey {
-            pubkey_components: RsaPublicKey {
+        let k = PrivateKey {
+            pubkey_components: PublicKey {
                 n: n_c,
                 e,
                 n_params,
@@ -550,7 +550,7 @@ impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
     /// Constructs an RSA key pair from individual components, accepting exponents outside
     /// the normal size bounds.
     ///
-    /// See [`RsaPrivateKey::from_components`] for an explanation on the parameters.
+    /// See [`PrivateKey::from_components`] for an explanation on the parameters.
     ///
     /// <div class="warning">
     /// <b>⚠️ Warning: Hazmat!</b>
@@ -563,7 +563,7 @@ impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
     /// untrusted input: <https://www.imperialviolet.org/2012/03/17/rsados.html>
     ///
     /// This is intended for interoperating with systems that use non-standard exponents
-    /// or loading legacy keys. Use [`RsaPrivateKey::from_components`] for standard key
+    /// or loading legacy keys. Use [`PrivateKey::from_components`] for standard key
     /// construction.
     #[cfg(all(feature = "hazmat", feature = "alloc"))]
     #[allow(clippy::missing_errors_doc, reason = "TODO")]
@@ -572,7 +572,7 @@ impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
         e: BoxedUint,
         d: BoxedUint,
         primes: Vec<BoxedUint>,
-    ) -> Result<RsaPrivateKey> {
+    ) -> Result<PrivateKey> {
         let mut k = Self::from_components_inner(n, e, d, primes, false)?;
 
         // Validate everything except exponent size bounds (to ensure precompute can't fail)
@@ -608,7 +608,7 @@ impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
         e: BoxedUint,
         d: BoxedUint,
         primes: Vec<BoxedUint>,
-    ) -> Result<RsaPrivateKey> {
+    ) -> Result<PrivateKey> {
         let mut k = Self::from_components_inner(n, e, d, primes, false)?;
 
         // Always validate the key, to ensure precompute can't fail
@@ -635,7 +635,7 @@ impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
         e: BoxedUint,
         d: BoxedUint,
         primes: Vec<BoxedUint>,
-    ) -> Result<RsaPrivateKey> {
+    ) -> Result<PrivateKey> {
         let mut k = Self::from_components_inner(n, e, d, primes, true)?;
         k.validate()?;
         k.precompute()?;
@@ -651,11 +651,7 @@ impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
     /// Private exponent will be rebuilt using the method defined in
     /// [NIST 800-56B Section 6.2.1](https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-56Br2.pdf#page=47).
     #[allow(clippy::missing_errors_doc, reason = "TODO")]
-    pub fn from_p_q(
-        p: BoxedUint,
-        q: BoxedUint,
-        public_exponent: BoxedUint,
-    ) -> Result<RsaPrivateKey> {
+    pub fn from_p_q(p: BoxedUint, q: BoxedUint, public_exponent: BoxedUint) -> Result<PrivateKey> {
         // RSA factors must be odd and greater than one. Check before deriving n or d.
         let two = BoxedUint::from(2u64);
         if (p.ct_lt(&two) | q.ct_lt(&two) | !p.is_odd() | !q.is_odd()).to_bool() {
@@ -675,10 +671,7 @@ impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
     ///
     /// This will rebuild the private exponent and the modulus.
     #[allow(clippy::missing_errors_doc, reason = "TODO")]
-    pub fn from_primes(
-        primes: Vec<BoxedUint>,
-        public_exponent: BoxedUint,
-    ) -> Result<RsaPrivateKey> {
+    pub fn from_primes(primes: Vec<BoxedUint>, public_exponent: BoxedUint) -> Result<PrivateKey> {
         if primes.len() < 2 {
             return Err(Error::NprimesTooSmall);
         }
@@ -703,16 +696,16 @@ impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
     ///
     /// Specific alternative to [`AsRef::as_ref`].
     #[must_use]
-    pub fn as_public_key(&self) -> &RsaPublicKey {
+    pub fn as_public_key(&self) -> &PublicKey {
         &self.pubkey_components
     }
 
     /// Get the public key from the private key, cloning `n` and `e`.
     ///
-    /// Generally this is not needed since `RsaPrivateKey` implements the `PublicKey` trait,
+    /// Generally this is not needed since `PrivateKey` implements the `PublicKey` trait,
     /// but it can occasionally be useful to discard the private information entirely.
     #[must_use]
-    pub fn to_public_key(&self) -> RsaPublicKey {
+    pub fn to_public_key(&self) -> PublicKey {
         self.pubkey_components.clone()
     }
 
@@ -859,7 +852,7 @@ impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
 
 #[cfg(feature = "keygen")]
 /// Generate a key with a [`Self::DEFAULT_BITS`]-bit modulus and public exponent 65537.
-impl Generate for RsaPrivateKey {
+impl Generate for PrivateKey {
     fn try_generate_from_rng<R: TryCryptoRng + ?Sized>(
         rng: &mut R,
     ) -> core::result::Result<Self, R::Error> {
@@ -887,7 +880,7 @@ impl Generate for RsaPrivateKey {
 /// This performs the structural and mathematical validation checks that are common to both
 /// `validate()` and `validate_skip_exponent_size()`.
 #[cfg(feature = "alloc")]
-fn validate_private_key_parts(key: &RsaPrivateKey) -> Result<()> {
+fn validate_private_key_parts(key: &PrivateKey) -> Result<()> {
     // RFC8017 §3.2 requires `d < n`, even if a larger exponent satisfies the congruences below.
     // Preserve the supplied d rather than reducing it.
     if key.d >= key.n().as_ref() {
@@ -939,10 +932,10 @@ fn validate_private_key_parts(key: &RsaPrivateKey) -> Result<()> {
 /// Validate the private key structure and cryptographic correctness,
 /// skipping only the exponent size bounds checks.
 ///
-/// This performs all the same checks as `RsaPrivateKey::validate()` except
+/// This performs all the same checks as `PrivateKey::validate()` except
 /// it doesn't verify that the exponent is within the standard bounds.
 #[cfg(all(feature = "hazmat", feature = "alloc"))]
-fn validate_skip_exponent_size(key: &RsaPrivateKey) -> Result<()> {
+fn validate_skip_exponent_size(key: &PrivateKey) -> Result<()> {
     // Check public key properties (without exponent size checks)
     check_public_skip_exponent_size(key.pubkey_components.n.as_ref(), &key.pubkey_components.e)?;
 
@@ -953,7 +946,7 @@ fn validate_skip_exponent_size(key: &RsaPrivateKey) -> Result<()> {
 }
 
 #[cfg(feature = "serde")]
-impl Serialize for RsaPrivateKey {
+impl Serialize for PrivateKey {
     fn serialize<S>(&self, serializer: S) -> core::prelude::v1::Result<S::Ok, S::Error>
     where
         S: ser::Serializer,
@@ -964,7 +957,7 @@ impl Serialize for RsaPrivateKey {
 }
 
 #[cfg(feature = "serde")]
-impl<'de> Deserialize<'de> for RsaPrivateKey {
+impl<'de> Deserialize<'de> for PrivateKey {
     fn deserialize<D>(deserializer: D) -> core::prelude::v1::Result<Self, D::Error>
     where
         D: de::Deserializer<'de>,
@@ -1009,7 +1002,7 @@ mod tests {
             let n = compute_modulus(&primes).get();
             let e = BoxedUint::from(17u64);
             let d = BoxedUint::from(d);
-            let key = RsaPrivateKey::from_components_inner(
+            let key = PrivateKey::from_components_inner(
                 n.clone(),
                 e.clone(),
                 d.clone(),
@@ -1019,11 +1012,11 @@ mod tests {
             .unwrap();
             assert_eq!(key.validate(), Err(Error::InvalidPrime));
             assert_eq!(
-                RsaPrivateKey::from_components(n.clone(), e.clone(), d.clone(), primes.clone()),
+                PrivateKey::from_components(n.clone(), e.clone(), d.clone(), primes.clone()),
                 Err(Error::InvalidPrime)
             );
             assert_eq!(
-                RsaPrivateKey::from_components_with_wide_primes(
+                PrivateKey::from_components_with_wide_primes(
                     n.clone(),
                     e.clone(),
                     d.clone(),
@@ -1033,19 +1026,16 @@ mod tests {
             );
             #[cfg(feature = "hazmat")]
             assert_eq!(
-                RsaPrivateKey::from_components_with_large_exponent(n, e.clone(), d, primes.clone()),
+                PrivateKey::from_components_with_large_exponent(n, e.clone(), d, primes.clone()),
                 Err(Error::InvalidPrime)
             );
             if primes.len() == 2 {
                 assert_eq!(
-                    RsaPrivateKey::from_p_q(primes[0].clone(), primes[1].clone(), e.clone()),
+                    PrivateKey::from_p_q(primes[0].clone(), primes[1].clone(), e.clone()),
                     Err(Error::InvalidPrime)
                 );
             }
-            assert_eq!(
-                RsaPrivateKey::from_primes(primes, e),
-                Err(Error::InvalidPrime)
-            );
+            assert_eq!(PrivateKey::from_primes(primes, e), Err(Error::InvalidPrime));
         }
     }
 
@@ -1058,11 +1048,11 @@ mod tests {
                     let q = BoxedUint::from(q);
                     let e = BoxedUint::from(17u64);
                     assert_eq!(
-                        RsaPrivateKey::from_p_q(p.clone(), q.clone(), e.clone()),
+                        PrivateKey::from_p_q(p.clone(), q.clone(), e.clone()),
                         Err(Error::InvalidPrime)
                     );
                     assert_eq!(
-                        RsaPrivateKey::from_primes(vec![p, q], e),
+                        PrivateKey::from_primes(vec![p, q], e),
                         Err(Error::InvalidPrime)
                     );
                 }
@@ -1073,7 +1063,7 @@ mod tests {
                 let mut primes = vec![61u64.into(), 53u64.into(), 47u64.into()];
                 primes[i] = BoxedUint::from(p);
                 assert_eq!(
-                    RsaPrivateKey::from_primes(primes, BoxedUint::from(17u64)),
+                    PrivateKey::from_primes(primes, BoxedUint::from(17u64)),
                     Err(Error::InvalidPrime)
                 );
             }
@@ -1118,7 +1108,7 @@ mod tests {
         impl TryCryptoRng for RepeatingRng {}
 
         assert_eq!(
-            RsaPrivateKey::new(&mut RepeatingRng(128), 1024),
+            PrivateKey::new(&mut RepeatingRng(128), 1024),
             Err(Error::InvalidPrime)
         );
     }
@@ -1127,7 +1117,7 @@ mod tests {
     fn private_exponent_range_and_identity() {
         // For `e=17`, these exponents are equivalent modulo `lambda(n)=780`.
         for (e, d) in [(17u64, 413u64), (17, 2753), (17, 5873), (497, 3233)] {
-            let result = RsaPrivateKey::from_components(
+            let result = PrivateKey::from_components(
                 BoxedUint::from(3233u64),
                 BoxedUint::from(e),
                 BoxedUint::from(d),
@@ -1145,8 +1135,8 @@ mod tests {
     fn test_from_into() {
         let raw_n = BoxedUint::from(101u64);
         let n_odd = CryptoOdd::new(raw_n.clone()).unwrap();
-        let private_key = RsaPrivateKey {
-            pubkey_components: RsaPublicKey {
+        let private_key = PrivateKey {
+            pubkey_components: PublicKey {
                 n: NonZero::new(raw_n.clone()).unwrap(),
                 e: BoxedUint::from(200u64),
                 n_params: BoxedMontyParams::new(n_odd),
@@ -1155,7 +1145,7 @@ mod tests {
             primes: vec![],
             precomputed: None,
         };
-        let public_key: RsaPublicKey = private_key.into();
+        let public_key: PublicKey = private_key.into();
 
         assert_eq!(PublicKeyParts::n(&public_key).as_ref(), &raw_n);
         assert_eq!(PublicKeyParts::e(&public_key), &BoxedUint::from(200u64));
@@ -1163,7 +1153,7 @@ mod tests {
         assert_eq!(PublicKeyParts::n_bytes(&public_key), [101].into());
     }
 
-    fn test_key_basics(private_key: &RsaPrivateKey) {
+    fn test_key_basics(private_key: &PrivateKey) {
         private_key.validate().expect("invalid private key");
 
         assert_eq!(
@@ -1182,7 +1172,7 @@ mod tests {
             "private exponent too large"
         );
 
-        let pub_key: RsaPublicKey = private_key.clone().into();
+        let pub_key: PublicKey = private_key.clone().into();
         let m = BoxedUint::from(42u64);
         let c = rsa_encrypt(&pub_key, &m).expect("encryption successful");
 
@@ -1216,7 +1206,7 @@ mod tests {
                     primes.reverse();
                 }
 
-                let mut key = RsaPrivateKey::from_components(
+                let mut key = PrivateKey::from_components(
                     (&n).resize_unchecked(256),
                     e.clone(),
                     (&d).resize_unchecked(input_bits),
@@ -1258,7 +1248,7 @@ mod tests {
             .wrapping_add(&(BoxedUint::one_with_precision(256) << 128));
 
         assert_eq!(
-            RsaPrivateKey::from_components(n, e, oversized, vec![p, q]),
+            PrivateKey::from_components(n, e, oversized, vec![p, q]),
             Err(Error::InvalidExponent)
         );
     }
@@ -1269,13 +1259,13 @@ mod tests {
             #[test]
             fn $name() {
                 let mut rng = ChaCha8Rng::from_seed([42; 32]);
-                let exp = BoxedUint::from(RsaPrivateKey::EXP);
+                let exp = BoxedUint::from(PrivateKey::EXP);
 
                 for _ in 0..10 {
                     let components =
                         generate_multi_prime_key_with_exp(&mut rng, $multi, $size, exp.clone())
                             .unwrap();
-                    let private_key = RsaPrivateKey::from_components(
+                    let private_key = PrivateKey::from_components(
                         components.n.get(),
                         components.e,
                         components.d,
@@ -1304,7 +1294,7 @@ mod tests {
     #[test]
     fn test_negative_decryption_value() {
         let bits = 128;
-        let private_key = RsaPrivateKey::from_components(
+        let private_key = PrivateKey::from_components(
             BoxedUint::from_le_slice(
                 &[
                     99, 192, 208, 179, 0, 220, 7, 29, 49, 151, 75, 107, 75, 73, 200, 180,
@@ -1340,7 +1330,7 @@ mod tests {
         use serde_test::{Configure, Token, assert_ser_tokens, assert_tokens};
 
         let mut rng = ChaCha8Rng::from_seed([42; 32]);
-        let priv_key = RsaPrivateKey::new_unchecked(&mut rng, 64).expect("failed to generate key");
+        let priv_key = PrivateKey::new_unchecked(&mut rng, 64).expect("failed to generate key");
 
         let priv_tokens = [Token::Str(concat!(
             "3056020100300d06092a864886f70d010101050004423040020100020900a",
@@ -1353,10 +1343,7 @@ mod tests {
             "3024300d06092a864886f70d01010105000313003010020900ab240c3361d02e370203010001",
         )];
         // Small public keys can still be serialized, but default decoding rejects them.
-        assert_ser_tokens(
-            &RsaPublicKey::from(priv_key.clone()).readable(),
-            &pub_tokens,
-        );
+        assert_ser_tokens(&PublicKey::from(priv_key.clone()).readable(), &pub_tokens);
     }
 
     #[test]
@@ -1449,7 +1436,7 @@ mod tests {
             .iter()
             .map(|p| BoxedUint::from_be_slice(p, bits / 2).unwrap())
             .collect();
-        let res = RsaPrivateKey::from_components(n, e, d, primes);
+        let res = PrivateKey::from_components(n, e, d, primes);
         assert_eq!(res, Err(Error::InvalidModulus));
     }
 
@@ -1523,17 +1510,14 @@ mod tests {
 
         let e = BoxedUint::from(65_537u64);
 
-        assert_eq!(
-            RsaPublicKey::new(n, e).err().unwrap(),
-            Error::ModulusTooLarge
-        );
+        assert_eq!(PublicKey::new(n, e).err().unwrap(), Error::ModulusTooLarge);
     }
 
     #[test]
     #[cfg(feature = "encoding")]
     fn build_key_from_primes() {
         const RSA_2048_PRIV_DER: &[u8] = include_bytes!("../tests/examples/pkcs8/rsa2048-priv.der");
-        let ref_key = RsaPrivateKey::from_pkcs8_der(RSA_2048_PRIV_DER).unwrap();
+        let ref_key = PrivateKey::from_pkcs8_der(RSA_2048_PRIV_DER).unwrap();
         assert_eq!(ref_key.validate(), Ok(()));
 
         let primes: Vec<_> = PrivateKeyParts::primes(&ref_key)
@@ -1542,8 +1526,8 @@ mod tests {
             .collect();
 
         let exp = PublicKeyParts::e(&ref_key);
-        let key = RsaPrivateKey::from_primes(primes, exp.clone())
-            .expect("failed to import key from primes");
+        let key =
+            PrivateKey::from_primes(primes, exp.clone()).expect("failed to import key from primes");
         assert_eq!(key.validate(), Ok(()));
 
         assert_eq!(PublicKeyParts::n(&key), PublicKeyParts::n(&ref_key));
@@ -1559,7 +1543,7 @@ mod tests {
     fn build_key_from_p_q() {
         const RSA_2048_SP800_PRIV_DER: &[u8] =
             include_bytes!("../tests/examples/pkcs8/rsa2048-sp800-56b-priv.der");
-        let ref_key = RsaPrivateKey::from_pkcs8_der(RSA_2048_SP800_PRIV_DER).unwrap();
+        let ref_key = PrivateKey::from_pkcs8_der(RSA_2048_SP800_PRIV_DER).unwrap();
         assert_eq!(ref_key.validate(), Ok(()));
 
         let primes: Vec<_> = PrivateKeyParts::primes(&ref_key)
@@ -1568,7 +1552,7 @@ mod tests {
             .collect();
         let exp = PublicKeyParts::e(&ref_key);
 
-        let key = RsaPrivateKey::from_p_q(primes[0].clone(), primes[1].clone(), exp.clone())
+        let key = PrivateKey::from_p_q(primes[0].clone(), primes[1].clone(), exp.clone())
             .expect("failed to import key from primes");
         assert_eq!(key.validate(), Ok(()));
 
@@ -1605,12 +1589,12 @@ mod tests {
 
         // from_components should fail with PublicExponentTooLarge
         let result =
-            RsaPrivateKey::from_components(n.clone(), large_e.clone(), d.clone(), primes.clone());
+            PrivateKey::from_components(n.clone(), large_e.clone(), d.clone(), primes.clone());
         assert!(result.is_err());
         assert_eq!(result.unwrap_err(), Error::PublicExponentTooLarge);
 
         // from_components_with_large_exponent should succeed
-        let key_with_large_exp = RsaPrivateKey::from_components_with_large_exponent(
+        let key_with_large_exp = PrivateKey::from_components_with_large_exponent(
             n.clone(),
             large_e.clone(),
             d.clone(),
@@ -1653,11 +1637,11 @@ mod tests {
 
         // from_components should fail
         let result =
-            RsaPrivateKey::from_components(n.clone(), small_e.clone(), d.clone(), primes.clone());
+            PrivateKey::from_components(n.clone(), small_e.clone(), d.clone(), primes.clone());
         assert!(result.is_err());
 
         // from_components_with_large_exponent should succeed
-        let key_with_small_exp = RsaPrivateKey::from_components_with_large_exponent(
+        let key_with_small_exp = PrivateKey::from_components_with_large_exponent(
             n.clone(),
             small_e.clone(),
             d.clone(),
@@ -1686,7 +1670,7 @@ mod tests {
     #[test]
     #[cfg(feature = "hazmat")]
     fn test_key_invalid_primes() {
-        let e = RsaPrivateKey::from_components_with_large_exponent(
+        let e = PrivateKey::from_components_with_large_exponent(
             BoxedUint::from(239u64),
             BoxedUint::from(185u64),
             BoxedUint::from(0u64),
