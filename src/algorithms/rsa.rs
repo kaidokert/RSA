@@ -10,7 +10,7 @@ use super::blinding::{blind_exponent, pow_mod_blinded, totient};
 use crypto_bigint::Resize as _;
 #[cfg(feature = "alloc")]
 use crypto_bigint::{
-    modular::BoxedMontyParams, BoxedUint, ConcatenatingMul, ConcatenatingSquare, Gcd, RandomMod,
+    BoxedUint, ConcatenatingMul, ConcatenatingSquare, Gcd, RandomMod, modular::BoxedMontyParams,
 };
 #[cfg(feature = "alloc")]
 use crypto_bigint::{NonZero as CryptoNonZero, Odd as CryptoOdd};
@@ -24,10 +24,10 @@ use crate::traits::keys::{PrivateKeyParts, PublicKeyParts};
 use crate::{
     errors::{Error, Result},
     traits::{
+        UnsignedModularInt,
         modular::{
             IntoMontyForm, InvertCt, ModulusParams, MulCt, Pow, PowBoundedExp, TryRandomMod,
         },
-        UnsignedModularInt,
     },
 };
 

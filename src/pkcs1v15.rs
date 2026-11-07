@@ -470,9 +470,9 @@ pub use oid::RsaSignatureAssociatedOid;
 mod tests {
     use super::*;
     use ::signature::{
-        hazmat::{PrehashSigner, PrehashVerifier},
         DigestSigner, DigestVerifier, Keypair, RandomizedDigestSigner, RandomizedSigner,
         SignatureEncoding, Signer, Verifier,
+        hazmat::{PrehashSigner, PrehashVerifier},
     };
     use base64ct::{Base64, Encoding};
     use hex_literal::hex;

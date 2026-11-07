@@ -7,7 +7,7 @@ use core::hash::{Hash, Hasher};
 use crypto_bigint::Resize as _;
 #[cfg(feature = "alloc")]
 use crypto_bigint::{
-    modular::BoxedMontyParams, BoxedUint, Choice, ConcatenatingMul, CtEq, CtLt, Integer,
+    BoxedUint, Choice, ConcatenatingMul, CtEq, CtLt, Integer, modular::BoxedMontyParams,
 };
 #[cfg(feature = "alloc")]
 use crypto_bigint::{NonZero as CryptoNonZero, Odd as CryptoOdd};
@@ -17,7 +17,7 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 #[cfg(feature = "serde")]
 use {
     pkcs8::{DecodePrivateKey, EncodePrivateKey},
-    serdect::serde::{de, ser, Deserialize, Serialize},
+    serdect::serde::{Deserialize, Serialize, de, ser},
     spki::{DecodePublicKey, EncodePublicKey},
 };
 
@@ -35,7 +35,7 @@ use crate::errors::{Error, Result};
 use crate::traits::keys::PublicKeyParts;
 use crate::traits::keys::{PrivateKeyParts, RawPrivateKeyConstructible};
 use crate::traits::{
-    modular::ModulusParams, NonZero, PaddingScheme, SignatureScheme, UnsignedModularInt,
+    NonZero, PaddingScheme, SignatureScheme, UnsignedModularInt, modular::ModulusParams,
 };
 
 /// Represents the public part of an RSA key.
@@ -1573,7 +1573,7 @@ mod tests {
     fn test_serde() {
         use rand::rngs::ChaCha8Rng;
         use rand_core::SeedableRng;
-        use serde_test::{assert_tokens, Configure, Token};
+        use serde_test::{Configure, Token, assert_tokens};
 
         let mut rng = ChaCha8Rng::from_seed([42; 32]);
         let priv_key = RsaPrivateKey::new_unchecked(&mut rng, 64).expect("failed to generate key");

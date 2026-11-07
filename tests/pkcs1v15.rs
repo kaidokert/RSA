@@ -6,8 +6,8 @@ fn signature_stringify() {
     use pkcs8::DecodePrivateKey;
     use signature::Signer;
 
-    use rsa::pkcs1v15::SigningKey;
     use rsa::RsaPrivateKey;
+    use rsa::pkcs1v15::SigningKey;
 
     let pem = include_str!("examples/pkcs8/rsa2048-priv.pem");
     let private_key = RsaPrivateKey::from_pkcs8_pem(pem).unwrap();
@@ -70,14 +70,18 @@ Rmb665iB5fwpqmbE/hYKIn7asYQE+V0dkgt8M3qvlJJ5JJbCrJx3
     assert_eq!(sig_via_new, sig_via_from);
 
     // each verifies the other
-    assert!(key_via_new
-        .verifying_key()
-        .verify(msg, &sig_via_from)
-        .is_ok());
-    assert!(key_via_from
-        .verifying_key()
-        .verify(msg, &sig_via_new)
-        .is_ok());
+    assert!(
+        key_via_new
+            .verifying_key()
+            .verify(msg, &sig_via_from)
+            .is_ok()
+    );
+    assert!(
+        key_via_from
+            .verifying_key()
+            .verify(msg, &sig_via_new)
+            .is_ok()
+    );
 }
 
 // End-to-end round-trip test for the heapless-shaped `try_sign_with_rng_into`
@@ -91,8 +95,8 @@ fn signing_key_try_sign_with_rng_into_round_trip() {
     use pkcs1::DecodeRsaPrivateKey;
     use rand::rngs::ChaCha8Rng;
     use rand_core::SeedableRng;
-    use rsa::pkcs1v15::{Signature, SigningKey};
     use rsa::RsaPrivateKey;
+    use rsa::pkcs1v15::{Signature, SigningKey};
     use signature::{Keypair, Verifier};
 
     const PRIV_KEY_PKCS1_PEM: &str = include_str!("examples/pkcs1/rsa2048-priv.pem");

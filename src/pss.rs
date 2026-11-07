@@ -38,6 +38,10 @@ use digest::{Digest, FixedOutputReset};
 use rand_core::TryCryptoRng;
 
 #[cfg(feature = "alloc")]
+use crate::RsaPrivateKey;
+#[cfg(feature = "alloc")]
+use crate::RsaPublicKey;
+#[cfg(feature = "alloc")]
 use crate::algorithms::pad::i2osp;
 use crate::algorithms::pss::*;
 #[cfg(feature = "alloc")]
@@ -45,10 +49,6 @@ use crate::algorithms::rsa::rsa_decrypt_and_check;
 use crate::algorithms::rsa::rsa_encrypt;
 use crate::errors::{Error, Result};
 use crate::traits::{PublicKeyParts, SignatureScheme, UnsignedModularInt};
-#[cfg(feature = "alloc")]
-use crate::RsaPrivateKey;
-#[cfg(feature = "alloc")]
-use crate::RsaPublicKey;
 
 #[cfg(feature = "encoding")]
 use {
@@ -56,8 +56,8 @@ use {
     const_oid::AssociatedOid,
     pkcs1::RsaPssParams,
     spki::{
-        der::{Any, ErrorKind},
         AlgorithmIdentifierOwned,
+        der::{Any, ErrorKind},
     },
 };
 

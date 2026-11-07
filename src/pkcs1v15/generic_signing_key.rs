@@ -9,15 +9,15 @@
 
 #[cfg(feature = "alloc")]
 use super::pkcs1v15_generate_prefix;
+use super::{GenericVerifyingKey, sign_into, sign_with_rng_into};
 #[cfg(not(feature = "alloc"))]
-use super::{pkcs1v15_generate_prefix_helper, Prefix};
-use super::{sign_into, sign_with_rng_into, GenericVerifyingKey};
+use super::{Prefix, pkcs1v15_generate_prefix_helper};
 use crate::{
     errors::Result,
     key::GenericRsaPrivateKey,
     traits::{
-        modular::{ModulusParams, Pow, PowBoundedExp},
         PublicKeyParts, UnsignedModularInt,
+        modular::{ModulusParams, Pow, PowBoundedExp},
     },
 };
 #[cfg(feature = "alloc")]

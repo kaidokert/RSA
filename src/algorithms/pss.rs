@@ -17,8 +17,8 @@ use digest::{Digest, FixedOutputReset};
 use super::mgf::{mgf1_xor, mgf1_xor_digest};
 use crate::errors::{Error, Result};
 use crate::traits::{
-    modular::{ModulusParams, Pow, PowBoundedExp},
     UnsignedModularInt,
+    modular::{ModulusParams, Pow, PowBoundedExp},
 };
 
 #[cfg(feature = "alloc")]

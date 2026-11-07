@@ -8,10 +8,10 @@
 use alloc::boxed::Box;
 use core::ops::{Shr, ShrAssign};
 
-use const_num_traits::ops::overflowing::OverflowingAdd;
-use const_num_traits::ops::wrapping::{WrappingAdd, WrappingMul, WrappingSub};
 use const_num_traits::FromByteSlice;
 use const_num_traits::WithPrecision;
+use const_num_traits::ops::overflowing::OverflowingAdd;
+use const_num_traits::ops::wrapping::{WrappingAdd, WrappingMul, WrappingSub};
 use const_num_traits::{Ct, HasPersonality, Nct, Personality};
 use const_num_traits::{One, Zero};
 use modmath::{CiosMontMul, CiosMontMulCt, Field as ModmathField, Parity, WideMul};
@@ -806,12 +806,12 @@ mod tests {
     use signature::hazmat::PrehashVerifier;
 
     use super::{
-        public_key_ct_from_be_bytes, public_key_from_be_bytes, ModMathForm, ModMathParams,
-        ModMathValue,
+        ModMathForm, ModMathParams, ModMathValue, public_key_ct_from_be_bytes,
+        public_key_from_be_bytes,
     };
     use crate::key::GenericRsaPublicKey;
     use crate::pkcs1v15::{GenericEncryptingKey, GenericSignature, GenericVerifyingKey};
-    use crate::{traits::RandomizedEncryptor, BoxedUint, Pkcs1v15Encrypt, RsaPublicKey};
+    use crate::{BoxedUint, Pkcs1v15Encrypt, RsaPublicKey, traits::RandomizedEncryptor};
 
     type SmallU = FixedUInt<u8, 64>;
     type SmallUCt = FixedUInt<u8, 64, Ct>;

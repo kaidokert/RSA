@@ -13,8 +13,8 @@ use crate::{
     errors::{Error, Result},
     key::GenericRsaPrivateKey,
     traits::{
-        modular::{ModulusParams, Pow, PowBoundedExp},
         PublicKeyParts, UnsignedModularInt,
+        modular::{ModulusParams, Pow, PowBoundedExp},
     },
 };
 use core::fmt;
@@ -297,8 +297,8 @@ mod tests {
     #[test]
     #[cfg(feature = "encoding")]
     fn signing_key_try_sign_with_rng_into_round_trip() {
-        use crate::pss::{Signature, SigningKey, VerifyingKey};
         use crate::RsaPrivateKey;
+        use crate::pss::{Signature, SigningKey, VerifyingKey};
         use pkcs1::DecodeRsaPrivateKey;
         use rand::rngs::ChaCha8Rng;
         use rand_core::SeedableRng;

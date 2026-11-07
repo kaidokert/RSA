@@ -16,8 +16,8 @@ use zeroize::Zeroizing;
 
 use crate::errors::{Error, Result};
 use crate::traits::{
-    modular::{ModulusParams, Pow, PowBoundedExp},
     UnsignedModularInt,
+    modular::{ModulusParams, Pow, PowBoundedExp},
 };
 
 #[cfg(feature = "alloc")]

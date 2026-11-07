@@ -11,8 +11,8 @@ use const_num_traits::{BitWidth, BitsPrecision, FromByteSlice, WithPrecision};
 use const_num_traits::{FromBytes as NumFromBytes, ToBytes as NumToBytes};
 #[cfg(feature = "alloc")]
 use crypto_bigint::{
-    modular::{BoxedMontyForm, BoxedMontyParams},
     BoxedUint, Resize as CryptoResize,
+    modular::{BoxedMontyForm, BoxedMontyParams},
 };
 #[cfg(feature = "alloc")]
 use crypto_bigint::{NonZero as CryptoNonZero, Odd as CryptoOdd};

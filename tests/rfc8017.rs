@@ -1,12 +1,11 @@
 //! Regression tests for RFC8017 signature representation and verification boundaries.
 #![cfg(feature = "keygen")]
 
-use rand::{rngs::ChaCha8Rng, SeedableRng};
+use rand::{SeedableRng, rngs::ChaCha8Rng};
 use rsa::{
-    pss,
-    signature::{hazmat::PrehashVerifier, DigestVerifier, Verifier},
+    BoxedUint, Pss, RsaPrivateKey, RsaPublicKey, pss,
+    signature::{DigestVerifier, Verifier, hazmat::PrehashVerifier},
     traits::PublicKeyParts,
-    BoxedUint, Pss, RsaPrivateKey, RsaPublicKey,
 };
 use sha2::{Digest, Sha256};
 
