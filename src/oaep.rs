@@ -28,11 +28,11 @@ use digest::{Digest, FixedOutputReset};
 use rand_core::TryCryptoRng;
 
 use crate::algorithms::oaep::*;
+use crate::algorithms::pad::i2osp_into;
 #[cfg(feature = "alloc")]
-use crate::algorithms::pad::{i2osp, i2osp_into, i2osp_zeroizing, os2ip, os2ip_zeroizing};
+use crate::algorithms::pad::{i2osp, i2osp_zeroizing, os2ip, os2ip_zeroizing};
 #[cfg(feature = "alloc")]
 use crate::algorithms::rsa::rsa_decrypt_and_check;
-#[cfg(feature = "alloc")]
 use crate::algorithms::rsa::rsa_encrypt;
 use crate::errors::{Error, Result};
 #[cfg(feature = "alloc")]
@@ -99,6 +99,7 @@ where
     /// let padding = Oaep::<Sha256>::new();
     /// let encrypted_data = key.encrypt(&mut rng, padding, b"secret").unwrap();
     /// ```
+    #[must_use]
     pub fn new() -> Self {
         Self {
             digest: D::new(),
@@ -144,6 +145,7 @@ where
     /// let padding = Oaep::<Sha256, Sha1>::new_with_mgf_hash();
     /// let encrypted_data = key.encrypt(&mut rng, padding, b"secret").unwrap();
     /// ```
+    #[must_use]
     pub fn new_with_mgf_hash() -> Self {
         Self {
             digest: D::new(),
@@ -278,31 +280,26 @@ where
 }
 
 /// Does not call `key::check_public` — that validator is `alloc`-only.
+#[allow(clippy::missing_errors_doc, reason = "TODO")]
 pub fn encrypt_digest_into<'a, R, D, MGD, K, T>(
     rng: &mut R,
     pub_key: &K,
     msg: &[u8],
     label: Option<&[u8]>,
     storage: &'a mut [u8],
-) -> crate::Result<&'a [u8]>
+) -> Result<&'a [u8]>
 where
-    R: rand_core::TryCryptoRng + ?Sized,
-    D: digest::Digest,
-    MGD: digest::Digest + digest::FixedOutputReset,
-    K: crate::traits::PublicKeyParts<T>,
+    R: TryCryptoRng + ?Sized,
+    D: Digest,
+    MGD: Digest + FixedOutputReset,
+    K: PublicKeyParts<T>,
     K::MontyParams: crate::traits::modular::CtModulusParams,
-    T: crate::traits::UnsignedModularInt,
+    T: UnsignedModularInt,
 {
     let padded_len = pub_key.size();
-    let em = crate::algorithms::oaep::oaep_encrypt_digest_into::<_, D, MGD>(
-        rng, msg, label, padded_len, storage,
-    )?;
+    let em = oaep_encrypt_digest_into::<_, D, MGD>(rng, msg, label, padded_len, storage)?;
     let int = T::try_from_be_bytes_vartime(em)?;
-    crate::algorithms::pad::i2osp_into(
-        crate::algorithms::rsa::rsa_encrypt(pub_key, &int)?,
-        padded_len,
-        storage,
-    )
+    i2osp_into(rsa_encrypt(pub_key, &int)?, padded_len, storage)
 }
 
 /// Decrypts a plaintext using RSA and the padding scheme from [PKCS#1 OAEP].

@@ -1,10 +1,13 @@
 //! Generate prime components for the RSA Private Key
 
+#![allow(clippy::integer_division_remainder_used, reason = "TODO")]
+
 use alloc::vec::Vec;
 use crypto_bigint::{BoxedUint, Odd};
 use crypto_primes::{
+    Flavor,
     hazmat::{SetBits, SmallFactorsSieveFactory},
-    is_prime, sieve_and_find, Flavor,
+    is_prime, sieve_and_find,
 };
 use rand_core::CryptoRng;
 
@@ -42,6 +45,7 @@ pub(crate) fn generate_multi_prime_key_with_exp<R: CryptoRng + ?Sized>(
         return Err(Error::NprimesTooSmall);
     }
 
+    #[allow(clippy::cast_precision_loss, reason = "TODO")]
     if bit_size < 64 {
         let prime_limit = (1u64 << (bit_size / nprimes) as u64) as f64;
 
@@ -82,6 +86,7 @@ pub(crate) fn generate_multi_prime_key_with_exp<R: CryptoRng + ?Sized>(
             todo += (nprimes - 2) / 5;
         }
 
+        #[allow(clippy::cast_possible_truncation, reason = "TODO")]
         for (i, prime) in primes.iter_mut().enumerate() {
             let bits = (todo / (nprimes - i)) as u32;
             *prime = generate_prime_with_rng(rng, bits);

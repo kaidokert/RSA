@@ -2,8 +2,8 @@
 
 use super::reduction::to_monty;
 use crypto_bigint::{
-    modular::{BoxedMontyForm, BoxedMontyParams},
     BoxedUint, ConcatenatingMul, Odd, Resize,
+    modular::{BoxedMontyForm, BoxedMontyParams},
 };
 use rand_core::TryCryptoRng;
 use zeroize::Zeroizing;
@@ -91,9 +91,9 @@ pub(crate) fn totient(primes: &[Odd<BoxedUint>], bits: u32) -> Result<Zeroizing<
 mod tests {
     use super::*;
     use crate::{
+        RsaPrivateKey,
         algorithms::rsa::rsa_decrypt_and_check,
         traits::{PrivateKeyParts, PublicKeyParts},
-        RsaPrivateKey,
     };
     use alloc::{collections::VecDeque, vec::Vec};
     use rand_core::TryRng;

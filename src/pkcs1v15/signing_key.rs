@@ -1,12 +1,12 @@
-use super::{sign, GenericSigningKey, GenericVerifyingKey, Signature, VerifyingKey};
-use crate::{dummy_rng::DummyRng, Result, RsaPrivateKey};
+use super::{GenericSigningKey, GenericVerifyingKey, Signature, VerifyingKey, sign};
+use crate::{Result, RsaPrivateKey, dummy_rng::DummyRng};
 use const_oid::AssociatedOid;
-use crypto_bigint::{modular::BoxedMontyParams, BoxedUint};
+use crypto_bigint::{BoxedUint, modular::BoxedMontyParams};
 use digest::{Digest, FixedOutput, HashMarker, Update};
 use rand_core::{CryptoRng, TryCryptoRng};
 use signature::{
-    hazmat::PrehashSigner, DigestSigner, Keypair, MultipartSigner, RandomizedDigestSigner,
-    RandomizedMultipartSigner, RandomizedSigner, Signer,
+    DigestSigner, Keypair, MultipartSigner, RandomizedDigestSigner, RandomizedMultipartSigner,
+    RandomizedSigner, Signer, hazmat::PrehashSigner,
 };
 use zeroize::ZeroizeOnDrop;
 
@@ -15,14 +15,14 @@ use {
     super::oid,
     pkcs8::{EncodePrivateKey, SecretDocument},
     spki::{
-        der::AnyRef, AlgorithmIdentifierRef, AssociatedAlgorithmIdentifier,
-        SignatureAlgorithmIdentifier,
+        AlgorithmIdentifierRef, AssociatedAlgorithmIdentifier, SignatureAlgorithmIdentifier,
+        der::AnyRef,
     },
 };
 #[cfg(feature = "serde")]
 use {
     pkcs8::DecodePrivateKey,
-    serdect::serde::{de, ser, Deserialize, Serialize},
+    serdect::serde::{Deserialize, Serialize, de, ser},
 };
 
 /// Signing key for `RSASSA-PKCS1-v1_5` signatures as described in [RFC8017 § 8.2].
@@ -36,6 +36,7 @@ where
 {
     /// Generate a new signing key with a prefix for the digest `D`.
     #[cfg(feature = "keygen")]
+    #[allow(clippy::missing_errors_doc, reason = "TODO")]
     pub fn random<R: CryptoRng + ?Sized>(rng: &mut R, bit_size: usize) -> Result<Self> {
         Ok(Self::new(RsaPrivateKey::new(rng, bit_size)?))
     }
@@ -47,6 +48,7 @@ where
 {
     /// Generate a new signing key with an empty prefix.
     #[cfg(feature = "keygen")]
+    #[allow(clippy::missing_errors_doc, reason = "TODO")]
     pub fn random_unprefixed<R: CryptoRng + ?Sized>(rng: &mut R, bit_size: usize) -> Result<Self> {
         Ok(Self::new_unprefixed(RsaPrivateKey::new(rng, bit_size)?))
     }
@@ -264,7 +266,7 @@ where
 {
     fn serialize<S>(&self, serializer: S) -> core::result::Result<S::Ok, S::Error>
     where
-        S: serdect::serde::Serializer,
+        S: serde::Serializer,
     {
         let der = self.to_pkcs8_der().map_err(ser::Error::custom)?;
         serdect::slice::serialize_hex_lower_or_bin(&der.as_bytes(), serializer)
@@ -278,7 +280,7 @@ where
 {
     fn deserialize<De>(deserializer: De) -> core::result::Result<Self, De::Error>
     where
-        De: serdect::serde::Deserializer<'de>,
+        De: serde::Deserializer<'de>,
     {
         let der_bytes = serdect::slice::deserialize_hex_or_bin_vec(deserializer)?;
         Self::from_pkcs8_der(&der_bytes).map_err(de::Error::custom)
@@ -293,7 +295,7 @@ mod tests {
         use super::*;
         use rand::rngs::ChaCha8Rng;
         use rand_core::SeedableRng;
-        use serde_test::{assert_tokens, Configure, Token};
+        use serde_test::{Configure, Token, assert_tokens};
         use sha2::Sha256;
 
         let mut rng = ChaCha8Rng::from_seed([42; 32]);

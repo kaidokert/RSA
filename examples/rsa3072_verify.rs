@@ -1,3 +1,5 @@
+//! RSA-3072 PKCS#1 v1.5 signature verification on the generic `modmath` backend.
+
 use fixed_bigint::FixedUInt;
 use rsa::modmath_support::public_key_from_be_bytes;
 use rsa::pkcs1v15::{GenericSignature, GenericVerifyingKey};

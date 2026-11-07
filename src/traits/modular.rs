@@ -11,8 +11,8 @@ use const_num_traits::{BitWidth, BitsPrecision, FromByteSlice, WithPrecision};
 use const_num_traits::{FromBytes as NumFromBytes, ToBytes as NumToBytes};
 #[cfg(feature = "alloc")]
 use crypto_bigint::{
-    modular::{BoxedMontyForm, BoxedMontyParams},
     BoxedUint, Resize as CryptoResize,
+    modular::{BoxedMontyForm, BoxedMontyParams},
 };
 #[cfg(feature = "alloc")]
 use crypto_bigint::{NonZero as CryptoNonZero, Odd as CryptoOdd};
@@ -64,6 +64,7 @@ pub trait FixedWidthUnsignedInt:
     /// only means anything because this trait is fixed-width.
     fn bit_length(&self) -> u32;
     fn to_be_bytes(&self) -> Self::Bytes;
+    #[allow(clippy::missing_errors_doc, reason = "TODO")]
     fn try_from_be_bytes_vartime(bytes: &[u8]) -> Result<Self>;
     fn bits_precision(&self) -> u32;
 }
@@ -317,7 +318,7 @@ where
         let non_zero = NonZero::new(value)?;
         let bytes = non_zero.as_ref().to_be_bytes();
         let bytes = bytes.as_ref();
-        let is_odd = bytes.last().map(|byte| byte & 1 == 1).unwrap_or(false);
+        let is_odd = bytes.last().is_some_and(|byte| byte & 1 == 1);
         if is_odd {
             Some(Self(non_zero.get()))
         } else {
@@ -334,6 +335,7 @@ where
         &self.0
     }
 
+    #[allow(clippy::missing_panics_doc, reason = "odd values are non-zero")]
     pub fn as_nz_ref(&self) -> NonZero<T> {
         NonZero::new(self.0.clone()).expect("odd values are non-zero")
     }
@@ -534,15 +536,12 @@ impl ModulusParams for BoxedMontyParams {
         // `#[repr(transparent)]` — verify layout at compile time so a future
         // crypto_bigint version that changes representation fails to build
         // instead of producing silent UB.
-        const _: () = assert!(
-            core::mem::size_of::<CryptoOdd<BoxedUint>>() == core::mem::size_of::<Odd<BoxedUint>>()
-        );
-        const _: () = assert!(
-            core::mem::align_of::<CryptoOdd<BoxedUint>>()
-                == core::mem::align_of::<Odd<BoxedUint>>()
-        );
+        const _: () = assert!(size_of::<CryptoOdd<BoxedUint>>() == size_of::<Odd<BoxedUint>>());
+        const _: () = assert!(align_of::<CryptoOdd<BoxedUint>>() == align_of::<Odd<BoxedUint>>());
+        // SAFETY: both wrappers hold a single `T` with the layout asserted above.
         unsafe {
-            &*(self.modulus() as *const CryptoOdd<Self::Modulus> as *const Odd<Self::Modulus>)
+            &*core::ptr::from_ref::<CryptoOdd<Self::Modulus>>(self.modulus())
+                .cast::<Odd<Self::Modulus>>()
         }
     }
     fn bits_precision(&self) -> u32 {
@@ -565,7 +564,7 @@ impl IntegerResize for BoxedUint {
 
 #[cfg(feature = "alloc")]
 impl UnsignedModularInt for BoxedUint {
-    type Bytes = alloc::boxed::Box<[u8]>;
+    type Bytes = Box<[u8]>;
 
     fn to_be_bytes(&self) -> Self::Bytes {
         self.to_be_bytes()

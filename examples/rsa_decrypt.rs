@@ -10,8 +10,8 @@ use fixed_bigint::FixedUInt;
 use rsa::pkcs1v15::{GenericSignature, GenericVerifyingKey};
 use rsa::signature::hazmat::PrehashVerifier;
 use rsa::{
-    modmath_support::{public_key_from_be_bytes, rsa_public_op},
     ModMathValue,
+    modmath_support::{public_key_from_be_bytes, rsa_public_op},
 };
 use sha1::Sha1;
 

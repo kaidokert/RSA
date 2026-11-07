@@ -1,10 +1,10 @@
-use super::{sign_digest, Signature, SigningKey, VerifyingKey};
+use super::{Signature, SigningKey, VerifyingKey, sign_digest};
 use crate::{Result, RsaPrivateKey};
 use digest::{Digest, FixedOutputReset, HashMarker, Update};
 use rand_core::{CryptoRng, TryCryptoRng};
 use signature::{
-    hazmat::RandomizedPrehashSigner, Keypair, RandomizedDigestSigner, RandomizedMultipartSigner,
-    RandomizedSigner,
+    Keypair, RandomizedDigestSigner, RandomizedMultipartSigner, RandomizedSigner,
+    hazmat::RandomizedPrehashSigner,
 };
 use zeroize::ZeroizeOnDrop;
 
@@ -14,14 +14,14 @@ use {
     const_oid::AssociatedOid,
     pkcs8::{EncodePrivateKey, SecretDocument},
     spki::{
-        der::AnyRef, AlgorithmIdentifierOwned, AlgorithmIdentifierRef,
-        AssociatedAlgorithmIdentifier, DynSignatureAlgorithmIdentifier,
+        AlgorithmIdentifierOwned, AlgorithmIdentifierRef, AssociatedAlgorithmIdentifier,
+        DynSignatureAlgorithmIdentifier, der::AnyRef,
     },
 };
 #[cfg(feature = "serde")]
 use {
     pkcs8::DecodePrivateKey,
-    serdect::serde::{de, ser, Deserialize, Serialize},
+    serdect::serde::{Deserialize, Serialize, de, ser},
 };
 
 /// Signing key for producing "blinded" RSASSA-PSS signatures as described in
@@ -38,12 +38,14 @@ where
     /// Create a new RSASSA-PSS signing key which produces "blinded"
     /// signatures.
     /// Digest output size is used as a salt length.
+    #[must_use]
     pub fn new(key: RsaPrivateKey) -> Self {
         Self(SigningKey::new(key))
     }
 
     /// Create a new RSASSA-PSS signing key which produces "blinded"
     /// signatures with a salt of the given length.
+    #[must_use]
     pub fn new_with_salt_len(key: RsaPrivateKey, salt_len: usize) -> Self {
         Self(SigningKey::new_with_salt_len(key, salt_len))
     }
@@ -52,6 +54,7 @@ where
     /// signatures.
     /// Digest output size is used as a salt length.
     #[cfg(feature = "keygen")]
+    #[allow(clippy::missing_errors_doc, reason = "TODO")]
     pub fn random<R: CryptoRng + ?Sized>(rng: &mut R, bit_size: usize) -> Result<Self> {
         SigningKey::random(rng, bit_size).map(Self)
     }
@@ -59,6 +62,7 @@ where
     /// Create a new random RSASSA-PSS signing key which produces "blinded"
     /// signatures with a salt of the given length.
     #[cfg(feature = "keygen")]
+    #[allow(clippy::missing_errors_doc, reason = "TODO")]
     pub fn random_with_salt_len<R: CryptoRng + ?Sized>(
         rng: &mut R,
         bit_size: usize,
@@ -68,6 +72,7 @@ where
     }
 
     /// Return specified salt length for this key
+    #[must_use]
     pub fn salt_len(&self) -> usize {
         self.0.salt_len()
     }
@@ -286,7 +291,7 @@ mod tests {
         use super::*;
         use rand::rngs::ChaCha8Rng;
         use rand_core::SeedableRng;
-        use serde_test::{assert_tokens, Configure, Token};
+        use serde_test::{Configure, Token, assert_tokens};
         use sha2::Sha256;
 
         let mut rng = ChaCha8Rng::from_seed([42; 32]);

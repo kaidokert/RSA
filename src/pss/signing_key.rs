@@ -1,18 +1,18 @@
-use super::{sign_digest, GenericSigningKey, Signature, VerifyingKey};
+use super::{GenericSigningKey, Signature, VerifyingKey, sign_digest};
 use crate::{Result, RsaPrivateKey};
-use crypto_bigint::{modular::BoxedMontyParams, BoxedUint};
+use crypto_bigint::{BoxedUint, modular::BoxedMontyParams};
 use digest::{Digest, FixedOutputReset, Update};
 use rand_core::{CryptoRng, TryCryptoRng};
 use signature::{
-    hazmat::RandomizedPrehashSigner, Keypair, RandomizedDigestSigner, RandomizedMultipartSigner,
-    RandomizedSigner,
+    Keypair, RandomizedDigestSigner, RandomizedMultipartSigner, RandomizedSigner,
+    hazmat::RandomizedPrehashSigner,
 };
 use zeroize::ZeroizeOnDrop;
 
 #[cfg(feature = "serde")]
 use {
     pkcs8::DecodePrivateKey,
-    serdect::serde::{de, ser, Deserialize, Serialize},
+    serdect::serde::{Deserialize, Serialize, de, ser},
 };
 
 #[cfg(feature = "encoding")]
@@ -21,15 +21,15 @@ use {
     const_oid::AssociatedOid,
     pkcs8::{EncodePrivateKey, SecretDocument},
     spki::{
-        der::AnyRef, AlgorithmIdentifierOwned, AlgorithmIdentifierRef,
-        AssociatedAlgorithmIdentifier, DynSignatureAlgorithmIdentifier,
+        AlgorithmIdentifierOwned, AlgorithmIdentifierRef, AssociatedAlgorithmIdentifier,
+        DynSignatureAlgorithmIdentifier, der::AnyRef,
     },
 };
 
 #[cfg(feature = "getrandom")]
 use {
     crypto_common::getrandom::SysRng,
-    signature::{hazmat::PrehashSigner, MultipartSigner, Signer},
+    signature::{MultipartSigner, Signer, hazmat::PrehashSigner},
 };
 
 /// Signing key for producing RSASSA-PSS signatures as described in
@@ -45,11 +45,13 @@ where
 {
     /// Generate a new random RSASSA-PSS signing key.
     /// Digest output size is used as a salt length.
+    #[allow(clippy::missing_errors_doc, reason = "TODO")]
     pub fn random<R: CryptoRng + ?Sized>(rng: &mut R, bit_size: usize) -> Result<Self> {
         Self::random_with_salt_len(rng, bit_size, <D as Digest>::output_size())
     }
 
     /// Generate a new random RSASSA-PSS signing key with a salt of the given length.
+    #[allow(clippy::missing_errors_doc, reason = "TODO")]
     pub fn random_with_salt_len<R: CryptoRng + ?Sized>(
         rng: &mut R,
         bit_size: usize,
@@ -259,7 +261,7 @@ where
 {
     fn serialize<S>(&self, serializer: S) -> core::result::Result<S::Ok, S::Error>
     where
-        S: serdect::serde::Serializer,
+        S: serde::Serializer,
     {
         let der = self.to_pkcs8_der().map_err(ser::Error::custom)?;
         serdect::slice::serialize_hex_lower_or_bin(&der.as_bytes(), serializer)
@@ -273,7 +275,7 @@ where
 {
     fn deserialize<De>(deserializer: De) -> core::result::Result<Self, De::Error>
     where
-        De: serdect::serde::Deserializer<'de>,
+        De: serde::Deserializer<'de>,
     {
         let der_bytes = serdect::slice::deserialize_hex_or_bin_vec(deserializer)?;
         Self::from_pkcs8_der(&der_bytes).map_err(de::Error::custom)
@@ -288,7 +290,7 @@ mod tests {
         use super::*;
         use rand::rngs::ChaCha8Rng;
         use rand_core::SeedableRng;
-        use serde_test::{assert_tokens, Configure, Token};
+        use serde_test::{Configure, Token, assert_tokens};
         use sha2::Sha256;
 
         let mut rng = ChaCha8Rng::from_seed([42; 32]);

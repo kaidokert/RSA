@@ -3,8 +3,6 @@
 #![cfg_attr(not(all(feature = "alloc", feature = "keygen")), allow(unused))]
 #![doc = include_str!("../README.md")]
 #![doc(html_logo_url = "https://raw.githubusercontent.com/RustCrypto/meta/master/logo_small.png")]
-#![warn(missing_docs)]
-#![cfg_attr(not(test), deny(clippy::unwrap_used))]
 
 //! # Supported algorithms
 //!

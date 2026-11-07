@@ -10,14 +10,12 @@ use super::blinding::{blind_exponent, pow_mod_blinded, totient};
 use crypto_bigint::Resize as _;
 #[cfg(feature = "alloc")]
 use crypto_bigint::{
-    modular::BoxedMontyParams, BoxedUint, ConcatenatingMul, ConcatenatingSquare, Gcd, RandomMod,
+    BoxedUint, ConcatenatingMul, ConcatenatingSquare, Gcd, RandomMod, modular::BoxedMontyParams,
 };
 #[cfg(feature = "alloc")]
 use crypto_bigint::{NonZero as CryptoNonZero, Odd as CryptoOdd};
 use rand_core::TryCryptoRng;
-use zeroize::Zeroize;
-#[cfg(feature = "alloc")]
-use zeroize::Zeroizing;
+use zeroize::{Zeroize, Zeroizing};
 
 #[cfg(not(feature = "alloc"))]
 use crate::traits::keys::PublicKeyParts;
@@ -26,10 +24,10 @@ use crate::traits::keys::{PrivateKeyParts, PublicKeyParts};
 use crate::{
     errors::{Error, Result},
     traits::{
+        UnsignedModularInt,
         modular::{
             IntoMontyForm, InvertCt, ModulusParams, MulCt, Pow, PowBoundedExp, TryRandomMod,
         },
-        UnsignedModularInt,
     },
 };
 
@@ -39,11 +37,14 @@ use crate::{
 /// The caller must check that the representative is less than `n` to implement either primitive;
 /// this function reduces out-of-range inputs modulo `n`.
 ///
-/// # ☢️️ WARNING: HAZARDOUS API ☢️
+/// <div class="warning">
+/// <b> ☢️️ WARNING: HAZARDOUS API ☢️</b>
 ///
 /// Use this function with great care! Raw RSA should never be used without an appropriate padding
 /// or signature scheme. See the [module-level documentation][crate::hazmat] for more information.
+/// </div>
 #[inline]
+#[allow(clippy::missing_errors_doc, reason = "TODO")]
 pub fn rsa_encrypt<T, K>(key: &K, m: &T) -> Result<T>
 where
     T: UnsignedModularInt,
@@ -63,12 +64,14 @@ where
 /// is passed, using fresh factors for each private operation.
 /// Blinded non-CRT operations require the prime factors in [`PrivateKeyParts::primes`].
 ///
-/// # ☢️️ WARNING: HAZARDOUS API ☢️
+/// <div class="warning">
+/// <b> ☢️️ WARNING: HAZARDOUS API ☢️</b>
 ///
 /// Use this function with great care! Raw RSA should never be used without an appropriate padding
 /// or signature scheme. See the [module-level documentation][crate::hazmat] for more information.
 #[cfg(feature = "alloc")]
 #[inline]
+#[allow(clippy::missing_errors_doc, reason = "TODO")]
 pub fn rsa_decrypt<R: TryCryptoRng + ?Sized>(
     mut rng: Option<&mut R>,
     priv_key: &impl PrivateKeyParts<BoxedUint, MontyParams = BoxedMontyParams>,
@@ -198,12 +201,14 @@ pub fn rsa_decrypt<R: TryCryptoRng + ?Sized>(
 ///
 /// `c` must have the same `bits_precision` as the RSA key modulus.
 ///
-/// # ☢️️ WARNING: HAZARDOUS API ☢️
+/// <div class="warning">
+/// <b> ☢️️ WARNING: HAZARDOUS API ☢️</b>
 ///
 /// Use this function with great care! Raw RSA should never be used without an appropriate padding
 /// or signature scheme. See the [module-level documentation][crate::hazmat] for more information.
 #[cfg(feature = "alloc")]
 #[inline]
+#[allow(clippy::missing_errors_doc, reason = "TODO")]
 pub fn rsa_decrypt_and_check<R: TryCryptoRng + ?Sized>(
     priv_key: &impl PrivateKeyParts<BoxedUint, MontyParams = BoxedMontyParams>,
     rng: Option<&mut R>,
@@ -453,7 +458,7 @@ pub fn rsa_private_op_and_check_blinded<R, T, M>(
     n_params: &M,
 ) -> Result<T>
 where
-    R: rand_core::TryCryptoRng + ?Sized,
+    R: TryCryptoRng + ?Sized,
     T: UnsignedModularInt + TryRandomMod,
     M: ModulusParams<Modulus = T> + crate::traits::modular::CtModulusParams,
     M::MontgomeryForm: Pow<M> + PowBoundedExp<M> + InvertCt<M> + MulCt<M>,
@@ -463,7 +468,7 @@ where
     for _ in 0..BLINDING_RETRIES {
         // `r` is secret — wrap in `Zeroizing` so it's wiped when we
         // drop out of scope on `continue`, verify-fail, or success.
-        let r = zeroize::Zeroizing::new(T::try_random_mod(rng, n)?);
+        let r = Zeroizing::new(T::try_random_mod(rng, n)?);
         crate::ct_probe::mark(crate::ct_probe::stage::SAMPLE_R);
         let mut m = match rsa_private_op_blinded(&*r, c, d, e, n_params) {
             Ok(m) => m,
@@ -731,7 +736,7 @@ mod tests {
         let (mut p1, mut q1) = recover_primes(&CryptoNonZero::new(n).unwrap(), &e, &d).unwrap();
 
         if p1 < q1 {
-            std::mem::swap(&mut p1, &mut q1);
+            core::mem::swap(&mut p1, &mut q1);
         }
         assert_eq!(p, p1);
         assert_eq!(q, q1);

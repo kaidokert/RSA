@@ -8,10 +8,10 @@
 use alloc::boxed::Box;
 use core::ops::{Shr, ShrAssign};
 
-use const_num_traits::ops::overflowing::OverflowingAdd;
-use const_num_traits::ops::wrapping::{WrappingAdd, WrappingMul, WrappingSub};
 use const_num_traits::FromByteSlice;
 use const_num_traits::WithPrecision;
+use const_num_traits::ops::overflowing::OverflowingAdd;
+use const_num_traits::ops::wrapping::{WrappingAdd, WrappingMul, WrappingSub};
 use const_num_traits::{Ct, HasPersonality, Nct, Personality};
 use const_num_traits::{One, Zero};
 use modmath::{CiosMontMul, CiosMontMulCt, Field as ModmathField, Parity, WideMul};
@@ -324,6 +324,7 @@ pub type ModMathValue<T> = T;
 //
 // See the `TryRandomMod` trait doc for the CT-property discussion.
 #[cfg(feature = "modmath")]
+#[allow(clippy::integer_division_remainder_used, reason = "public bit counts")]
 fn try_random_mod_masked<R, T, W, F>(
     rng: &mut R,
     modulus_bits: u32,
@@ -439,6 +440,7 @@ pub struct ModMathParams<T, P: Personality = Nct> {
 }
 
 impl<T: ModMathInt + HasPersonality<P = Nct>> ModMathParams<T, Nct> {
+    #[allow(clippy::missing_errors_doc, reason = "TODO")]
     pub fn new(modulus: T) -> Result<Self> {
         let field = ModmathField::<T, Nct>::new(modulus).ok_or(Error::InvalidModulus)?;
         let modulus_odd = Odd::new(wrap_value(modulus)).ok_or(Error::InvalidModulus)?;
@@ -449,6 +451,7 @@ impl<T: ModMathInt + HasPersonality<P = Nct>> ModMathParams<T, Nct> {
 impl<T: ModMathIntCt + HasPersonality<P = Ct>> ModMathParams<T, Ct> {
     /// Create CT (encrypt) Montgomery parameters for an odd, non-zero
     /// modulus.
+    #[allow(clippy::missing_errors_doc, reason = "TODO")]
     pub fn new(modulus: T) -> Result<Self> {
         let field = ModmathField::<T, Ct>::new(modulus).ok_or(Error::InvalidModulus)?;
         let modulus_odd = Odd::new(wrap_value(modulus)).ok_or(Error::InvalidModulus)?;
@@ -464,6 +467,7 @@ impl<T, P: Personality> ModMathParams<T, P> {
 
 /// Construct an **NCT** public key from big-endian modulus bytes and a public
 /// exponent. Use this for signature verification.
+#[allow(clippy::missing_errors_doc, reason = "TODO")]
 pub fn public_key_from_be_bytes<T>(
     modulus: &[u8],
     exponent: u32,
@@ -483,6 +487,7 @@ where
 
 /// Apply the raw RSA public operation to a fixed-width block using the **NCT**
 /// (vartime) Montgomery path. Intended for signature verification.
+#[allow(clippy::missing_errors_doc, reason = "TODO")]
 pub fn rsa_public_op<T>(
     key: &GenericRsaPublicKey<ModMathValue<T>, ModMathParams<T, Nct>>,
     input: &[u8],
@@ -500,6 +505,7 @@ where
 /// PKCS#1 v1.5 / OAEP encryption (or any other path where the plaintext is
 /// secret). `T` must be a Ct-typed FixedUInt; the bound is enforced by the
 /// `CiosMontMulCt` requirement inside [`ModMathIntCt`].
+#[allow(clippy::missing_errors_doc, reason = "TODO")]
 pub fn public_key_ct_from_be_bytes<T>(
     modulus: &[u8],
     exponent: u32,
@@ -517,6 +523,7 @@ where
     GenericRsaPublicKey::from_components(n, e, ModMathParams::<T, Ct>::new(unwrap_value(&n))?)
 }
 
+#[allow(clippy::missing_errors_doc, reason = "TODO")]
 pub fn rsa_public_op_ct<T>(
     key: &GenericRsaPublicKey<ModMathValue<T>, ModMathParams<T, Ct>>,
     input: &[u8],
@@ -799,12 +806,12 @@ mod tests {
     use signature::hazmat::PrehashVerifier;
 
     use super::{
-        public_key_ct_from_be_bytes, public_key_from_be_bytes, ModMathForm, ModMathParams,
-        ModMathValue,
+        ModMathForm, ModMathParams, ModMathValue, public_key_ct_from_be_bytes,
+        public_key_from_be_bytes,
     };
     use crate::key::GenericRsaPublicKey;
     use crate::pkcs1v15::{GenericEncryptingKey, GenericSignature, GenericVerifyingKey};
-    use crate::{traits::RandomizedEncryptor, BoxedUint, Pkcs1v15Encrypt, RsaPublicKey};
+    use crate::{BoxedUint, Pkcs1v15Encrypt, RsaPublicKey, traits::RandomizedEncryptor};
 
     type SmallU = FixedUInt<u8, 64>;
     type SmallUCt = FixedUInt<u8, 64, Ct>;
@@ -995,7 +1002,7 @@ mod private_op_tests {
     // `Pow + PowBoundedExp + InvertCt + MulCt`, and for `T` /
     // `ModMathValue<T>` to satisfy `TryRandomMod`.
     trait TestCt:
-        super::ModMathIntCt
+        ModMathIntCt
         + HasPersonality<P = Ct>
         + modmath_cios::CiosRowOps
         + core::ops::BitOr<Output = Self>
@@ -1006,7 +1013,7 @@ mod private_op_tests {
     }
     impl<T> TestCt for T
     where
-        T: super::ModMathIntCt
+        T: ModMathIntCt
             + HasPersonality<P = Ct>
             + modmath_cios::CiosRowOps
             + core::ops::BitOr<Output = T>
@@ -1501,13 +1508,13 @@ mod private_op_tests {
 
     // Local alias for `rsa_public_op_ct` — keeps the test's call-site short.
     fn public_key_op_ct<T>(
-        key: &crate::key::GenericRsaPublicKey<ModMathValue<T>, ModMathParams<T, Ct>>,
+        key: &GenericRsaPublicKey<ModMathValue<T>, ModMathParams<T, Ct>>,
         input: &[u8],
     ) -> Result<<ModMathValue<T> as UnsignedModularInt>::Bytes>
     where
         T: ModMathIntCt + HasPersonality<P = Ct>,
     {
-        crate::modmath_support::rsa_public_op_ct(key, input)
+        rsa_public_op_ct(key, input)
     }
 
     // ─── defensive-error tests for `sign_into` upfront checks ───────────
@@ -1758,8 +1765,7 @@ mod private_op_tests {
         type U2048 = FixedUInt<u8, 256, Ct>;
         const K: usize = 256;
 
-        let public =
-            crate::modmath_support::public_key_ct_from_be_bytes::<U2048>(&N_2048, 65537).unwrap();
+        let public = public_key_ct_from_be_bytes::<U2048>(&N_2048, 65537).unwrap();
         let public_clone: GenericRsaPublicKey<ModMathValue<U2048>, ModMathParams<U2048, Ct>> =
             public.clone();
         let d = wrap_value(
@@ -1796,8 +1802,7 @@ mod private_op_tests {
         type U2048 = FixedUInt<u8, 256, Ct>;
         const K: usize = 256;
 
-        let public =
-            crate::modmath_support::public_key_ct_from_be_bytes::<U2048>(&N_2048, 65537).unwrap();
+        let public = public_key_ct_from_be_bytes::<U2048>(&N_2048, 65537).unwrap();
         let d = wrap_value(
             <U2048 as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(&D_2048).unwrap(),
         );
@@ -1824,8 +1829,7 @@ mod private_op_tests {
         const K: usize = 256;
         const KEY_BITS: usize = 2048;
 
-        let key =
-            crate::modmath_support::public_key_ct_from_be_bytes::<U2048>(&N_2048, 65537).unwrap();
+        let key = public_key_ct_from_be_bytes::<U2048>(&N_2048, 65537).unwrap();
         let d = wrap_value(
             <U2048 as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(&D_2048).unwrap(),
         );
@@ -1877,8 +1881,7 @@ mod private_op_tests {
         const K: usize = 256;
         const KEY_BITS: usize = 2048;
 
-        let key =
-            crate::modmath_support::public_key_ct_from_be_bytes::<U2048>(&N_2048, 65537).unwrap();
+        let key = public_key_ct_from_be_bytes::<U2048>(&N_2048, 65537).unwrap();
         let d = wrap_value(
             <U2048 as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(&D_2048).unwrap(),
         );
@@ -1926,8 +1929,7 @@ mod private_op_tests {
         type U2048 = FixedUInt<u8, 256, Ct>;
         const K: usize = 256;
 
-        let key =
-            crate::modmath_support::public_key_ct_from_be_bytes::<U2048>(&N_2048, 65537).unwrap();
+        let key = public_key_ct_from_be_bytes::<U2048>(&N_2048, 65537).unwrap();
         let d = wrap_value(
             <U2048 as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(&D_2048).unwrap(),
         );
@@ -1955,8 +1957,7 @@ mod private_op_tests {
         type U2048 = FixedUInt<u8, 256, Ct>;
         const K: usize = 256;
 
-        let key =
-            crate::modmath_support::public_key_ct_from_be_bytes::<U2048>(&N_2048, 65537).unwrap();
+        let key = public_key_ct_from_be_bytes::<U2048>(&N_2048, 65537).unwrap();
         let d = wrap_value(
             <U2048 as FixedWidthUnsignedInt>::try_from_be_bytes_vartime(&D_2048).unwrap(),
         );
@@ -1987,8 +1988,7 @@ mod private_op_tests {
             GenericSigningKey<Sha1, ModMathValue<SmallUCt>, ModMathParams<SmallUCt, Ct>>,
         >();
 
-        let public =
-            crate::modmath_support::public_key_ct_from_be_bytes::<SmallUCt>(&[35u8], 5).unwrap();
+        let public = public_key_ct_from_be_bytes::<SmallUCt>(&[35u8], 5).unwrap();
         let priv_key =
             GenericRsaPrivateKey::from_public_and_d(public, wrap_value(SmallUCt::from(29u8)));
         let mut signing_key = GenericSigningKey::<Sha1, _, _>::new(priv_key);
@@ -2007,8 +2007,7 @@ mod private_op_tests {
 
         // Construct one and exercise .zeroize() at runtime to confirm the
         // delegation compiles end-to-end.
-        let public =
-            crate::modmath_support::public_key_ct_from_be_bytes::<SmallUCt>(&[35u8], 5).unwrap();
+        let public = public_key_ct_from_be_bytes::<SmallUCt>(&[35u8], 5).unwrap();
         let priv_key =
             GenericRsaPrivateKey::from_public_and_d(public, wrap_value(SmallUCt::from(29u8)));
         let mut signing_key = GenericSigningKey::<Sha1, _, _>::new(priv_key);
@@ -2038,8 +2037,7 @@ mod private_op_tests {
 
         // Use the existing public-key constructor for the pubkey side,
         // then attach a dummy d.
-        let public =
-            crate::modmath_support::public_key_ct_from_be_bytes::<SmallUCt>(&[35u8], 5).unwrap();
+        let public = public_key_ct_from_be_bytes::<SmallUCt>(&[35u8], 5).unwrap();
         let key = GenericRsaPrivateKey::from_public_and_d(public, wrap_value(SmallUCt::from(29u8)));
 
         assert_pub_parts::<_, ModMathValue<SmallUCt>>(&key);
@@ -2089,7 +2087,7 @@ mod private_op_tests {
                     salt_len,
                     &mut storage,
                 ),
-                Err(crate::Error::Verification)
+                Err(Error::Verification)
             );
         }
     }

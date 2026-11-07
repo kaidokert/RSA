@@ -129,7 +129,7 @@ pub(crate) fn i2osp_zeroizing(input: BoxedUint, padded_len: usize) -> Zeroizing<
 pub fn i2osp_zeroizing_into<T>(input: T, padded_len: usize, storage: &mut [u8]) -> Result<&[u8]>
 where
     T: UnsignedModularInt,
-    T::Bytes: zeroize::Zeroize,
+    T::Bytes: Zeroize,
 {
     let input = Zeroizing::new(input);
     let bytes = Zeroizing::new(input.to_be_bytes());
@@ -155,6 +155,7 @@ where
 /// [RFC8017 §4.2]: https://www.rfc-editor.org/rfc/rfc8017.html#section-4.2
 #[cfg(feature = "alloc")]
 #[inline]
+#[allow(clippy::integer_division_remainder_used, reason = "debug")]
 pub(crate) fn os2ip(input: &[u8], bits_precision: u32) -> Result<BoxedUint> {
     debug_assert_eq!(bits_precision % crypto_bigint::Limb::BITS, 0);
     Ok(BoxedUint::from_be_slice(input, bits_precision)?)
@@ -257,7 +258,7 @@ mod tests {
     fn os2ip_rejects_oversized_input() {
         // Leading zeros do not make an encoding fit the requested storage width.
         let input = vec![0; 17];
-        let expected = crate::errors::Error::Decode(crypto_bigint::DecodeError::InputSize);
+        let expected = Error::Decode(crypto_bigint::DecodeError::InputSize);
         assert_eq!(os2ip(&input, 128).unwrap_err(), expected);
         assert_eq!(
             os2ip_zeroizing(Zeroizing::new(input), 128).unwrap_err(),

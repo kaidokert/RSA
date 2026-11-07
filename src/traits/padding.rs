@@ -18,6 +18,7 @@ pub trait PaddingScheme {
     /// If an `rng` is passed, it uses RSA blinding to help mitigate timing
     /// side-channel attacks.
     #[cfg(feature = "alloc")]
+    #[allow(clippy::missing_errors_doc, reason = "TODO")]
     fn decrypt<Rng: TryCryptoRng + ?Sized>(
         self,
         rng: Option<&mut Rng>,
@@ -27,6 +28,7 @@ pub trait PaddingScheme {
 
     /// Encrypt the given message using the given public key.
     #[cfg(feature = "alloc")]
+    #[allow(clippy::missing_errors_doc, reason = "TODO")]
     fn encrypt<Rng, K, T>(self, rng: &mut Rng, pub_key: &K, msg: &[u8]) -> Result<Vec<u8>>
     where
         Rng: TryCryptoRng + ?Sized,
@@ -39,6 +41,7 @@ pub trait PaddingScheme {
 pub trait SignatureScheme {
     /// Sign the given digest.
     #[cfg(feature = "alloc")]
+    #[allow(clippy::missing_errors_doc, reason = "TODO")]
     fn sign<Rng: TryCryptoRng + ?Sized>(
         self,
         rng: Option<&mut Rng>,
@@ -52,6 +55,7 @@ pub trait SignatureScheme {
     /// passed in through `hash`.
     ///
     /// If the message is valid `Ok(())` is returned, otherwise an `Err` indicating failure.
+    #[allow(clippy::missing_errors_doc, reason = "TODO")]
     fn verify<K, T>(self, pub_key: &K, hashed: &[u8], sig: &[u8]) -> Result<()>
     where
         T: UnsignedModularInt,

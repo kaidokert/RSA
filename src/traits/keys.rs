@@ -5,7 +5,7 @@ use crate::key::SecretPrime;
 #[cfg(feature = "alloc")]
 use alloc::boxed::Box;
 
-use crate::traits::{modular::ModulusParams, NonZero, UnsignedModularInt};
+use crate::traits::{NonZero, UnsignedModularInt, modular::ModulusParams};
 
 /// Marker trait gating the raw `(public_key, d)` constructor
 /// [`crate::key::GenericRsaPrivateKey::from_public_and_d`]. Backends opt

@@ -98,6 +98,7 @@ impl Pkcs1v15Encrypt {
     /// Encrypts the given message with RSA and PKCS#1 v1.5 padding into caller-provided storage.
     ///
     /// The message must be no longer than the length of the public modulus minus 11 bytes.
+    #[allow(clippy::missing_errors_doc, reason = "TODO")]
     pub fn encrypt_into<'a, R, K, T>(
         self,
         rng: &mut R,
@@ -234,6 +235,7 @@ impl Pkcs1v15Sign {
     ///
     /// The digest must have an [`AssociatedOid`]. Make sure to enable the `oid`
     /// feature of the relevant digest crate.
+    #[must_use]
     pub fn new<D>() -> Self
     where
         D: Digest + AssociatedOid,
@@ -250,6 +252,7 @@ impl Pkcs1v15Sign {
     /// Create new PKCS#1 v1.5 padding for computing an unprefixed signature.
     ///
     /// This sets `hash_len` to `None` and uses an empty `prefix`.
+    #[must_use]
     pub fn new_unprefixed() -> Self {
         Self {
             hash_len: None,
@@ -309,6 +312,7 @@ impl SignatureScheme for Pkcs1v15Sign {
 /// scheme from PKCS#1 v1.5.  The message must be no longer than the
 /// length of the public modulus minus 11 bytes.
 #[inline]
+#[allow(clippy::missing_errors_doc, reason = "TODO")]
 pub fn encrypt_into<'a, R, K, T>(
     rng: &mut R,
     pub_key: &K,
@@ -439,28 +443,23 @@ mod oid {
 
     #[cfg(feature = "sha1")]
     impl RsaSignatureAssociatedOid for sha1::Sha1 {
-        const OID: ObjectIdentifier =
-            const_oid::ObjectIdentifier::new_unwrap("1.2.840.113549.1.1.5");
+        const OID: ObjectIdentifier = ObjectIdentifier::new_unwrap("1.2.840.113549.1.1.5");
     }
 
     impl RsaSignatureAssociatedOid for sha2::Sha224 {
-        const OID: ObjectIdentifier =
-            const_oid::ObjectIdentifier::new_unwrap("1.2.840.113549.1.1.14");
+        const OID: ObjectIdentifier = ObjectIdentifier::new_unwrap("1.2.840.113549.1.1.14");
     }
 
     impl RsaSignatureAssociatedOid for sha2::Sha256 {
-        const OID: ObjectIdentifier =
-            const_oid::ObjectIdentifier::new_unwrap("1.2.840.113549.1.1.11");
+        const OID: ObjectIdentifier = ObjectIdentifier::new_unwrap("1.2.840.113549.1.1.11");
     }
 
     impl RsaSignatureAssociatedOid for sha2::Sha384 {
-        const OID: ObjectIdentifier =
-            const_oid::ObjectIdentifier::new_unwrap("1.2.840.113549.1.1.12");
+        const OID: ObjectIdentifier = ObjectIdentifier::new_unwrap("1.2.840.113549.1.1.12");
     }
 
     impl RsaSignatureAssociatedOid for sha2::Sha512 {
-        const OID: ObjectIdentifier =
-            const_oid::ObjectIdentifier::new_unwrap("1.2.840.113549.1.1.13");
+        const OID: ObjectIdentifier = ObjectIdentifier::new_unwrap("1.2.840.113549.1.1.13");
     }
 }
 
@@ -471,9 +470,9 @@ pub use oid::RsaSignatureAssociatedOid;
 mod tests {
     use super::*;
     use ::signature::{
-        hazmat::{PrehashSigner, PrehashVerifier},
         DigestSigner, DigestVerifier, Keypair, RandomizedDigestSigner, RandomizedSigner,
         SignatureEncoding, Signer, Verifier,
+        hazmat::{PrehashSigner, PrehashVerifier},
     };
     use base64ct::{Base64, Encoding};
     use hex_literal::hex;

@@ -10,11 +10,11 @@ use signature::SignatureEncoding;
 use crate::traits::UnsignedModularInt;
 
 #[cfg(feature = "serde")]
-use serdect::serde::{de, Deserialize, Serialize};
+use serdect::serde::{Deserialize, Serialize, de};
 #[cfg(feature = "encoding")]
 use spki::{
-    der::{asn1::BitString, Result as DerResult},
     SignatureBitStringEncoding,
+    der::{Result as DerResult, asn1::BitString},
 };
 
 /// `RSASSA-PSS` signatures as described in [RFC8017 § 8.1].
@@ -33,6 +33,17 @@ where
 pub struct SignatureBytes<T>(T::Bytes)
 where
     T: UnsignedModularInt;
+
+impl<T> Debug for SignatureBytes<T>
+where
+    T: UnsignedModularInt,
+{
+    fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
+        f.debug_tuple("SignatureBytes")
+            .field(&self.0.as_ref())
+            .finish()
+    }
+}
 
 /// Boxed PSS signature alias used by the `alloc` code path.
 #[cfg(feature = "alloc")]
@@ -181,9 +192,9 @@ impl<T> Serialize for GenericSignature<T>
 where
     T: UnsignedModularInt,
 {
-    fn serialize<S>(&self, serializer: S) -> core::result::Result<S::Ok, S::Error>
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: serdect::serde::Serializer,
+        S: serde::Serializer,
     {
         let bytes = self.inner.to_be_bytes();
         serdect::slice::serialize_hex_lower_or_bin(&bytes, serializer)
@@ -192,9 +203,9 @@ where
 
 #[cfg(all(feature = "serde", feature = "alloc"))]
 impl<'de> Deserialize<'de> for GenericSignature<BoxedUint> {
-    fn deserialize<D>(deserializer: D) -> core::result::Result<Self, D::Error>
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
-        D: serdect::serde::Deserializer<'de>,
+        D: serde::Deserializer<'de>,
     {
         serdect::slice::deserialize_hex_or_bin_vec(deserializer)?
             .as_slice()
@@ -209,7 +220,7 @@ mod tests {
     #[cfg(all(feature = "serde", feature = "alloc"))]
     fn test_serde() {
         use super::*;
-        use serde_test::{assert_tokens, Configure, Token};
+        use serde_test::{Configure, Token, assert_tokens};
         let signature = GenericSignature::<BoxedUint> {
             inner: BoxedUint::from(42u32),
         };

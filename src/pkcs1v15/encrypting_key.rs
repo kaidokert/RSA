@@ -1,16 +1,16 @@
 use super::encrypt_into;
 use crate::{
+    Result,
     key::GenericRsaPublicKey,
     traits::{
-        modular::{CtModulusParams, ModulusParams},
         PublicKeyParts, RandomizedEncryptor, UnsignedModularInt,
+        modular::{CtModulusParams, ModulusParams},
     },
-    Result,
 };
 #[cfg(feature = "alloc")]
 use alloc::vec::Vec;
 #[cfg(feature = "alloc")]
-use crypto_bigint::{modular::BoxedMontyParams, BoxedUint};
+use crypto_bigint::{BoxedUint, modular::BoxedMontyParams};
 use rand_core::CryptoRng;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -81,7 +81,7 @@ mod tests {
         use crate::RsaPrivateKey;
         use rand::rngs::ChaCha8Rng;
         use rand_core::SeedableRng;
-        use serde_test::{assert_tokens, Configure, Token};
+        use serde_test::{Configure, Token, assert_tokens};
 
         let mut rng = ChaCha8Rng::from_seed([42; 32]);
         let priv_key = RsaPrivateKey::new_unchecked(&mut rng, 64).expect("failed to generate key");

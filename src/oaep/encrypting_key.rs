@@ -1,16 +1,16 @@
-use super::encrypt_digest_into;
 #[cfg(not(feature = "alloc"))]
 use super::Label;
+use super::encrypt_digest_into;
 use crate::traits::{
-    modular::{CtModulusParams, ModulusParams},
     PublicKeyParts, UnsignedModularInt,
+    modular::{CtModulusParams, ModulusParams},
 };
-use crate::{traits::RandomizedEncryptor, GenericRsaPublicKey, Result};
+use crate::{GenericRsaPublicKey, Result, traits::RandomizedEncryptor};
 #[cfg(feature = "alloc")]
 use alloc::{boxed::Box, vec::Vec};
 use core::marker::PhantomData;
 #[cfg(feature = "alloc")]
-use crypto_bigint::{modular::BoxedMontyParams, BoxedUint};
+use crypto_bigint::{BoxedUint, modular::BoxedMontyParams};
 use digest::{Digest, FixedOutputReset};
 use rand_core::{CryptoRng, TryCryptoRng};
 #[cfg(feature = "serde")]
@@ -130,7 +130,7 @@ mod tests {
         use super::*;
         use rand::rngs::ChaCha8Rng;
         use rand_core::SeedableRng;
-        use serde_test::{assert_tokens, Configure, Token};
+        use serde_test::{Configure, Token, assert_tokens};
 
         let mut rng = ChaCha8Rng::from_seed([42; 32]);
         let priv_key =

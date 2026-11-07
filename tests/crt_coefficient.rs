@@ -5,8 +5,8 @@
 #[cfg(feature = "hazmat")]
 use rand::rngs::ChaCha8Rng;
 use rsa::{
-    traits::{PrivateKeyParts, PublicKeyParts},
     BoxedUint, RsaPrivateKey,
+    traits::{PrivateKeyParts, PublicKeyParts},
 };
 
 fn key_and_coefficient(reverse: bool) -> (RsaPrivateKey, BoxedUint) {

@@ -9,13 +9,13 @@ use std::{fmt::Debug, fs::File};
 
 use pkcs1::DecodeRsaPublicKey;
 use pkcs8::DecodePrivateKey;
-use rsa::{pkcs1v15, pss, signature::Verifier, Oaep, RsaPrivateKey, RsaPublicKey};
+use rsa::{Oaep, RsaPrivateKey, RsaPublicKey, pkcs1v15, pss, signature::Verifier};
 use rstest::rstest;
 use serde::Deserialize;
 use sha1::Sha1;
 use sha2::{
-    digest::{Digest, FixedOutputReset},
     Sha224, Sha256, Sha384, Sha512, Sha512_224, Sha512_256,
+    digest::{Digest, FixedOutputReset},
 };
 
 #[derive(Deserialize, Debug)]
@@ -225,7 +225,7 @@ fn test_rsa_pss_verify(#[case] file: &str) {
     for group in tests.groups {
         summary.group(&group);
 
-        let key = rsa::RsaPublicKey::from_pkcs1_der(&group.public_key_asn).unwrap();
+        let key = RsaPublicKey::from_pkcs1_der(&group.public_key_asn).unwrap();
         println!("key is {:?}", key);
 
         for test in group.tests {
