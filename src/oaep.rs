@@ -23,24 +23,22 @@ use alloc::boxed::Box;
 #[cfg(feature = "alloc")]
 use alloc::{vec, vec::Vec};
 use core::fmt;
-#[cfg(feature = "alloc")]
-use crypto_bigint::BoxedUint;
 
 use digest::{Digest, FixedOutputReset};
 use rand_core::TryCryptoRng;
 
 use crate::algorithms::oaep::*;
+use crate::algorithms::pad::i2osp_into;
 #[cfg(feature = "alloc")]
-use crate::algorithms::pad::{uint_to_be_pad, uint_to_be_pad_into, uint_to_zeroizing_be_pad};
+use crate::algorithms::pad::{i2osp, i2osp_zeroizing, os2ip, os2ip_zeroizing};
 #[cfg(feature = "alloc")]
 use crate::algorithms::rsa::rsa_decrypt_and_check;
-#[cfg(feature = "alloc")]
 use crate::algorithms::rsa::rsa_encrypt;
 use crate::errors::{Error, Result};
 #[cfg(feature = "alloc")]
-use crate::key::RsaPrivateKey;
+use crate::private_key::RsaPrivateKey;
 #[cfg(feature = "alloc")]
-use crate::key::{self, RsaPublicKey};
+use crate::public_key::{self, RsaPublicKey};
 use crate::traits::{PaddingScheme, PublicKeyParts, UnsignedModularInt};
 
 /// Encryption and Decryption using [OAEP padding](https://datatracker.ietf.org/doc/html/rfc8017#section-7.1).
@@ -101,6 +99,7 @@ where
     /// let padding = Oaep::<Sha256>::new();
     /// let encrypted_data = key.encrypt(&mut rng, padding, b"secret").unwrap();
     /// ```
+    #[must_use]
     pub fn new() -> Self {
         Self {
             digest: D::new(),
@@ -146,6 +145,7 @@ where
     /// let padding = Oaep::<Sha256, Sha1>::new_with_mgf_hash();
     /// let encrypted_data = key.encrypt(&mut rng, padding, b"secret").unwrap();
     /// ```
+    #[must_use]
     pub fn new_with_mgf_hash() -> Self {
         Self {
             digest: D::new(),
@@ -204,8 +204,7 @@ where
         )?;
         let int = T::try_from_be_bytes_vartime(&em)?;
         let mut storage = vec![0u8; pub_key.size()];
-        let ciphertext =
-            uint_to_be_pad_into(rsa_encrypt(pub_key, &int)?, pub_key.size(), &mut storage)?;
+        let ciphertext = i2osp_into(rsa_encrypt(pub_key, &int)?, pub_key.size(), &mut storage)?;
         Ok(ciphertext.to_vec())
     }
 }
@@ -244,12 +243,12 @@ where
     D: Digest + FixedOutputReset,
     MGD: Digest + FixedOutputReset,
 {
-    key::check_public(pub_key)?;
+    public_key::check_public(pub_key)?;
 
     let em = oaep_encrypt(rng, msg, digest, mgf_digest, label, pub_key.size())?;
 
-    let int = BoxedUint::from_be_slice(&em, pub_key.n_bits_precision())?;
-    uint_to_be_pad(rsa_encrypt(pub_key, &int)?, pub_key.size())
+    let int = os2ip_zeroizing(em, pub_key.n_bits_precision())?;
+    Ok(i2osp(rsa_encrypt(pub_key, &int)?, pub_key.size()))
 }
 
 /// Encrypts the given message with RSA and the padding scheme from
@@ -272,40 +271,35 @@ where
     D: Digest,
     MGD: Digest + FixedOutputReset,
 {
-    key::check_public(pub_key)?;
+    public_key::check_public(pub_key)?;
 
     let em = oaep_encrypt_digest::<_, D, MGD>(rng, msg, label, pub_key.size())?;
 
-    let int = BoxedUint::from_be_slice(&em, pub_key.n_bits_precision())?;
-    uint_to_be_pad(rsa_encrypt(pub_key, &int)?, pub_key.size())
+    let int = os2ip_zeroizing(em, pub_key.n_bits_precision())?;
+    Ok(i2osp(rsa_encrypt(pub_key, &int)?, pub_key.size()))
 }
 
-/// Does not call `key::check_public` — that validator is `alloc`-only.
+/// Does not call `public_key::check_public` — that validator is `alloc`-only.
+#[allow(clippy::missing_errors_doc, reason = "TODO")]
 pub fn encrypt_digest_into<'a, R, D, MGD, K, T>(
     rng: &mut R,
     pub_key: &K,
     msg: &[u8],
     label: Option<&[u8]>,
     storage: &'a mut [u8],
-) -> crate::Result<&'a [u8]>
+) -> Result<&'a [u8]>
 where
-    R: rand_core::TryCryptoRng + ?Sized,
-    D: digest::Digest,
-    MGD: digest::Digest + digest::FixedOutputReset,
-    K: crate::traits::PublicKeyParts<T>,
+    R: TryCryptoRng + ?Sized,
+    D: Digest,
+    MGD: Digest + FixedOutputReset,
+    K: PublicKeyParts<T>,
     K::MontyParams: crate::traits::modular::CtModulusParams,
-    T: crate::traits::UnsignedModularInt,
+    T: UnsignedModularInt,
 {
     let padded_len = pub_key.size();
-    let em = crate::algorithms::oaep::oaep_encrypt_digest_into::<_, D, MGD>(
-        rng, msg, label, padded_len, storage,
-    )?;
+    let em = oaep_encrypt_digest_into::<_, D, MGD>(rng, msg, label, padded_len, storage)?;
     let int = T::try_from_be_bytes_vartime(em)?;
-    crate::algorithms::pad::uint_to_be_pad_into(
-        crate::algorithms::rsa::rsa_encrypt(pub_key, &int)?,
-        padded_len,
-        storage,
-    )
+    i2osp_into(rsa_encrypt(pub_key, &int)?, padded_len, storage)
 }
 
 /// Decrypts a plaintext using RSA and the padding scheme from [PKCS#1 OAEP].
@@ -339,10 +333,10 @@ where
         return Err(Error::Decryption);
     }
 
-    let ciphertext = BoxedUint::from_be_slice(ciphertext, priv_key.n_bits_precision())?;
+    let ciphertext = os2ip(ciphertext, priv_key.n_bits_precision())?;
 
     let em = rsa_decrypt_and_check(priv_key, rng, &ciphertext)?;
-    let mut em = uint_to_zeroizing_be_pad(em, priv_key.size())?;
+    let mut em = i2osp_zeroizing(em, priv_key.size());
 
     oaep_decrypt(&mut em, digest, mgf_digest, label, priv_key.size())
 }
@@ -372,15 +366,15 @@ where
     D: Digest,
     MGD: Digest + FixedOutputReset,
 {
-    key::check_public(priv_key)?;
+    public_key::check_public(priv_key)?;
 
     if ciphertext.len() != priv_key.size() {
         return Err(Error::Decryption);
     }
 
-    let ciphertext = BoxedUint::from_be_slice(ciphertext, priv_key.n_bits_precision())?;
+    let ciphertext = os2ip(ciphertext, priv_key.n_bits_precision())?;
     let em = rsa_decrypt_and_check(priv_key, rng, &ciphertext)?;
-    let mut em = uint_to_zeroizing_be_pad(em, priv_key.size())?;
+    let mut em = i2osp_zeroizing(em, priv_key.size());
 
     oaep_decrypt_digest::<D, MGD>(&mut em, label, priv_key.size())
 }
@@ -388,10 +382,10 @@ where
 #[cfg(test)]
 #[cfg(feature = "alloc")]
 mod tests {
-    use crate::key::{RsaPrivateKey, RsaPublicKey};
     use crate::oaep::{DecryptingKey, EncryptingKey, Oaep};
     use crate::traits::PublicKeyParts;
     use crate::traits::{Decryptor, RandomizedDecryptor, RandomizedEncryptor};
+    use crate::{private_key::RsaPrivateKey, public_key::RsaPublicKey};
 
     use crypto_bigint::BoxedUint;
     use digest::{Digest, FixedOutputReset};

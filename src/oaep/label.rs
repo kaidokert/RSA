@@ -13,18 +13,22 @@ pub const MAX_LABEL_LEN: usize = 128;
 pub struct Label(Vec<u8, MAX_LABEL_LEN>);
 
 impl Label {
+    #[must_use]
     pub fn new(label: Vec<u8, MAX_LABEL_LEN>) -> Self {
         Self(label)
     }
 
+    #[must_use]
     pub fn len(&self) -> usize {
         self.0.len()
     }
 
+    #[must_use]
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }
 
+    #[must_use]
     pub fn as_bytes(&self) -> &[u8] {
         self.0.as_slice()
     }

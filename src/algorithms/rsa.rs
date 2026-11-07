@@ -1,19 +1,21 @@
-//! Generic RSA implementation
+//! Shared integer arithmetic for RSAEP/RSAVP1 and RSADP/RSASP1 (RFC8017 §5).
+//!
+//! These functions do not implement octet-string conversion or scheme encoding. In particular,
+//! `rsa_encrypt` performs modular exponentiation without checking the representative's range;
+//! callers implementing RSAEP or RSAVP1 must establish that the input is less than `n`.
 
 #[cfg(feature = "alloc")]
-use core::cmp::Ordering;
-
+use super::blinding::{blind_exponent, pow_mod_blinded, totient};
 #[cfg(feature = "alloc")]
 use crypto_bigint::Resize as _;
 #[cfg(feature = "alloc")]
 use crypto_bigint::{
-    modular::{BoxedMontyForm, BoxedMontyParams},
-    BoxedUint, ConcatenatingMul, ConcatenatingSquare, Gcd, RandomMod,
+    BoxedUint, ConcatenatingMul, ConcatenatingSquare, Gcd, RandomMod, modular::BoxedMontyParams,
 };
 #[cfg(feature = "alloc")]
 use crypto_bigint::{NonZero as CryptoNonZero, Odd as CryptoOdd};
 use rand_core::TryCryptoRng;
-use zeroize::Zeroize;
+use zeroize::{Zeroize, Zeroizing};
 
 #[cfg(not(feature = "alloc"))]
 use crate::traits::keys::PublicKeyParts;
@@ -22,20 +24,27 @@ use crate::traits::keys::{PrivateKeyParts, PublicKeyParts};
 use crate::{
     errors::{Error, Result},
     traits::{
+        UnsignedModularInt,
         modular::{
             IntoMontyForm, InvertCt, ModulusParams, MulCt, Pow, PowBoundedExp, TryRandomMod,
         },
-        UnsignedModularInt,
     },
 };
 
-/// ⚠️ Raw RSA encryption of m with the public key. No padding is performed.
+/// ⚠️ Raw RSA public-key operation on the integer representative `m`, without padding.
 ///
-/// # ☢️️ WARNING: HAZARDOUS API ☢️
+/// Computes the exponentiation shared by RSAEP (RFC8017 §5.1.1) and RSAVP1 (§5.2.2).
+/// The caller must check that the representative is less than `n` to implement either primitive;
+/// this function reduces out-of-range inputs modulo `n`.
+///
+/// <div class="warning">
+/// <b> ☢️️ WARNING: HAZARDOUS API ☢️</b>
 ///
 /// Use this function with great care! Raw RSA should never be used without an appropriate padding
 /// or signature scheme. See the [module-level documentation][crate::hazmat] for more information.
+/// </div>
 #[inline]
+#[allow(clippy::missing_errors_doc, reason = "TODO")]
 pub fn rsa_encrypt<T, K>(key: &K, m: &T) -> Result<T>
 where
     T: UnsignedModularInt,
@@ -46,18 +55,25 @@ where
     Ok(res)
 }
 
-/// ⚠️ Performs raw RSA decryption with no padding or error checking.
+/// ⚠️ Performs the raw RSA private-key operation without padding or a CRT fault check.
 ///
-/// Returns a plaintext `BoxedUint`. Performs RSA blinding if an `Rng` is passed.
+/// Implements the integer arithmetic shared by RSADP (RFC8017 §5.1.2) and RSASP1 (§5.2.1).
+/// Checks that `c < n` and that `c` has the modulus's storage precision.
 ///
-/// # ☢️️ WARNING: HAZARDOUS API ☢️
+/// Returns a plaintext `BoxedUint`. Performs base, exponent, and CRT modulus blinding if an `Rng`
+/// is passed, using fresh factors for each private operation.
+/// Blinded non-CRT operations require the prime factors in [`PrivateKeyParts::primes`].
+///
+/// <div class="warning">
+/// <b> ☢️️ WARNING: HAZARDOUS API ☢️</b>
 ///
 /// Use this function with great care! Raw RSA should never be used without an appropriate padding
 /// or signature scheme. See the [module-level documentation][crate::hazmat] for more information.
 #[cfg(feature = "alloc")]
 #[inline]
+#[allow(clippy::missing_errors_doc, reason = "TODO")]
 pub fn rsa_decrypt<R: TryCryptoRng + ?Sized>(
-    rng: Option<&mut R>,
+    mut rng: Option<&mut R>,
     priv_key: &impl PrivateKeyParts<BoxedUint, MontyParams = BoxedMontyParams>,
     c: &BoxedUint,
 ) -> Result<BoxedUint> {
@@ -75,14 +91,12 @@ pub fn rsa_decrypt<R: TryCryptoRng + ?Sized>(
     let mut ir = None;
 
     let n_params = priv_key.n_params();
-    let bits = d.bits_precision();
-
-    let c = if let Some(rng) = rng {
+    let c = if let Some(rng) = rng.as_deref_mut() {
         let (blinded, unblinder) = blind(rng, priv_key, c, n_params)?;
         ir = Some(unblinder);
-        blinded.try_resize(bits).ok_or(Error::Internal)?
+        blinded
     } else {
-        c.try_resize(bits).ok_or(Error::Internal)?
+        c.clone()
     };
 
     // `primes()` defaults to `&[]`; the `primes.len() >= 2` guard below
@@ -95,49 +109,51 @@ pub fn rsa_decrypt<R: TryCryptoRng + ?Sized>(
         priv_key.dp(),
         priv_key.dq(),
         priv_key.qinv(),
-        priv_key.p_params(),
-        priv_key.q_params(),
+        priv_key.p(),
+        priv_key.q(),
     ) {
-        (Some(dp), Some(dq), Some(qinv), Some(p_params), Some(q_params))
+        (Some(dp), Some(dq), Some(qinv), Some(p), Some(q))
             if !is_multiprime && primes.len() >= 2 =>
         {
             // We have the precalculated values needed for the CRT.
-
-            let p = &primes[0];
-            let q = &primes[1];
-
             // precomputed: dP = (1/e) mod (p-1) = d mod (p-1)
             // precomputed: dQ = (1/e) mod (q-1) = d mod (q-1)
 
-            // TODO: it may be faster to convert to and from Montgomery with prepared parameters
-            // (modulo `p` and `q`) rather than calculating the remainder directly.
+            // TODO(tarcieri): zeroize intermediates
+            let p_params = BoxedMontyParams::from(p.clone());
+            let q_params = BoxedMontyParams::from(q.clone());
 
-            // m1 = c^dP mod p
-            let p_wide = p_params.modulus().resize_unchecked(c.bits_precision());
-            let c_mod_dp = (&c % p_wide.as_nz_ref()).resize_unchecked(dp.bits_precision());
-            let cp = BoxedMontyForm::new(c_mod_dp, p_params);
-            let mut m1 = cp.pow(dp);
-            // m2 = c^dQ mod q
-            let q_wide = q_params.modulus().resize_unchecked(c.bits_precision());
-            let c_mod_dq = (&c % q_wide.as_nz_ref()).resize_unchecked(dq.bits_precision());
-            let cq = BoxedMontyForm::new(c_mod_dq, q_params);
-            let m2 = cq.pow(dq).retrieve();
-
-            // Note that since `p` and `q` may have different `bits_precision`,
-            // it may be different for `m1` and `m2` as well.
-
-            // (m1 - m2) mod p = (m1 mod p) - (m2 mod p) mod p
-            let m2_mod_p = match p_params.bits_precision().cmp(&q_params.bits_precision()) {
-                Ordering::Less => {
-                    let p_wide = CryptoNonZero::new(p.clone())
-                        .expect("`p` is non-zero")
-                        .resize_unchecked(q_params.bits_precision());
-                    (&m2 % p_wide).resize_unchecked(p_params.bits_precision())
-                }
-                Ordering::Greater => (&m2).resize_unchecked(p_params.bits_precision()),
-                Ordering::Equal => m2.clone(),
+            let blinded_exponents = if let Some(rng) = rng.as_deref_mut() {
+                let pm1 = Zeroizing::new(p.modulus().wrapping_sub(BoxedUint::one()));
+                let qm1 = Zeroizing::new(q.modulus().wrapping_sub(BoxedUint::one()));
+                Some((
+                    blind_exponent(rng, dp, &pm1)?,
+                    blind_exponent(rng, dq, &qm1)?,
+                ))
+            } else {
+                None
             };
-            let m2r = BoxedMontyForm::new(m2_mod_p, p_params);
+
+            let (dp, dq) = blinded_exponents
+                .as_ref()
+                .map_or((dp, dq), |(dp, dq)| (&**dp, &**dq));
+
+            // Exponentiate modulo independently blinded primes, then reduce both residues back
+            // to the original primes before using the precomputed qInv for CRT recombination.
+            let (mut m1, m2) = if let Some(rng) = rng {
+                (
+                    pow_mod_blinded(rng, &c, dp, &p_params)?,
+                    pow_mod_blinded(rng, &c, dq, &q_params)?.retrieve(),
+                )
+            } else {
+                (
+                    to_monty(&c, &p_params).pow(dp),
+                    to_monty(&c, &q_params).pow(dq).retrieve(),
+                )
+            };
+
+            // (m1 - m2) mod p, also supporting custom keys with unequal public widths.
+            let m2r = to_monty(&m2, &p_params);
             m1 -= &m2r;
 
             // precomputed: qInv = (1/q) mod p
@@ -146,16 +162,24 @@ pub fn rsa_decrypt<R: TryCryptoRng + ?Sized>(
             let h = (qinv * m1).retrieve();
 
             // m = m2 + h.q
+            // With m2 < q and h < p, m < n even when the exponentiations used blinded moduli.
             let m2 = m2.try_resize(n.bits_precision()).ok_or(Error::Internal)?;
             let hq = h
-                .concatenating_mul(&q)
+                .concatenating_mul(primes[1].as_ref())
                 .try_resize(n.bits_precision())
                 .ok_or(Error::Internal)?;
             m2.wrapping_add(&hq)
         }
         _ => {
             // c^d (mod n)
-            pow_mod_params(&c, d, n_params)
+            let blinded_d = if let Some(rng) = rng {
+                let phi = totient(priv_key.primes(), n.bits_precision())?;
+                Some(blind_exponent(rng, d, &phi)?)
+            } else {
+                None
+            };
+
+            pow_mod_params(&c, blinded_d.as_deref().unwrap_or(d), n_params)
         }
     };
 
@@ -171,17 +195,20 @@ pub fn rsa_decrypt<R: TryCryptoRng + ?Sized>(
 
 /// ⚠️ Performs raw RSA decryption with no padding.
 ///
-/// Returns a plaintext `BoxedUint`. Performs RSA blinding if an `Rng` is passed.  This will also
-/// check for errors in the CRT computation.
+/// Returns a plaintext `BoxedUint`. Performs base, exponent, and CRT modulus blinding if an `Rng`
+/// is passed, using fresh factors for each private operation.
+/// Blinded non-CRT operations require the prime factors in [`PrivateKeyParts::primes`].
 ///
 /// `c` must have the same `bits_precision` as the RSA key modulus.
 ///
-/// # ☢️️ WARNING: HAZARDOUS API ☢️
+/// <div class="warning">
+/// <b> ☢️️ WARNING: HAZARDOUS API ☢️</b>
 ///
 /// Use this function with great care! Raw RSA should never be used without an appropriate padding
 /// or signature scheme. See the [module-level documentation][crate::hazmat] for more information.
 #[cfg(feature = "alloc")]
 #[inline]
+#[allow(clippy::missing_errors_doc, reason = "TODO")]
 pub fn rsa_decrypt_and_check<R: TryCryptoRng + ?Sized>(
     priv_key: &impl PrivateKeyParts<BoxedUint, MontyParams = BoxedMontyParams>,
     rng: Option<&mut R>,
@@ -301,9 +328,8 @@ where
     M::MontgomeryForm: Pow<M> + PowBoundedExp<M>,
 {
     let mut m = rsa_private_op(c, d, n_params);
-    // `m < n` by construction, so use `from_reduced` to skip the
-    // variable-time reduction `from_value` (→ `rem_vartime`) would do on
-    // BoxedUint and leak `m` via timing.
+    // `m < n` by construction, so `from_reduced` skips the reduction
+    // `from_value` would do.
     let m_sized = m.clone().resize_unchecked(n_params.bits_precision());
     let m_mont = M::MontgomeryForm::from_reduced(m_sized, n_params);
     let check = m_mont.pow_bounded_exp(e, e.bits()).retrieve();
@@ -318,14 +344,15 @@ where
 }
 
 /// Computes `base.pow_mod(exp, n)` with precomputed `n_params`.
+///
+/// Constant-time with respect to `base` and `exp`
 fn pow_mod_params<T, M>(base: &T, exp: &T, n_params: &M) -> T
 where
     T: UnsignedModularInt,
     M: ModulusParams<Modulus = T>,
     M::MontgomeryForm: Pow<M>,
 {
-    let base = reduce_vartime(base, n_params);
-    base.pow(exp).retrieve()
+    to_monty(base, n_params).pow(exp).retrieve()
 }
 
 /// ⚠️ Raw RSA private op with base-blinding: `m = ((c · r^e)^d · r⁻¹) mod n`.
@@ -339,9 +366,8 @@ where
 ///
 /// - **`blinding_r < n`** — the blinding factor must already be
 ///   reduced modulo `n`. The primitive uses `from_reduced` to convert
-///   to Montgomery form and would leak `r`'s value on the
-///   `BoxedMontyForm` backend via `rem_vartime` if we accepted
-///   unreduced input. Callers should sample `r` from `[1, n)` via
+///   to Montgomery form, which performs no reduction and gives wrong
+///   results on unreduced input. Callers should sample `r` from `[1, n)` via
 ///   `crate::traits::modular::TryRandomMod` — see
 ///   [`rsa_private_op_and_check_blinded`].
 /// - **`c < n`** — same reason applied to the (secret) message. The
@@ -370,12 +396,8 @@ where
     M: ModulusParams<Modulus = T> + crate::traits::modular::CtModulusParams,
     M::MontgomeryForm: Pow<M> + PowBoundedExp<M> + InvertCt<M> + MulCt<M>,
 {
-    // `blinding_r < n` and `c < n` are caller preconditions — use
-    // `from_reduced` on both to skip the variable-time `rem_vartime`
-    // that `from_value` (via `reduce_vartime`) would do on the
-    // `BoxedMontyForm` backend. Vartime on `r` in particular would
-    // leak the very value that's meant to *defend* against timing
-    // analysis of `c` and `d`.
+    // `blinding_r < n` and `c < n` are caller preconditions, so
+    // `from_reduced` on both skips the reduction `from_value` would do.
     let r_sized = blinding_r
         .clone()
         .resize_unchecked(n_params.bits_precision());
@@ -436,7 +458,7 @@ pub fn rsa_private_op_and_check_blinded<R, T, M>(
     n_params: &M,
 ) -> Result<T>
 where
-    R: rand_core::TryCryptoRng + ?Sized,
+    R: TryCryptoRng + ?Sized,
     T: UnsignedModularInt + TryRandomMod,
     M: ModulusParams<Modulus = T> + crate::traits::modular::CtModulusParams,
     M::MontgomeryForm: Pow<M> + PowBoundedExp<M> + InvertCt<M> + MulCt<M>,
@@ -446,7 +468,7 @@ where
     for _ in 0..BLINDING_RETRIES {
         // `r` is secret — wrap in `Zeroizing` so it's wiped when we
         // drop out of scope on `continue`, verify-fail, or success.
-        let r = zeroize::Zeroizing::new(T::try_random_mod(rng, n)?);
+        let r = Zeroizing::new(T::try_random_mod(rng, n)?);
         crate::ct_probe::mark(crate::ct_probe::stage::SAMPLE_R);
         let mut m = match rsa_private_op_blinded(&*r, c, d, e, n_params) {
             Ok(m) => m,
@@ -454,7 +476,7 @@ where
         };
         // Verify-back integrity check — same shape as
         // `rsa_private_op_and_check`. `m < n` by construction, so
-        // `from_reduced` is safe (skips vartime rem).
+        // `from_reduced` is safe.
         let m_sized = m.clone().resize_unchecked(n_params.bits_precision());
         let m_mont = M::MontgomeryForm::from_reduced(m_sized, n_params);
         let check = m_mont.pow_bounded_exp(e, e.bits()).retrieve();
@@ -473,23 +495,39 @@ where
 
 /// Computes `base.pow_mod(exp, n)` with a bounded exponent and precomputed `n_params`.
 ///
-/// The exponent bit length `exp_bits` may be leaked in the time pattern.
+/// Constant-time with respect to `base`. The exponent bit length `exp_bits` may be leaked in the
+/// time pattern
 fn pow_mod_params_vartime_exp_bits<T, M>(base: &T, exp: &T, exp_bits: u32, n_params: &M) -> T
 where
     T: UnsignedModularInt,
     M: ModulusParams<Modulus = T>,
 {
-    let base = reduce_vartime(base, n_params);
-    base.pow_bounded_exp(exp, exp_bits).retrieve()
+    to_monty(base, n_params)
+        .pow_bounded_exp(exp, exp_bits)
+        .retrieve()
 }
 
-fn reduce_vartime<T, M>(n: &T, p: &M) -> M::MontgomeryForm
+// Converts `x` into Montgomery form modulo `p` in constant time with respect to `x`
+///
+/// This is on the private-key path: `rsa_decrypt_and_check` re-encrypts the unblinded plaintext
+/// to detect CRT faults, and the non-CRT decrypt path feeds the ciphertext through here. A
+/// variable-time remainder at this point leaks information about the plaintext (Marvin attack,
+/// CVE-2023-49092 / RUSTSEC-2023-0071)
+///
+/// Inputs wider than the modulus are passed through unresized, so `from_value` can reduce them
+/// instead of having them truncated.
+pub(crate) fn to_monty<T, M>(x: &T, p: &M) -> M::MontgomeryForm
 where
     T: UnsignedModularInt,
     M: ModulusParams<Modulus = T>,
 {
-    let n_sized = n.clone().resize_unchecked(p.bits_precision());
-    M::MontgomeryForm::from_value(n_sized, p)
+    let bits = p.bits_precision();
+    let x = if x.bits_precision() <= bits {
+        x.clone().resize_unchecked(bits)
+    } else {
+        x.clone()
+    };
+    M::MontgomeryForm::from_value(x, p)
 }
 
 /// The following (deterministic) algorithm also recovers the prime factors `p` and `q` of a modulus `n`, given the
@@ -698,9 +736,52 @@ mod tests {
         let (mut p1, mut q1) = recover_primes(&CryptoNonZero::new(n).unwrap(), &e, &d).unwrap();
 
         if p1 < q1 {
-            std::mem::swap(&mut p1, &mut q1);
+            core::mem::swap(&mut p1, &mut q1);
         }
         assert_eq!(p, p1);
         assert_eq!(q, q1);
+    }
+
+    #[test]
+    fn to_monty_matches_reference_reduction() {
+        use crypto_bigint::{Odd, Resize};
+
+        let n = Odd::new(
+            BoxedUint::from_be_hex(
+                concat!(
+                    "d397b84d98a4c26138ed1b695a8106ead91d553bf06041b62d3fdc50a041e222",
+                    "b8f4529689c1b82c5e71554f5dd69fa2f4b6158cf0dbeb57811a0fc327e1f28e",
+                    "74fe74d3bc166c1eabdc1b8b57b934ca8be5b00b4f29975bcc99acaf415b59bb",
+                    "28a6782bb41a2c3c2976b3c18dbadef62f00c6bb226640095096c0cc60d22fe7",
+                    "ef987d75c6a81b10d96bf292028af110dc7cc1bbc43d22adab379a0cd5d8078c",
+                    "c780ff5cd6209dea34c922cf784f7717e428d75b5aec8ff30e5f0141510766e2",
+                    "e0ab8d473c84e8710b2b98227c3db095337ad3452f19e2b9bfbccdd8148abf67",
+                    "76fa552775e6e75956e45229ae5a9c46949bab1e622f0e48f56524a84ed3483b"
+                ),
+                2048,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let params = BoxedMontyParams::new(n.clone());
+        let nz = n.as_nz_ref();
+
+        let candidates = [
+            BoxedUint::zero_with_precision(2048),
+            BoxedUint::one_with_precision(2048),
+            n.as_ref() - &BoxedUint::one(),
+            n.as_ref().clone(),
+            n.as_ref().wrapping_add(BoxedUint::one()),
+            BoxedUint::max(2048),
+            BoxedUint::from(12345u64),
+            BoxedUint::max(4096),
+            BoxedUint::max(2048)
+                .resize(4096)
+                .wrapping_add(BoxedUint::one()),
+        ];
+        for x in candidates {
+            let expected = x.rem_vartime(nz).resize_unchecked(2048);
+            assert_eq!(to_monty(&x, &params).retrieve(), expected);
+        }
     }
 }

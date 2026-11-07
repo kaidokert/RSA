@@ -1,16 +1,16 @@
 use super::encrypt_into;
 use crate::{
-    key::GenericRsaPublicKey,
-    traits::{
-        modular::{CtModulusParams, ModulusParams},
-        PublicKeyParts, RandomizedEncryptor, UnsignedModularInt,
-    },
     Result,
+    public_key::GenericRsaPublicKey,
+    traits::{
+        PublicKeyParts, RandomizedEncryptor, UnsignedModularInt,
+        modular::{CtModulusParams, ModulusParams},
+    },
 };
 #[cfg(feature = "alloc")]
 use alloc::vec::Vec;
 #[cfg(feature = "alloc")]
-use crypto_bigint::{modular::BoxedMontyParams, BoxedUint};
+use crypto_bigint::{BoxedUint, modular::BoxedMontyParams};
 use rand_core::CryptoRng;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
@@ -75,17 +75,17 @@ where
 #[cfg(test)]
 mod tests {
     #[test]
-    #[cfg(all(feature = "hazmat", feature = "serde", feature = "keygen"))]
+    #[cfg(feature = "serde")]
     fn test_serde() {
         use super::*;
-        use crate::RsaPrivateKey;
-        use rand::rngs::ChaCha8Rng;
-        use rand_core::SeedableRng;
-        use serde_test::{assert_tokens, Configure, Token};
+        use crate::RsaPublicKey;
+        use pkcs8::DecodePublicKey;
+        use serde_test::{Configure, Token, assert_tokens};
 
-        let mut rng = ChaCha8Rng::from_seed([42; 32]);
-        let priv_key = RsaPrivateKey::new_unchecked(&mut rng, 64).expect("failed to generate key");
-        let encrypting_key = GenericEncryptingKey::new(priv_key.to_public_key());
+        let der = include_bytes!("../../tests/examples/pkcs8/rsa2048-pub.der");
+        let pub_key = RsaPublicKey::from_public_key_der(der).unwrap();
+        let encoded = include_str!("../../tests/examples/pkcs8/rsa2048-pub.hex").trim();
+        let encrypting_key = GenericEncryptingKey::new(pub_key);
 
         let tokens = [
             Token::Struct {
@@ -93,9 +93,7 @@ mod tests {
                 len: 1,
             },
             Token::Str("inner"),
-            Token::Str(
-                "3024300d06092a864886f70d01010105000313003010020900ab240c3361d02e370203010001",
-            ),
+            Token::Str(encoded),
             Token::StructEnd,
         ];
         assert_tokens(&encrypting_key.clone().readable(), &tokens);

@@ -9,8 +9,6 @@
 //! [Probabilistic Signature Scheme]: https://en.wikipedia.org/wiki/Probabilistic_signature_scheme
 //! [RFC8017 § 8.1]: https://datatracker.ietf.org/doc/html/rfc8017#section-8.1
 
-#[cfg(feature = "alloc")]
-mod blinded_signing_key;
 mod generic_signing_key;
 mod signature;
 #[cfg(feature = "alloc")]
@@ -19,7 +17,7 @@ mod verifying_key;
 
 pub use self::generic_signing_key::GenericSigningKey;
 #[cfg(feature = "alloc")]
-pub use self::{blinded_signing_key::BlindedSigningKey, signing_key::SigningKey};
+pub use self::signing_key::SigningKey;
 
 #[cfg(feature = "alloc")]
 pub use self::{signature::Signature, verifying_key::VerifyingKey};
@@ -38,30 +36,42 @@ use digest::{Digest, FixedOutputReset};
 use rand_core::TryCryptoRng;
 
 #[cfg(feature = "alloc")]
-use crate::algorithms::pad::{uint_to_be_pad, uint_to_be_pad_into, uint_to_zeroizing_be_pad};
-use crate::algorithms::pss::*;
-#[cfg(feature = "alloc")]
-use crate::algorithms::rsa::rsa_decrypt_and_check;
-#[cfg(feature = "alloc")]
-use crate::algorithms::rsa::rsa_encrypt;
-use crate::errors::{Error, Result};
-use crate::traits::{PublicKeyParts, SignatureScheme, UnsignedModularInt};
-#[cfg(feature = "alloc")]
 use crate::RsaPrivateKey;
 #[cfg(feature = "alloc")]
 use crate::RsaPublicKey;
+#[cfg(feature = "alloc")]
+use crate::algorithms::pad::i2osp;
+use crate::algorithms::pss::*;
+#[cfg(feature = "alloc")]
+use crate::algorithms::rsa::rsa_decrypt_and_check;
+use crate::algorithms::rsa::rsa_encrypt;
+use crate::errors::{Error, Result};
+use crate::traits::{PublicKeyParts, SignatureScheme, UnsignedModularInt};
+
+/// DEPRECATED: type alias for legacy blinded signing key. Blinding is now applied automatically
+/// when available.
+#[cfg(feature = "alloc")]
+#[deprecated(
+    since = "0.10.0",
+    note = "use `SigningKey` which is blinded automatically"
+)]
+pub type BlindedSigningKey<D> = SigningKey<D>;
 
 #[cfg(feature = "encoding")]
 use {
     crate::encoding::ID_RSASSA_PSS,
     const_oid::AssociatedOid,
     pkcs1::RsaPssParams,
-    spki::{der::Any, AlgorithmIdentifierOwned},
+    spki::{
+        AlgorithmIdentifierOwned,
+        der::{Any, ErrorKind},
+    },
 };
 
 /// Digital signatures using PSS padding.
 pub struct Pss<D> {
-    /// Create blinded signatures.
+    /// Enable RSA base blinding for the private operation (enabled by default).
+    /// This does not change the RSASSA-PSS signature format.
     pub blinded: bool,
 
     /// Digest type to use.
@@ -87,27 +97,31 @@ where
 {
     /// New PSS padding for the given digest.
     /// Digest output size is used as a salt length.
+    #[must_use]
     pub fn new() -> Self {
         Self::new_with_salt(<D as Digest>::output_size())
     }
 
     /// New PSS padding for the given digest with a salt value of the given length.
+    #[must_use]
     pub fn new_with_salt(len: usize) -> Self {
         Self {
-            blinded: false,
+            blinded: true,
             digest: D::new(),
             salt_len: Some(len),
         }
     }
 
-    /// New PSS padding for blinded signatures (RSA-BSSA) for the given digest.
+    /// New PSS padding with RSA base blinding for the given digest.
     /// Digest output size is used as a salt length.
+    #[must_use]
     pub fn new_blinded() -> Self {
         Self::new_blinded_with_salt(<D as Digest>::output_size())
     }
 
-    /// New PSS padding for blinded signatures (RSA-BSSA) for the given digest
+    /// New PSS padding with RSA base blinding for the given digest
     /// with a salt value of the given length.
+    #[must_use]
     pub fn new_blinded_with_salt(len: usize) -> Self {
         Self {
             blinded: true,
@@ -123,6 +137,7 @@ where
     D: Digest + FixedOutputReset,
 {
     #[cfg(feature = "alloc")]
+    #[allow(clippy::unwrap_in_result, reason = "TODO")]
     fn sign<Rng: TryCryptoRng + ?Sized>(
         mut self,
         rng: Option<&mut Rng>,
@@ -152,17 +167,11 @@ where
             return Err(Error::Verification);
         }
 
-        let mut em = vec![0u8; pub_key.size()];
-        let em_len =
-            uint_to_be_pad_into(rsa_encrypt(pub_key, &sig)?, pub_key.size(), &mut em)?.len();
+        let em_bits = pub_key.n().bits() as usize - 1;
+        let mut storage = vec![0u8; pub_key.size()];
+        let em = decode_em_into(pub_key, &sig, em_bits, &mut storage)?;
 
-        emsa_pss_verify(
-            hashed,
-            &mut em[..em_len],
-            self.salt_len,
-            &mut self.digest,
-            pub_key.n().bits() as _,
-        )
+        emsa_pss_verify(hashed, em, self.salt_len, &mut self.digest, em_bits)
     }
 }
 
@@ -189,13 +198,9 @@ pub(crate) fn verify<D>(
 where
     D: Digest + FixedOutputReset,
 {
-    if sig_len != pub_key.size() {
-        return Err(Error::Verification);
-    }
-    let raw = rsa_encrypt(pub_key, sig)?;
-    let mut em = uint_to_be_pad(raw, pub_key.size())?;
-
-    emsa_pss_verify(hashed, &mut em, salt_len, digest, pub_key.n().bits() as _)
+    let mut em = decode_signature(pub_key, sig, sig_len)?;
+    let em_bits = pub_key.n().bits() as usize - 1;
+    emsa_pss_verify(hashed, &mut em, salt_len, digest, em_bits)
 }
 
 #[cfg(feature = "alloc")]
@@ -214,36 +219,72 @@ where
 }
 
 /// `storage` must be at least `pub_key.size()` bytes.
+#[allow(clippy::missing_errors_doc, reason = "TODO")]
 pub fn verify_digest_into<D, K, T>(
     pub_key: &K,
     hashed: &[u8],
     sig: &T,
     salt_len: Option<usize>,
     storage: &mut [u8],
-) -> crate::Result<()>
+) -> Result<()>
 where
-    D: digest::Digest + digest::FixedOutputReset,
-    K: crate::traits::PublicKeyParts<T>,
-    T: crate::traits::UnsignedModularInt,
+    D: Digest + FixedOutputReset,
+    K: PublicKeyParts<T>,
+    T: UnsignedModularInt,
 {
     if sig >= pub_key.n().as_ref() || sig.bits_precision() != pub_key.n_bits_precision() {
-        return Err(crate::Error::Verification);
+        return Err(Error::Verification);
     }
-    let padded_len = pub_key.size();
-    let em = crate::algorithms::pad::uint_to_be_pad_into(
-        crate::algorithms::rsa::rsa_encrypt(pub_key, sig)?,
-        padded_len,
-        storage,
-    )?;
-    // `uint_to_be_pad_into` returns an immutable slice into `storage`; PSS
-    // verify wants `&mut [u8]`. Drop the borrow and re-slice mutably.
-    let em_len = em.len();
-    emsa_pss_verify_digest::<D>(
-        hashed,
-        &mut storage[..em_len],
-        salt_len,
-        pub_key.n().bits() as _,
-    )
+    let em_bits = pub_key.n().bits() as usize - 1;
+    let em = decode_em_into(pub_key, sig, em_bits, storage)?;
+    emsa_pss_verify_digest::<D>(hashed, em, salt_len, em_bits)
+}
+
+/// Performs the RSAVP1 and I2OSP steps of RFC8017 §8.1.2 into `storage`, for a signature whose
+/// length and range the caller has checked.
+///
+/// EM has `emLen` octets, which can be `k - 1`. The fallible I2OSP rejects a representative with a
+/// nonzero octet above `emLen`.
+fn decode_em_into<'a, K, T>(
+    pub_key: &K,
+    sig: &T,
+    em_bits: usize,
+    storage: &'a mut [u8],
+) -> Result<&'a mut [u8]>
+where
+    K: PublicKeyParts<T>,
+    T: UnsignedModularInt,
+{
+    let em_len = em_bits.div_ceil(8);
+    let m = rsa_encrypt(pub_key, sig)?;
+    crate::algorithms::pad::i2osp_into(m, em_len, storage).map_err(|_| Error::Verification)?;
+    storage.get_mut(..em_len).ok_or(Error::Verification)
+}
+
+/// Performs the length, RSAVP1, and I2OSP steps of RFC8017 §8.1.2.
+#[cfg(feature = "alloc")]
+fn decode_signature(pub_key: &RsaPublicKey, sig: &BoxedUint, sig_len: usize) -> Result<Vec<u8>> {
+    // Step 1: `S` must be exactly `k` octets, independently of integer storage precision.
+    if sig_len != pub_key.size() {
+        return Err(Error::Verification);
+    }
+
+    // Steps 2a and 2b: `s = OS2IP(S), m = RSAVP1((n, e), s)`. `sig` arrives already decoded.
+    if sig >= pub_key.n().as_ref() || sig.bits_precision() != pub_key.n_bits_precision() {
+        return Err(Error::Verification);
+    }
+    let m = rsa_encrypt(pub_key, sig)?;
+
+    // Step 2c: EM has `emLen` octets, which can be `k - 1`.
+    //
+    // Check the public representative's width before calling infallible I2OSP; discarding a nonzero
+    // leading octet is invalid.
+    let em_bits = pub_key.n().bits() as usize - 1;
+    let em_len = em_bits.div_ceil(8);
+    if m.bits() as usize > 8 * em_len {
+        return Err(Error::Verification);
+    }
+    Ok(i2osp(m, em_len))
 }
 
 /// SignPSS calculates the signature of hashed using RSASSA-PSS.
@@ -311,7 +352,7 @@ where
 
     let em = BoxedUint::from_be_slice(&em, priv_key.n_bits_precision())?;
     let raw = rsa_decrypt_and_check(priv_key, blind_rng, &em)?;
-    uint_to_zeroizing_be_pad(raw, priv_key.size())
+    Ok(i2osp(raw, priv_key.size()))
 }
 
 #[cfg(feature = "alloc")]
@@ -329,27 +370,29 @@ where
     let em = emsa_pss_encode_digest::<D>(hashed, em_bits as _, salt)?;
 
     let em = BoxedUint::from_be_slice(&em, priv_key.n_bits_precision())?;
-    uint_to_zeroizing_be_pad(
+    Ok(i2osp(
         rsa_decrypt_and_check(priv_key, blind_rng, &em)?,
         priv_key.size(),
-    )
+    ))
 }
 
 /// Returns the [`AlgorithmIdentifierOwned`] associated with PSS signature using a given digest.
 #[cfg(feature = "encoding")]
+#[allow(clippy::missing_errors_doc, reason = "TODO")]
 pub fn get_default_pss_signature_algo_id<D>() -> spki::Result<AlgorithmIdentifierOwned>
 where
     D: Digest + AssociatedOid,
 {
-    let salt_len: u8 = <D as Digest>::output_size() as u8;
-    get_pss_signature_algo_id::<D>(salt_len)
+    get_pss_signature_algo_id::<D>(<D as Digest>::output_size())
 }
 
 #[cfg(feature = "encoding")]
-fn get_pss_signature_algo_id<D>(salt_len: u8) -> spki::Result<AlgorithmIdentifierOwned>
+fn get_pss_signature_algo_id<D>(salt_len: usize) -> spki::Result<AlgorithmIdentifierOwned>
 where
     D: Digest + AssociatedOid,
 {
+    // RsaPssParams encodes salt_len in a single byte; reject rather than truncate.
+    let salt_len = u8::try_from(salt_len).map_err(|_| ErrorKind::Overflow.to_error())?;
     let pss_params = RsaPssParams::new::<D>(salt_len);
 
     Ok(AlgorithmIdentifierOwned {
@@ -360,7 +403,7 @@ where
 
 #[cfg(all(test, feature = "encoding"))]
 mod test {
-    use crate::pss::{BlindedSigningKey, Pss, Signature, SigningKey, VerifyingKey};
+    use crate::pss::{Pss, Signature, SigningKey, VerifyingKey};
     use crate::{RsaPrivateKey, RsaPublicKey};
 
     use crate::traits::PublicKeyParts;
@@ -372,6 +415,9 @@ mod test {
     use sha1::{Digest, Sha1};
     use signature::hazmat::{PrehashVerifier, RandomizedPrehashSigner};
     use signature::{DigestVerifier, Keypair, RandomizedDigestSigner, RandomizedSigner, Verifier};
+
+    use super::get_default_pss_signature_algo_id;
+    use spki::DynSignatureAlgorithmIdentifier;
 
     fn get_private_key() -> RsaPrivateKey {
         // In order to generate new test vectors you'll need the PEM form of this key:
@@ -559,49 +605,11 @@ tAboUGBxTDq3ZroNism3DaMIbKPyYrAqhKov1h5V
 
     #[rstest]
     #[case("test\n")]
-    fn test_sign_and_verify_roundtrip_blinded_signer(#[case] test: &str) {
-        let priv_key = get_private_key();
-
-        let mut rng = ChaCha8Rng::from_seed([42; 32]);
-        let signing_key = BlindedSigningKey::<Sha1>::new(priv_key);
-        let verifying_key = signing_key.verifying_key();
-
-        let sig = signing_key.sign_with_rng(&mut rng, test.as_bytes());
-        verifying_key
-            .verify(test.as_bytes(), &sig)
-            .expect("failed to verify");
-    }
-
-    #[rstest]
-    #[case("test\n")]
     fn test_sign_and_verify_roundtrip_digest_signer(#[case] test: &str) {
         let priv_key = get_private_key();
 
         let mut rng = ChaCha8Rng::from_seed([42; 32]);
         let signing_key = SigningKey::new(priv_key);
-        let verifying_key = signing_key.verifying_key();
-
-        let sig = signing_key
-            .sign_digest_with_rng(&mut rng, |digest: &mut Sha1| digest.update(test.as_bytes()));
-
-        verifying_key
-            .verify_digest(
-                |digest: &mut Sha1| {
-                    digest.update(test.as_bytes());
-                    Ok(())
-                },
-                &sig,
-            )
-            .expect("failed to verify");
-    }
-
-    #[rstest]
-    #[case("test\n")]
-    fn test_sign_and_verify_roundtrip_blinded_digest_signer(#[case] test: &str) {
-        let priv_key = get_private_key();
-
-        let mut rng = ChaCha8Rng::from_seed([42; 32]);
-        let signing_key = BlindedSigningKey::<Sha1>::new(priv_key);
         let verifying_key = signing_key.verifying_key();
 
         let sig = signing_key
@@ -670,24 +678,6 @@ tAboUGBxTDq3ZroNism3DaMIbKPyYrAqhKov1h5V
             .expect("failed to verify");
     }
 
-    #[rstest]
-    #[case("test\n")]
-    fn test_sign_and_verify_pss_blinded_hazmat(#[case] test: &str) {
-        let priv_key = get_private_key();
-
-        let test = &Sha1::digest(test);
-        let mut rng = ChaCha8Rng::from_seed([42; 32]);
-        let signing_key = BlindedSigningKey::<Sha1>::new(priv_key);
-        let verifying_key = signing_key.verifying_key();
-
-        let sig = signing_key
-            .sign_prehash_with_rng(&mut rng, test)
-            .expect("failed to sign");
-        verifying_key
-            .verify_prehash(test, &sig)
-            .expect("failed to verify");
-    }
-
     #[test]
     #[cfg(feature = "keygen")]
     // Tests the corner case where the key is multiple of 8 + 1 bits long
@@ -741,5 +731,80 @@ tAboUGBxTDq3ZroNism3DaMIbKPyYrAqhKov1h5V
                 .verify(test.as_bytes(), &sig)
                 .expect("verification to succeed");
         }
+    }
+
+    // A salt length that does not fit in a byte must be rejected, not truncated (#703).
+    #[test]
+    fn signature_algorithm_identifier_rejects_oversized_salt_len() {
+        use spki::DynSignatureAlgorithmIdentifier;
+
+        let priv_key = get_private_key();
+
+        // largest value that fits in a byte
+        let ok_key = SigningKey::<Sha1>::new_with_salt_len(priv_key.clone(), 255);
+        assert!(ok_key.signature_algorithm_identifier().is_ok());
+
+        // would wrap to 0
+        let bad_key = SigningKey::<Sha1>::new_with_salt_len(priv_key.clone(), 256);
+        assert!(bad_key.signature_algorithm_identifier().is_err());
+    }
+
+    /// `signature_algorithm_identifier()` must advertise the configured salt length
+    /// verbatim: the encoded `AlgorithmIdentifier` parameters must DER-round-trip
+    /// back to the same `salt_len` for both signing key types (see issue #703).
+    #[rstest]
+    #[case(255)]
+    #[case(128)]
+    fn test_pss_algo_id_salt_len_representable(#[case] salt_len: usize) {
+        use spki::der::Encode;
+
+        let priv_key = get_private_key();
+
+        let signing_key = SigningKey::<Sha1>::new_with_salt_len(priv_key.clone(), salt_len);
+
+        let algo_id = signing_key
+            .signature_algorithm_identifier()
+            .expect("salt_len fits in a u8, so encoding must succeed");
+
+        let params_bytes = algo_id
+            .parameters
+            .as_ref()
+            .expect("RSA-PSS AlgorithmIdentifier carries parameters")
+            .to_der()
+            .expect("parameters are DER-encodable");
+        let pss_params = <pkcs1::RsaPssParamsOwned as spki::der::Decode>::from_der(&params_bytes)
+            .expect("RSA-PSS parameters are DER-decodable");
+        assert_eq!(pss_params.salt_len as usize, salt_len);
+    }
+
+    #[rstest]
+    #[case(256)]
+    #[case(300)]
+    #[case(usize::MAX)]
+    fn test_pss_algo_id_salt_len_out_of_range(#[case] salt_len: usize) {
+        let priv_key = get_private_key();
+        let signing_key = SigningKey::<Sha1>::new_with_salt_len(priv_key.clone(), salt_len);
+
+        signing_key
+            .signature_algorithm_identifier()
+            .expect_err("salt_len overflows the u8 in RsaPssParams, so encoding must fail");
+    }
+
+    /// The digest-size default salt length is unchanged by the `u8` validation.
+    #[test]
+    fn test_pss_algo_id_default_salt_len_unchanged() {
+        use spki::der::Encode;
+
+        let algo_id = get_default_pss_signature_algo_id::<Sha1>()
+            .expect("the default salt length must remain encodable");
+        let params_bytes = algo_id
+            .parameters
+            .as_ref()
+            .expect("RSA-PSS AlgorithmIdentifier carries parameters")
+            .to_der()
+            .expect("parameters are DER-encodable");
+        let pss_params = <pkcs1::RsaPssParamsOwned as spki::der::Decode>::from_der(&params_bytes)
+            .expect("RSA-PSS parameters are DER-decodable");
+        assert_eq!(pss_params.salt_len as usize, Sha1::output_size());
     }
 }

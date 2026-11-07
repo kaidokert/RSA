@@ -20,29 +20,29 @@ jobs:
   clippy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: RustCrypto/actions/cargo-cache@master
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: 1.87.0
           components: clippy
-      - run: cargo clippy --all -- -D warnings
+      - run: cargo clippy -p rsa_heapless -p rsa-marvin -- -D warnings
 
   fmt:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: RustCrypto/actions/cargo-cache@master
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: stable
           components: rustfmt
-      - run: cargo fmt --all -- --check
+      - run: cargo fmt -p rsa_heapless -p rsa-marvin -- --check
 
   doc:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: RustCrypto/actions/cargo-cache@master
       - uses: dtolnay/rust-toolchain@master
         with:
@@ -52,5 +52,5 @@ jobs:
   typos:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: crate-ci/typos@v1.44.0
+      - uses: actions/checkout@v7
+      - uses: crate-ci/typos@v1.51.1

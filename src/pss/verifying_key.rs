@@ -1,11 +1,11 @@
-use super::{verify_digest_into, GenericSignature};
-use crate::key::GenericRsaPublicKey;
-use crate::traits::{modular::ModulusParams, PublicKeyParts, UnsignedModularInt};
+use super::{GenericSignature, verify_digest_into};
+use crate::public_key::GenericRsaPublicKey;
+use crate::traits::{PublicKeyParts, UnsignedModularInt, modular::ModulusParams};
 use core::marker::PhantomData;
 #[cfg(feature = "alloc")]
-use crypto_bigint::{modular::BoxedMontyParams, BoxedUint};
+use crypto_bigint::{BoxedUint, modular::BoxedMontyParams};
 use digest::{Digest, FixedOutputReset, Update};
-use signature::{hazmat::PrehashVerifier, DigestVerifier, Verifier};
+use signature::{DigestVerifier, Verifier, hazmat::PrehashVerifier};
 
 #[cfg(all(feature = "alloc", feature = "encoding"))]
 use crate::RsaPublicKey;
@@ -14,11 +14,11 @@ use {
     crate::encoding::ID_RSASSA_PSS,
     const_oid::AssociatedOid,
     pkcs8::{Document, EncodePublicKey},
-    spki::{der::AnyRef, AlgorithmIdentifierRef, AssociatedAlgorithmIdentifier},
+    spki::{AlgorithmIdentifierRef, AssociatedAlgorithmIdentifier, der::AnyRef},
 };
 #[cfg(feature = "serde")]
 use {
-    serdect::serde::{de, ser, Deserialize, Serialize},
+    serdect::serde::{Deserialize, Serialize, de, ser},
     spki::DecodePublicKey,
 };
 
@@ -74,6 +74,7 @@ where
     }
 
     /// Return specified salt length for this key
+    #[must_use]
     pub fn salt_len(&self) -> Option<usize> {
         self.salt_len
     }
@@ -290,23 +291,19 @@ where
 #[cfg(test)]
 mod tests {
     #[test]
-    #[cfg(all(feature = "hazmat", feature = "serde", feature = "keygen"))]
+    #[cfg(feature = "serde")]
     fn test_serde() {
         use super::*;
-        use crate::RsaPrivateKey;
-        use rand::rngs::ChaCha8Rng;
-        use rand_core::SeedableRng;
-        use serde_test::{assert_tokens, Configure, Token};
+        use pkcs8::DecodePublicKey;
+        use serde_test::{Configure, Token, assert_tokens};
         use sha2::Sha256;
 
-        let mut rng = ChaCha8Rng::from_seed([42; 32]);
-        let priv_key = RsaPrivateKey::new_unchecked(&mut rng, 64).expect("failed to generate key");
-        let pub_key = priv_key.to_public_key();
+        let der = include_bytes!("../../tests/examples/pkcs8/rsa2048-pub.der");
+        let pub_key = RsaPublicKey::from_public_key_der(der).unwrap();
+        let encoded = include_str!("../../tests/examples/pkcs8/rsa2048-pub.hex").trim();
         let verifying_key = VerifyingKey::<Sha256>::new(pub_key);
 
-        let tokens = [Token::Str(
-            "3024300d06092a864886f70d01010105000313003010020900ab240c3361d02e370203010001",
-        )];
+        let tokens = [Token::Str(encoded)];
 
         assert_tokens(&verifying_key.readable(), &tokens);
     }

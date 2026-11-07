@@ -3,8 +3,6 @@
 #![cfg_attr(not(all(feature = "alloc", feature = "keygen")), allow(unused))]
 #![doc = include_str!("../README.md")]
 #![doc(html_logo_url = "https://raw.githubusercontent.com/RustCrypto/meta/master/logo_small.png")]
-#![warn(missing_docs)]
-#![cfg_attr(not(test), deny(clippy::unwrap_used))]
 
 //! # Supported algorithms
 //!
@@ -21,10 +19,8 @@
 //!
 //! ## OAEP encryption
 //!
-//! Note: requires `sha2` feature of `rsa` crate is enabled.
-//!
-#![cfg_attr(feature = "sha2", doc = "```")]
-#![cfg_attr(not(feature = "sha2"), doc = "```ignore")]
+#![cfg_attr(feature = "keygen", doc = "```")]
+#![cfg_attr(not(feature = "keygen"), doc = "```ignore")]
 //! use rsa::{RsaPrivateKey, RsaPublicKey, Oaep, sha2::Sha256};
 //!
 //! let mut rng = rand::rng();
@@ -49,7 +45,8 @@
 //!
 //! <div class="warning">
 //! <b>Warning:</b>
-//! See security notes in the <code><a href="./pkcs1v15/index.html">pkcs1v15</a></code> module.
+//! PKCS#1 v1.5 encryption is deprecated due to security concerns. See security notes in the
+//! <code><a href="./pkcs1v15/index.html">pkcs1v15</a></code> module.
 //! </div>
 //!
 #![cfg_attr(feature = "keygen", doc = "```")]
@@ -79,10 +76,8 @@
 //! See security notes in the <code><a href="./pkcs1v15/index.html">pkcs1v15</a></code> module.
 //! </div>
 //!
-//! Note: requires `sha2` feature of `rsa` crate is enabled.
-//!
-#![cfg_attr(feature = "sha2", doc = "```")]
-#![cfg_attr(not(feature = "sha2"), doc = "```ignore")]
+#![cfg_attr(feature = "keygen", doc = "```")]
+#![cfg_attr(not(feature = "keygen"), doc = "```ignore")]
 //! use rsa::RsaPrivateKey;
 //! use rsa::pkcs1v15::{SigningKey, VerifyingKey};
 //! use rsa::signature::{Keypair, RandomizedSigner, SignatureEncoding, Verifier};
@@ -106,10 +101,8 @@
 //!
 //! ## PSS signatures
 //!
-//! Note: requires `sha2` feature of `rsa` crate is enabled.
-//!
-#![cfg_attr(feature = "sha2", doc = "```")]
-#![cfg_attr(not(feature = "sha2"), doc = "```ignore")]
+#![cfg_attr(feature = "keygen", doc = "```")]
+#![cfg_attr(not(feature = "keygen"), doc = "```ignore")]
 //! use rsa::RsaPrivateKey;
 //! use rsa::pss::{BlindedSigningKey, VerifyingKey};
 //! use rsa::signature::{Keypair,RandomizedSigner, SignatureEncoding, Verifier};
@@ -222,7 +215,7 @@
 //! # }
 //! ```
 //!
-//! [RFC8017]: https://datatracker.ietf.org/doc/html/rfc8017#section-8.1
+//! [RFC8017]: https://www.rfc-editor.org/rfc/rfc8017.html
 //!
 // TODO(tarcieri): figure out why rustdoc isn't rendering these links correctly
 //! [`pkcs8::DecodePublicKey`]: https://docs.rs/pkcs8/latest/pkcs8/trait.DecodePublicKey.html
@@ -250,11 +243,13 @@ pub mod pkcs1v15;
 pub mod pss;
 pub mod traits;
 
+#[cfg(not(feature = "getrandom"))]
 mod dummy_rng;
 mod encoding;
-mod key;
 #[cfg(feature = "modmath")]
 pub mod modmath_support;
+mod private_key;
+mod public_key;
 
 #[cfg(feature = "modmath")]
 pub use crate::modmath_support::{
@@ -266,20 +261,19 @@ pub use const_num_traits::{Ct, Nct};
 pub use pkcs1;
 #[cfg(feature = "encoding")]
 pub use pkcs8;
-#[cfg(feature = "sha2")]
 pub use sha2;
 
 #[cfg(feature = "alloc")]
-pub use crate::key::RsaPublicKey;
+pub use crate::public_key::RsaPublicKey;
 pub use crate::{
     errors::{Error, Result},
-    key::GenericRsaPublicKey,
     pkcs1v15::{Pkcs1v15Encrypt, Pkcs1v15Sign},
+    public_key::GenericRsaPublicKey,
 };
 
-pub use crate::key::GenericRsaPrivateKey;
+pub use crate::private_key::GenericRsaPrivateKey;
 #[cfg(feature = "alloc")]
-pub use crate::key::RsaPrivateKey;
+pub use crate::private_key::RsaPrivateKey;
 
 #[cfg(feature = "alloc")]
 pub use crate::oaep::Oaep;

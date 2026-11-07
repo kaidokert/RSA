@@ -2,7 +2,7 @@
 name = "rsa_heapless"
 version = "0.5.0"
 authors = ["RustCrypto Developers", "dignifiedquire <dignifiedquire@gmail.com>", "kaidokert@gmail.com"]
-edition = "2021"
+edition = "2024"
 description = "Pure Rust RSA implementation - heapless fork"
 license = "MIT OR Apache-2.0"
 documentation = "https://docs.rs/rsa_heapless"
@@ -11,20 +11,33 @@ keywords = ["rsa", "encryption", "security", "crypto", "no_std"]
 categories = ["cryptography", "no-std", "no-std::no-alloc"]
 readme = "README.md"
 rust-version = "1.87"
-resolver = "3"
-exclude = ["marvin-toolkit/", "thirdparty/", "ct-verify/"]
+exclude = ["checkct/", "marvin-toolkit/", "thirdparty/", "ct-verify/"]
 
 [lib]
 name = "rsa"
+
+[workspace]
+members = ["checkct", "checkct/checkct_macros", "marvin-toolkit"]
+default-members = ["."]
+exclude = ["ct-verify", "footprint"]
+resolver = "3"
+
+[workspace.dependencies]
+crypto-bigint = { version = "0.7.10", default-features = false, features = ["zeroize", "rand_core"] }
+rand = "0.10"
+rand_core = { version = "0.10", default-features = false }
+zeroize = { version = "1.8", default-features = false }
 
 [dependencies]
 const-oid = { version = "0.10", default-features = false }
 crypto-primes = { version = "0.7", optional = true, default-features = false }
 digest = { version = "0.11", default-features = false, features = ["oid"] }
-rand_core = { version = "0.10", default-features = false }
+hmac = { version = "0.13", default-features = false, features = ["zeroize"] }
+rand_core = { workspace = true }
 rand_chacha = { version = "0.10", default-features = false }
+sha2 = { version = "0.11", default-features = false, features = ["oid", "zeroize"] }
 signature = { version = "3", default-features = false, features = ["digest", "rand_core"] }
-zeroize = { version = "1.8", default-features = false }
+zeroize = { workspace = true }
 ctutils = { version = "0.4", default-features = false }
 const-num-traits = { version = "0.2.1", default-features = false, features = ["ct"] }
 
@@ -34,12 +47,11 @@ pkcs1 = { version = "0.8", optional = true, default-features = false, features =
 pkcs8 = { version = "0.11", optional = true, default-features = false, features = ["alloc", "pem"] }
 serdect = { version = "0.4", optional = true }
 sha1 = { version = "0.11", optional = true, default-features = false, features = ["oid"] }
-sha2 = { version = "0.11", optional = true, default-features = false, features = ["oid"] }
 spki = { version = "0.8", optional = true, default-features = false, features = ["alloc"] }
 serde = { version = "1.0.184", optional = true, default-features = false, features = ["derive"] }
 
 # Big integer backend
-crypto-bigint = { version = "0.7.1", optional = true, default-features = false, features = ["zeroize","rand_core"] }
+crypto-bigint = { workspace = true, optional = true }
 modmath = { version = "0.6.0", optional = true, default-features = false, features = ["zeroize"] }
 modmath-cios = { version = "0.1.2", optional = true, default-features = false }
 fixed-bigint = { version = "0.6.0", default-features = false, features = ["use-unsafe", "zeroize", "cios"] }
@@ -51,15 +63,14 @@ base64ct = { version = "1", features = ["alloc"] }
 hex-literal = "1"
 proptest = "1"
 serde_test = "1.0.89"
-rand = { version = "0.10", features = ["chacha"] }
-rand_core = { version = "0.10", default-features = false }
+rand = { workspace = true, features = ["chacha"] }
+rand_core = { workspace = true }
 sha1 = { version = "0.11", default-features = false, features = ["oid"] }
-sha2 = { version = "0.11", default-features = false, features = ["oid"] }
-sha3 = { version = "0.11", default-features = false, features = ["oid"] }
+sha3 = { version = "0.12", default-features = false, features = ["oid"] }
 hex = { version = "0.4.3", features = ["serde"] }
 serde_json = "1.0.138"
 serde = { version = "1.0.184", features = ["derive"] }
-rstest = "0.26.1"
+rstest = "0.28"
 static_assertions = "1.1"
 krabi-caliper = { version = "0.1", features = ["deterministic-rng"] }
 crypto-bigint = { version = "0.7", default-features = false, features = ["zeroize", "alloc"] }
@@ -87,7 +98,7 @@ name = "rsa_decrypt"
 required-features = ["modmath", "alloc"]
 
 [features]
-default = ["std", "encoding", "modmath", "keygen"]
+default = ["std", "encoding", "modmath", "keygen", "getrandom"]
 encoding = ["alloc", "dep:pkcs1", "dep:pkcs8", "dep:spki"]
 hazmat = []
 getrandom = ["dep:crypto-bigint", "crypto-bigint/getrandom", "crypto-common"]
@@ -107,8 +118,47 @@ modmath = ["dep:modmath", "dep:modmath-cios"]
 # timing delta. Off by default; shipped builds carry nothing.
 ct-cycle-probe = []
 
+[lints.clippy]
+borrow_as_ptr = "warn"
+cast_lossless = "warn"
+cast_possible_truncation = "warn"
+cast_possible_wrap = "warn"
+cast_precision_loss = "warn"
+cast_sign_loss = "warn"
+checked_conversions = "warn"
+implicit_saturating_sub = "warn"
+integer_division_remainder_used = "warn"
+manual_assert = "warn"
+map_unwrap_or = "warn"
+missing_errors_doc = "warn"
+missing_panics_doc = "warn"
+mod_module_files = "warn"
+must_use_candidate = "warn"
+needless_range_loop = "allow"
+ptr_as_ptr = "warn"
+redundant_closure_for_method_calls = "warn"
+ref_as_ptr = "warn"
+return_self_not_must_use = "warn"
+semicolon_if_nothing_returned = "warn"
+trivially_copy_pass_by_ref = "warn"
+std_instead_of_alloc = "warn"
+std_instead_of_core = "warn"
+undocumented_unsafe_blocks = "warn"
+unnecessary_safety_comment = "warn"
+unwrap_in_result = "warn"
+unwrap_used = "warn"
+
+[lints.rust]
+missing_copy_implementations = "warn"
+missing_debug_implementations = "warn"
+missing_docs = "warn"
+trivial_casts = "warn"
+trivial_numeric_casts = "warn"
+unused_lifetimes = "warn"
+unused_qualifications = "warn"
+
 [package.metadata.docs.rs]
-features = ["std", "serde", "hazmat", "sha2"]
+features = ["std", "serde", "hazmat"]
 
 [profile.dev]
 opt-level = 2
