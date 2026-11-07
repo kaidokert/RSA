@@ -1,0 +1,28 @@
+[package]
+name = "driver"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[[bin]]
+name = "driver"
+path = "driver/src/main.rs"
+test = false
+bench = false
+
+[dependencies]
+checkct_macros = { path = "checkct_macros" }
+rsa = { package = "rsa_heapless", path = "..", default-features = false, features = ["alloc", "hazmat"] }
+crypto-bigint = { workspace = true, features = ["alloc"] }
+zeroize = { workspace = true, features = ["alloc"] }
+
+# RNG traits supplied by cargo-checkct's generated rng.rs.
+rand_core = { workspace = true, default-features = true }
+rand_core_06 = { package = "rand_core", version = "0.6" }
+rand_core_09 = { package = "rand_core", version = "0.9" }
+
+# `src/algorithms/pad.rs` is compiled into this crate by path; its
+# alloc-gated items need the same cfg here.
+[features]
+default = ["alloc"]
+alloc = []
