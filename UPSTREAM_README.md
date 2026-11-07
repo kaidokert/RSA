@@ -96,7 +96,7 @@ dual licensed as above, without any additional terms or conditions.
 [coverage-image]: https://codecov.io/gh/RustCrypto/RSA/graph/badge.svg?token=2HyUy96elu
 [coverage-link]: https://codecov.io/gh/RustCrypto/RSA
 [license-image]: https://img.shields.io/badge/license-Apache2.0/MIT-blue.svg
-[msrv-image]: https://img.shields.io/badge/rustc-1.85+-blue.svg
+[msrv-image]: https://img.shields.io/badge/rustc-1.87+-blue.svg
 [chat-image]: https://img.shields.io/badge/zulip-join_chat-blue.svg
 [chat-link]: https://rustcrypto.zulipchat.com/#narrow/stream/260047-RSA
 
