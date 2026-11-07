@@ -56,6 +56,23 @@ jobs:
       - run: cargo test --release --features getrandom
       - run: cargo test --release --features serde
 
+  # Generate code coverage and report to codecov.io
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools
+      - uses: taiki-e/install-action@cargo-llvm-cov
+      - run: cargo llvm-cov -p rsa_heapless --all-features --lcov --output-path lcov.info
+      - uses: codecov/codecov-action@v7
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: true
+
   minimal-versions:
     runs-on: ubuntu-latest
     steps:
