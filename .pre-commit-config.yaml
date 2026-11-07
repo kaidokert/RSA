@@ -24,6 +24,7 @@ repos:
     rev: v1.0
     hooks:
     -   id: fmt
+        args: ['-p', 'rsa_heapless', '--']
         exclude: ^checkct/
     -   id: cargo-check
     -   id: clippy
