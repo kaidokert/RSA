@@ -35,13 +35,19 @@ where
     T: UnsignedModularInt,
 {
     pub(super) inner: T,
+    /// Encoded length in bytes, at most the byte width of `inner`.
+    len: usize,
 }
 
 /// Owned signature byte buffer sized to match the underlying integer type `T`.
 #[derive(Clone)]
-pub struct SignatureBytes<T>(T::Bytes)
+pub struct SignatureBytes<T>
 where
-    T: UnsignedModularInt;
+    T: UnsignedModularInt,
+{
+    bytes: T::Bytes,
+    start: usize,
+}
 
 impl<T> Debug for SignatureBytes<T>
 where
@@ -49,7 +55,7 @@ where
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
         f.debug_tuple("SignatureBytes")
-            .field(&self.0.as_ref())
+            .field(&self.as_ref())
             .finish()
     }
 }
@@ -85,14 +91,28 @@ where
             return Err(signature::Error::new());
         }
 
-        Ok(Self {
-            inner: T::try_from_be_bytes_vartime(bytes).map_err(signature::Error::from_source)?,
-        })
+        let inner = T::try_from_be_bytes_vartime(bytes).map_err(signature::Error::from_source)?;
+        Ok(Self::with_len(inner, bytes.len()))
     }
 
     /// Construct a signature from its underlying integer representation.
+    ///
+    /// The signature encodes to the full byte width of `T`.
     pub fn from_inner(inner: T) -> Self {
-        Self { inner }
+        Self::with_len(inner, usize::MAX)
+    }
+
+    /// Construct a signature that encodes to `len` bytes, clamped to the byte width of `inner`.
+    fn with_len(inner: T, len: usize) -> Self {
+        let len = len.min(inner.to_be_bytes().as_ref().len());
+        Self { inner, len }
+    }
+
+    /// Big-endian encoding of exactly the signature's encoded length.
+    fn to_signature_bytes(&self) -> SignatureBytes<T> {
+        let bytes = self.inner.to_be_bytes();
+        let start = bytes.as_ref().len().saturating_sub(self.len);
+        SignatureBytes { bytes, start }
     }
 
     /// Borrow the underlying integer representation.
@@ -106,16 +126,7 @@ where
     T: UnsignedModularInt,
 {
     fn from(inner: T) -> Self {
-        Self { inner }
-    }
-}
-
-impl<T> SignatureBytes<T>
-where
-    T: UnsignedModularInt,
-{
-    fn new(inner: T::Bytes) -> Self {
-        Self(inner)
+        Self::from_inner(inner)
     }
 }
 
@@ -124,7 +135,8 @@ where
     T: UnsignedModularInt,
 {
     fn as_ref(&self) -> &[u8] {
-        self.0.as_ref()
+        let bytes = self.bytes.as_ref();
+        bytes.get(self.start..).unwrap_or(bytes)
     }
 }
 
@@ -135,7 +147,7 @@ where
     type Target = [u8];
 
     fn deref(&self) -> &[u8] {
-        self.0.as_ref()
+        self.as_ref()
     }
 }
 
@@ -144,7 +156,7 @@ where
     T: UnsignedModularInt,
 {
     fn from(signature: GenericSignature<T>) -> Self {
-        Self::new(signature.inner.to_be_bytes())
+        signature.to_signature_bytes()
     }
 }
 
@@ -183,7 +195,7 @@ where
 #[cfg(feature = "alloc")]
 impl From<GenericSignature<BoxedUint>> for Box<[u8]> {
     fn from(signature: GenericSignature<BoxedUint>) -> Box<[u8]> {
-        SignatureBytes::<BoxedUint>::from(signature).0
+        Box::from(signature.to_signature_bytes().as_ref())
     }
 }
 
@@ -204,8 +216,7 @@ where
     T: UnsignedModularInt,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
-        let bytes = self.inner.to_be_bytes();
-        for byte in bytes.as_ref() {
+        for byte in self.to_signature_bytes().as_ref() {
             write!(f, "{:02x}", byte)?;
         }
         Ok(())
@@ -217,8 +228,7 @@ where
     T: UnsignedModularInt,
 {
     fn fmt(&self, f: &mut Formatter<'_>) -> core::fmt::Result {
-        let bytes = self.inner.to_be_bytes();
-        for byte in bytes.as_ref() {
+        for byte in self.to_signature_bytes().as_ref() {
             write!(f, "{:02X}", byte)?;
         }
         Ok(())
@@ -243,8 +253,7 @@ where
     where
         S: serde::Serializer,
     {
-        let bytes = self.inner.to_be_bytes();
-        serdect::slice::serialize_hex_lower_or_bin(&bytes, serializer)
+        serdect::slice::serialize_hex_lower_or_bin(&self.to_signature_bytes(), serializer)
     }
 }
 
@@ -268,9 +277,7 @@ mod tests {
     fn test_serde() {
         use super::*;
         use serde_test::{Configure, Token, assert_tokens};
-        let signature = GenericSignature::<BoxedUint> {
-            inner: BoxedUint::from(42u32),
-        };
+        let signature = GenericSignature::from_inner(BoxedUint::from(42u32));
 
         let tokens = [Token::Str("000000000000002a")];
         assert_tokens(&signature.readable(), &tokens);
