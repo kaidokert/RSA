@@ -24,3 +24,8 @@ codegen-units = 1
 opt-level = "z"
 panic = "abort"
 incremental = false
+
+# The ladder gate's counted-loop acceptance is unreleased; drop this once
+# krabi-caliper 0.2.1 is on crates.io.
+[patch.crates-io]
+krabi-caliper = { git = "https://github.com/kaidokert/krabi-caliper-rs", tag = "v0.2.1-alpha.1" }

@@ -9,8 +9,14 @@ This is a nested cargo workspace, excluded from the published crate.
 The pinned profile (`lto = "fat"`, `codegen-units = 1`,
 `opt-level = "z"`, `panic = "abort"`) lives in [`Cargo.toml`](Cargo.toml)
 and matches what a size-conscious embedded deployment builds; CI pins
-rustc 1.87.0 (the crate MSRV) so codegen drift surfaces as a reviewable
-diff, not silent rot.
+rustc 1.88.0 (krabi-caliper 0.2's MSRV; the crate's own stays 1.87) so
+codegen drift surfaces as a reviewable diff, not silent rot.
+
+Cargo ignores a dependency's `[profile]`, so deployments pick their own
+opt-level. CI runs the ladder check, the panic audit, the taint gate and
+the hardware campaigns at both `"z"` and `"s"`, overriding the profile
+with `CARGO_PROFILE_RELEASE_OPT_LEVEL`; set it the same way to reproduce
+a run locally.
 
 ## What is attested
 
@@ -48,8 +54,12 @@ tests, not this workspace). `static_assertions` pins that only
 the fixture staticlib per ISA (thumbv7em/7m/6m, riscv32imc/imac),
 disassembles it, and asserts each `Field::<Ct>::exp` monomorphization —
 the secret-exponent ladder — carries at most the reviewed public
-bit-width loop-guard branch count (1 on Thumb, 2 on RV32) and nothing
-more. Fails closed: it requires exactly one ladder monomorphization per
+bit-width loop-guard branch (at most 1) and nothing more. Loops over
+public bounds are accepted structurally: at `"s"` the per-limb select
+loops inline into the ladder, and krabi-caliper's counted-loop model
+recognises their constant-step counters. That model cannot see where a
+bound came from, which is why the negative controls are loops that exit
+early on a loaded byte: they must still trip. Fails closed: it requires exactly one ladder monomorphization per
 positive fixture in the archive (a missing one means a carrier's ladder
 was inlined/renamed and its attestation would be vacuous), and the
 negative controls must trip the per-ISA mnemonic tables. Deliberately
