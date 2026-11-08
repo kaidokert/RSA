@@ -10,7 +10,7 @@ pub const TARGETS: &[TargetSpec] = &[
     TargetSpec {
         triple: "thumbv7em-none-eabi",
         priority: 1,
-        toolchain: "1.87.0",
+        toolchain: "1.88.0",
         forbidden: mnemonics::THUMB_FORBIDDEN,
         allowed_cmov: mnemonics::THUMB_ALLOWED,
         ladder_allowed_branches: 1,
@@ -19,7 +19,7 @@ pub const TARGETS: &[TargetSpec] = &[
     TargetSpec {
         triple: "thumbv7m-none-eabi",
         priority: 1,
-        toolchain: "1.87.0",
+        toolchain: "1.88.0",
         forbidden: mnemonics::THUMB_FORBIDDEN,
         allowed_cmov: mnemonics::THUMB_ALLOWED,
         ladder_allowed_branches: 1,
@@ -29,7 +29,7 @@ pub const TARGETS: &[TargetSpec] = &[
     TargetSpec {
         triple: "thumbv6m-none-eabi",
         priority: 2,
-        toolchain: "1.87.0",
+        toolchain: "1.88.0",
         forbidden: mnemonics::THUMB_FORBIDDEN,
         allowed_cmov: mnemonics::THUMB_ALLOWED,
         ladder_allowed_branches: 1,
@@ -39,19 +39,19 @@ pub const TARGETS: &[TargetSpec] = &[
     TargetSpec {
         triple: "riscv32imc-unknown-none-elf",
         priority: 3,
-        toolchain: "1.87.0",
+        toolchain: "1.88.0",
         forbidden: mnemonics::RISCV_FORBIDDEN,
         allowed_cmov: &[],
-        ladder_allowed_branches: 2,
+        ladder_allowed_branches: 1,
         extra_cargo_args: &[],
     },
     TargetSpec {
         triple: "riscv32imac-unknown-none-elf",
         priority: 3,
-        toolchain: "1.87.0",
+        toolchain: "1.88.0",
         forbidden: mnemonics::RISCV_FORBIDDEN,
         allowed_cmov: &[],
-        ladder_allowed_branches: 2,
+        ladder_allowed_branches: 1,
         extra_cargo_args: &[],
     },
     // Priority 4: 8-bit AVR (nightly-only, needs build-std + target-cpu).
@@ -71,7 +71,7 @@ pub const TARGETS: &[TargetSpec] = &[
     TargetSpec {
         triple: "aarch64-unknown-linux-gnu",
         priority: 5,
-        toolchain: "1.87.0",
+        toolchain: "1.88.0",
         forbidden: mnemonics::AARCH64_FORBIDDEN,
         allowed_cmov: mnemonics::AARCH64_ALLOWED,
         ladder_allowed_branches: 1,
@@ -81,7 +81,7 @@ pub const TARGETS: &[TargetSpec] = &[
     TargetSpec {
         triple: "x86_64-unknown-linux-gnu",
         priority: 6,
-        toolchain: "1.87.0",
+        toolchain: "1.88.0",
         forbidden: mnemonics::X86_64_FORBIDDEN,
         allowed_cmov: mnemonics::X86_64_ALLOWED,
         ladder_allowed_branches: 1,

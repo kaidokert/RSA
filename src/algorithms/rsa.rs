@@ -481,7 +481,12 @@ where
         let m_mont = M::MontgomeryForm::from_reduced(m_sized, n_params);
         let check = m_mont.pow_bounded_exp(e, e.bits()).retrieve();
         crate::ct_probe::mark(crate::ct_probe::stage::VERIFY);
-        if *c != check {
+        // The outcome is public: a valid signature recomputes `c` exactly,
+        // and only a fault makes it differ. Taint analysis cannot see that,
+        // because `check` is computed from `d`.
+        let mut mismatch = *c != check;
+        crate::ct_probe::declassify(&mut mismatch);
+        if mismatch {
             // `m` is secret material (would-be plaintext or signature).
             // Wipe before returning `Err` — the failure path indicates a
             // fault-attack signal and the caller doesn't need `m`.

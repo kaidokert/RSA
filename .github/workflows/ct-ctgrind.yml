@@ -11,6 +11,8 @@ on:
     branches:
       - heapless
       - 'feature/**'
+  schedule:
+    - cron: "23 4 * * 1"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
@@ -29,9 +31,15 @@ jobs:
   # before. The x86_64 row pins +lzcnt,+bmi1 so baseline `leading_zeros`
   # doesn't lower to a data-dependent branch inside a core intrinsic.
   ctgrind:
+    name: ctgrind (${{ matrix.arch }}, opt ${{ matrix.opt }})
+    env:
+      CARGO_PROFILE_RELEASE_OPT_LEVEL: ${{ matrix.opt }}
     strategy:
       fail-fast: false
       matrix:
+        # "z" is the pinned profile; deployments commonly build at "s".
+        opt: ["s", "z"]
+        arch: [x86_64, aarch64]
         include:
           - runner: ubuntu-latest
             arch: x86_64
@@ -46,7 +54,7 @@ jobs:
           persist-credentials: false
       - uses: dtolnay/rust-toolchain@master
         with:
-          toolchain: 1.87.0
+          toolchain: 1.88.0
       - name: Install Valgrind
         run: sudo apt-get update -qq && sudo apt-get install -y -qq valgrind
       - name: Build ct-ctgrind

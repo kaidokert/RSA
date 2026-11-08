@@ -12,12 +12,24 @@
 //! The signature output is untainted before we `black_box` it: an RSA
 //! signature is secret-*derived* but public-by-design (it is what the
 //! caller publishes), so reads of it downstream are not leaks.
+//!
+//! Fat LTO inlines the fixtures into these wrappers, so a plain `&d` to a
+//! constant or zeroed local lets the optimizer use the known value and the
+//! taint never reaches the sign path. Every secret therefore goes through
+//! [`taint_ptr`].
 
 use core::hint::black_box;
 use krabi_caliper::ctgrind_fixture;
 
 krabi_caliper::ctgrind_standard_controls!();
 use krabi_caliper::host::ctgrind::{taint_val, untaint_val};
+
+/// Taint `value` and return a pointer to it the optimizer cannot trace back
+/// to the local, so the fixture loads the tainted bytes.
+fn taint_ptr<T>(value: &T) -> *const T {
+    taint_val(value);
+    black_box(value as *const T)
+}
 
 // Positive: the whole blinded PKCS#1 v1.5 sign at 512-bit, driven by
 // the secret `d`. `ct-fixtures::D_512` is the real private exponent, so
@@ -29,8 +41,8 @@ unsafe extern "C" {
 ctgrind_fixture!(ct_fix__pkcs1v15_blinded_sign__fb8__N64, {
     let d = ct_fixtures::D_512;
     let mut out = [0u8; 64];
-    taint_val(&d);
-    unsafe { ct_fix__pkcs1v15_blinded_sign__fb8__N64(&d, &mut out) }
+    let d = taint_ptr(&d);
+    unsafe { ct_fix__pkcs1v15_blinded_sign__fb8__N64(d, &mut out) }
     untaint_val(&out);
     let _ = black_box(out);
 });
@@ -44,8 +56,8 @@ unsafe extern "C" {
 ctgrind_fixture!(ct_fix__pkcs1v15_blinded_sign__fb32__N64, {
     let d = ct_fixtures::D_2048;
     let mut out = [0u8; 256];
-    taint_val(&d);
-    unsafe { ct_fix__pkcs1v15_blinded_sign__fb32__N64(&d, &mut out) }
+    let d = taint_ptr(&d);
+    unsafe { ct_fix__pkcs1v15_blinded_sign__fb32__N64(d, &mut out) }
     untaint_val(&out);
     let _ = black_box(out);
 });
@@ -58,8 +70,8 @@ unsafe extern "C" {
 ctgrind_fixture!(ct_fix__pkcs1v15_blinded_sign__fb8__N256, {
     let d = ct_fixtures::D_2048;
     let mut out = [0u8; 256];
-    taint_val(&d);
-    unsafe { ct_fix__pkcs1v15_blinded_sign__fb8__N256(&d, &mut out) }
+    let d = taint_ptr(&d);
+    unsafe { ct_fix__pkcs1v15_blinded_sign__fb8__N256(d, &mut out) }
     untaint_val(&out);
     let _ = black_box(out);
 });
@@ -71,8 +83,8 @@ unsafe extern "C" {
 ctgrind_fixture!(ct_fix__pkcs1v15_blinded_sign__fb64__N32, {
     let d = ct_fixtures::D_2048;
     let mut out = [0u8; 256];
-    taint_val(&d);
-    unsafe { ct_fix__pkcs1v15_blinded_sign__fb64__N32(&d, &mut out) }
+    let d = taint_ptr(&d);
+    unsafe { ct_fix__pkcs1v15_blinded_sign__fb64__N32(d, &mut out) }
     untaint_val(&out);
     let _ = black_box(out);
 });
@@ -85,8 +97,8 @@ unsafe extern "C" {
 ctgrind_fixture!(nct_fix__neg__secret_branch__fb8__N64, {
     let s = [0u8; 64];
     let mut out = 0u8;
-    taint_val(&s);
-    unsafe { nct_fix__neg__secret_branch__fb8__N64(&s, &mut out) }
+    let s = taint_ptr(&s);
+    unsafe { nct_fix__neg__secret_branch__fb8__N64(s, &mut out) }
     untaint_val(&out);
     let _ = black_box(out);
 });
@@ -99,8 +111,8 @@ unsafe extern "C" {
 ctgrind_fixture!(nct_fix__neg__vartime_cmp__fb8__N64, {
     let s = [0u8; 64];
     let mut out = 0u8;
-    taint_val(&s);
-    unsafe { nct_fix__neg__vartime_cmp__fb8__N64(&s, &mut out) }
+    let s = taint_ptr(&s);
+    unsafe { nct_fix__neg__vartime_cmp__fb8__N64(s, &mut out) }
     untaint_val(&out);
     let _ = black_box(out);
 });

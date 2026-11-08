@@ -10,9 +10,15 @@ on:
 
 jobs:
   hardware:
+    strategy:
+      fail-fast: false
+      matrix:
+        # "z" is the pinned profile; deployments commonly build at "s".
+        opt: ["s", "z"]
     uses: kaidokert/krabi-caliper-rs/.github/workflows/hw-ct.yml@hw-ct-v1
     with:
-      invocation-name: rsa
+      invocation-name: rsa-opt-${{ matrix.opt }}
       campaigns-json: '["rsa768-ct-jtrace-f407-30mhz","rsa2048-smoke-jtrace-f407-168mhz"]'
       working-directory: ct-verify/cyccnt-hardware
       prepared: true
+      opt-level: ${{ matrix.opt }}

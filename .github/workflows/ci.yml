@@ -6,6 +6,8 @@ on:
     branches:
       - heapless
       - 'feature/**'
+  schedule:
+    - cron: "23 4 * * 1"
 
 env:
   RUSTFLAGS: "-Dwarnings"
