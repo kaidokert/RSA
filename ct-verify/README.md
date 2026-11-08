@@ -7,8 +7,7 @@ This is a nested cargo workspace, excluded from the published crate. Its
 release profile in [`Cargo.toml`](Cargo.toml) is `lto = "fat"`,
 `codegen-units = 1`, `opt-level = "z"`, `panic = "abort"`, which is what
 a size-conscious embedded build uses. CI pins the toolchain too, so a
-codegen change shows up as a failing or changed gate rather than going
-unnoticed.
+codegen change shows up as a failing or changed gate.
 
 Cargo ignores a dependency's `[profile]`, so a deployment picks its own
 opt-level. CI runs the ladder check, the panic audit, the taint gate and
@@ -99,10 +98,9 @@ names the routine it covers as the innermost frame, and none matches on
 the fixture frame alone.
 
 One more value is public by design: the result of the verify-after-sign
-comparison. It is declassified in the library rather than suppressed.
-The private op passes it to `ct_probe::declassify` (feature
-`ct-declassify`, enabled only by this harness), and the harness untaints
-that value alone.
+comparison. It is declassified in the library: the private op passes
+it to `ct_probe::declassify` (feature `ct-declassify`, enabled only by
+this harness), and the harness untaints that value alone.
 
 **Panic-free audit** ([`panic-free-audit`](panic-free-audit/)).
 Cross-builds the whole sign as a staticlib with unused code removed and
