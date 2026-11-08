@@ -12,7 +12,7 @@ use crypto_bigint::{
 #[cfg(feature = "alloc")]
 use crypto_bigint::{NonZero as CryptoNonZero, Odd as CryptoOdd};
 
-use rand_core::CryptoRng;
+use rand_core::TryCryptoRng;
 use zeroize::{Zeroize, ZeroizeOnDrop};
 #[cfg(feature = "serde")]
 use {
@@ -376,8 +376,9 @@ impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
     ///
     /// # Errors
     /// - If `bit_size` is lower than the minimum 1024-bits.
+    /// - If the RNG fails, returns [`Error::Rng`].
     #[cfg(feature = "keygen")]
-    pub fn new<R: CryptoRng + ?Sized>(rng: &mut R, bit_size: usize) -> Result<Self> {
+    pub fn new<R: TryCryptoRng + ?Sized>(rng: &mut R, bit_size: usize) -> Result<Self> {
         Self::new_with_exp(rng, bit_size, Self::EXP.into())
     }
 
@@ -389,7 +390,7 @@ impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
     /// which are insecure!
     #[cfg(all(feature = "hazmat", feature = "keygen"))]
     #[allow(clippy::missing_errors_doc, reason = "TODO")]
-    pub fn new_unchecked<R: CryptoRng + ?Sized>(rng: &mut R, bit_size: usize) -> Result<Self> {
+    pub fn new_unchecked<R: TryCryptoRng + ?Sized>(rng: &mut R, bit_size: usize) -> Result<Self> {
         Self::new_with_exp_unchecked(rng, bit_size, Self::EXP.into())
     }
 
@@ -399,7 +400,7 @@ impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
     /// Unless you have specific needs, you should use [`RsaPrivateKey::new`] instead.
     #[cfg(feature = "keygen")]
     #[allow(clippy::missing_errors_doc, reason = "TODO")]
-    pub fn new_with_exp<R: CryptoRng + ?Sized>(
+    pub fn new_with_exp<R: TryCryptoRng + ?Sized>(
         rng: &mut R,
         bit_size: usize,
         exp: BoxedUint,
@@ -428,7 +429,7 @@ impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
     /// which are insecure!
     #[cfg(all(feature = "hazmat", feature = "keygen"))]
     #[allow(clippy::missing_errors_doc, reason = "TODO")]
-    pub fn new_with_exp_unchecked<R: CryptoRng + ?Sized>(
+    pub fn new_with_exp_unchecked<R: TryCryptoRng + ?Sized>(
         rng: &mut R,
         bit_size: usize,
         exp: BoxedUint,
@@ -801,7 +802,7 @@ impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
     /// [`Pkcs1v15Encrypt`][crate::Pkcs1v15Encrypt] has the same implicit-rejection
     /// behavior as [`Self::decrypt`], independently of the blinding randomness.
     #[allow(clippy::missing_errors_doc, reason = "TODO")]
-    pub fn decrypt_blinded<R: CryptoRng + ?Sized, P: PaddingScheme>(
+    pub fn decrypt_blinded<R: TryCryptoRng + ?Sized, P: PaddingScheme>(
         &self,
         rng: &mut R,
         padding: P,
@@ -837,7 +838,7 @@ impl GenericRsaPrivateKey<BoxedUint, BoxedMontyParams> {
     ///   [`Pss::new`][`crate::Pss::new`] for a standard RSASSA-PSS signature with
     ///   RSA base blinding enabled by default.
     #[allow(clippy::missing_errors_doc, reason = "TODO")]
-    pub fn sign_with_rng<R: CryptoRng + ?Sized, S: SignatureScheme>(
+    pub fn sign_with_rng<R: TryCryptoRng + ?Sized, S: SignatureScheme>(
         &self,
         rng: &mut R,
         padding: S,

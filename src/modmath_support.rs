@@ -800,18 +800,19 @@ impl<T: ModMathIntCt + HasPersonality<P = Ct>> crate::traits::modular::CtModulus
 mod tests {
     use const_num_traits::Ct;
     use fixed_bigint::FixedUInt;
-    use rand::rngs::ChaCha8Rng;
-    use rand_core::SeedableRng;
-    use sha1::Sha1;
-    use signature::hazmat::PrehashVerifier;
 
-    use super::{
-        ModMathForm, ModMathParams, ModMathValue, public_key_ct_from_be_bytes,
-        public_key_from_be_bytes,
+    use super::{ModMathForm, ModMathParams};
+    #[cfg(feature = "pkcs1v15")]
+    use {
+        super::{ModMathValue, public_key_ct_from_be_bytes, public_key_from_be_bytes},
+        crate::pkcs1v15::{GenericEncryptingKey, GenericSignature, GenericVerifyingKey},
+        crate::public_key::GenericRsaPublicKey,
+        crate::{BoxedUint, Pkcs1v15Encrypt, RsaPublicKey, traits::RandomizedEncryptor},
+        rand::rngs::ChaCha8Rng,
+        rand_core::SeedableRng,
+        sha1::Sha1,
+        signature::hazmat::PrehashVerifier,
     };
-    use crate::pkcs1v15::{GenericEncryptingKey, GenericSignature, GenericVerifyingKey};
-    use crate::public_key::GenericRsaPublicKey;
-    use crate::{BoxedUint, Pkcs1v15Encrypt, RsaPublicKey, traits::RandomizedEncryptor};
 
     type SmallU = FixedUInt<u8, 64>;
     type SmallUCt = FixedUInt<u8, 64, Ct>;
@@ -869,6 +870,7 @@ mod tests {
         assert_zeroize_on_drop::<ModMathForm<SmallUCt, Ct>>();
     }
 
+    #[cfg(feature = "pkcs1v15")]
     #[test]
     fn verify_pkcs1v15_signature_with_modmath_fixed_uint() {
         type U512 = FixedUInt<u8, 64>;
@@ -899,6 +901,7 @@ mod tests {
         verifying_key.verify_prehash(&digest, &signature).unwrap();
     }
 
+    #[cfg(feature = "pkcs1v15")]
     #[test]
     fn verify_pkcs1v15_signature_with_modmath_fixed_uint32() {
         type U512 = FixedUInt<u32, 16>;
@@ -939,6 +942,7 @@ mod tests {
         verifying_key.verify_prehash(&digest, &signature).unwrap();
     }
 
+    #[cfg(feature = "pkcs1v15")]
     #[test]
     fn encrypt_pkcs1v15_with_modmath_fixed_uint_matches_boxeduint() {
         // Encrypt path takes a secret plaintext, so type the modulus as
@@ -1403,6 +1407,7 @@ mod private_op_tests {
          7d508aae275b946915c02e2e1106d175d74ec6777f5e80d12c053d9c7be1e341"
     );
 
+    #[cfg(feature = "pkcs1v15")]
     #[test]
     fn pkcs1v15_sign_into_round_trip_2048_sha1() {
         use crate::algorithms::pkcs1v15::{
@@ -1534,6 +1539,7 @@ mod private_op_tests {
     // SmallUCt = FixedUInt<u8, 64, Ct> → bits_precision = 512 → k = 64.
     const SMALL_K: usize = 64;
 
+    #[cfg(feature = "pkcs1v15")]
     #[test]
     fn pkcs1v15_sign_into_rejects_wrong_k() {
         use crate::algorithms::pkcs1v15::sign_into;
@@ -1554,6 +1560,7 @@ mod private_op_tests {
         assert!(matches!(result, Err(Error::InvalidArguments)));
     }
 
+    #[cfg(feature = "pkcs1v15")]
     #[test]
     fn pkcs1v15_sign_into_rejects_small_sig_storage() {
         use crate::algorithms::pkcs1v15::sign_into;
@@ -1574,6 +1581,7 @@ mod private_op_tests {
         assert!(matches!(result, Err(Error::OutputBufferTooSmall)));
     }
 
+    #[cfg(feature = "pkcs1v15")]
     #[test]
     fn pkcs1v15_sign_into_propagates_message_too_long() {
         // prefix + hashed + 11 > k → `pkcs1v15_sign_pad_into` returns
@@ -1700,6 +1708,7 @@ mod private_op_tests {
     // not the container's `bits_precision()`, otherwise a shorter
     // modulus stored in a wider container spuriously rejects the only
     // valid `k`.
+    #[cfg(feature = "pkcs1v15")]
     #[test]
     fn pkcs1v15_sign_into_k_uses_modulus_bits_not_container() {
         use crate::algorithms::pkcs1v15::sign_into;
@@ -1755,6 +1764,7 @@ mod private_op_tests {
 
     // ─── PrivateKeyParts smoke tests ─────────────────────────────
 
+    #[cfg(feature = "pkcs1v15")]
     #[test]
     fn pkcs1v15_signing_key_round_trip_2048_sha1() {
         use crate::pkcs1v15::{GenericSignature, GenericSigningKey, GenericVerifyingKey};
@@ -1794,6 +1804,7 @@ mod private_op_tests {
         verifying_key.verify_prehash(&digest, &sig).unwrap();
     }
 
+    #[cfg(feature = "pkcs1v15")]
     #[test]
     fn pkcs1v15_signing_key_rejects_wrong_prehash_length() {
         use crate::pkcs1v15::GenericSigningKey;
@@ -1996,6 +2007,7 @@ mod private_op_tests {
         signing_key.zeroize();
     }
 
+    #[cfg(feature = "pkcs1v15")]
     #[test]
     fn pkcs1v15_signing_key_satisfies_zeroize() {
         use crate::pkcs1v15::GenericSigningKey;

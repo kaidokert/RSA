@@ -83,24 +83,26 @@ name = "key"
 # must include both `modmath` and `alloc`.
 [[example]]
 name = "rsa1024_verify"
-required-features = ["modmath", "alloc"]
+required-features = ["modmath", "alloc", "pkcs1v15"]
 
 [[example]]
 name = "rsa2048_verify"
-required-features = ["modmath", "alloc"]
+required-features = ["modmath", "alloc", "pkcs1v15"]
 
 [[example]]
 name = "rsa3072_verify"
-required-features = ["modmath", "alloc"]
+required-features = ["modmath", "alloc", "pkcs1v15"]
 
 [[example]]
 name = "rsa_decrypt"
-required-features = ["modmath", "alloc"]
+required-features = ["modmath", "alloc", "pkcs1v15"]
 
 [features]
 default = ["std", "encoding", "modmath", "keygen", "getrandom"]
 encoding = ["alloc", "dep:pkcs1", "dep:pkcs8", "dep:spki"]
 hazmat = []
+# PKCS #1 v1.5 is only supported as opt-in basis for legacy protocols
+pkcs1v15 = []
 getrandom = ["dep:crypto-bigint", "crypto-bigint/getrandom", "crypto-common"]
 serde = ["encoding", "dep:serde", "dep:serdect", "dep:crypto-bigint", "crypto-bigint/serde"]
 pkcs5 = ["pkcs8/encryption"]
@@ -158,7 +160,7 @@ unused_lifetimes = "warn"
 unused_qualifications = "warn"
 
 [package.metadata.docs.rs]
-features = ["std", "serde", "hazmat"]
+all-features = true
 
 [profile.dev]
 opt-level = 2

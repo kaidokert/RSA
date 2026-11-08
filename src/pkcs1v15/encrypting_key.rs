@@ -11,7 +11,7 @@ use crate::{
 use alloc::vec::Vec;
 #[cfg(feature = "alloc")]
 use crypto_bigint::{BoxedUint, modular::BoxedMontyParams};
-use rand_core::CryptoRng;
+use rand_core::TryCryptoRng;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -55,7 +55,7 @@ where
     T: UnsignedModularInt,
     M: CtModulusParams<Modulus = T>,
 {
-    fn encrypt_with_rng_into<'a, R: rand_core::TryCryptoRng + ?Sized>(
+    fn encrypt_with_rng_into<'a, R: TryCryptoRng + ?Sized>(
         &self,
         rng: &mut R,
         msg: &[u8],
@@ -65,7 +65,11 @@ where
     }
 
     #[cfg(feature = "alloc")]
-    fn encrypt_with_rng<R: CryptoRng + ?Sized>(&self, rng: &mut R, msg: &[u8]) -> Result<Vec<u8>> {
+    fn encrypt_with_rng<R: TryCryptoRng + ?Sized>(
+        &self,
+        rng: &mut R,
+        msg: &[u8],
+    ) -> Result<Vec<u8>> {
         let mut storage = vec![0u8; self.inner.size()];
         let ciphertext = encrypt_into(rng, &self.inner, msg, &mut storage)?;
         Ok(ciphertext.to_vec())

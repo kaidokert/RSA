@@ -12,7 +12,7 @@ bench = false
 
 [dependencies]
 checkct_macros = { path = "checkct_macros" }
-rsa = { package = "rsa_heapless", path = "..", default-features = false, features = ["alloc", "hazmat"] }
+rsa = { package = "rsa_heapless", path = "..", default-features = false, features = ["alloc", "hazmat", "pkcs1v15"] }
 crypto-bigint = { workspace = true, features = ["alloc"] }
 zeroize = { workspace = true, features = ["alloc"] }
 
