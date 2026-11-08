@@ -78,7 +78,171 @@ use crate::traits::{
     PaddingScheme, PrivateKeyParts, PublicKeyParts, SignatureScheme, UnsignedModularInt,
 };
 #[cfg(feature = "alloc")]
-use crate::{private_key::RsaPrivateKey, public_key};
+use crate::{PublicKey, private_key::PrivateKey, public_key};
+
+#[cfg(feature = "getrandom")]
+use crypto_common::getrandom::SysRng;
+
+#[cfg(feature = "alloc")]
+impl PublicKey {
+    /// Encrypt `plaintext` using PKCS#1 v1.5 and the operating system RNG.
+    ///
+    /// Prefer [`Self::oaep_encrypt`] for new protocols. See the [`crate::pkcs1v15`]
+    /// module's security notes.
+    ///
+    /// # Errors
+    /// Returns an error if the key is invalid, the plaintext is too long, or the RNG fails.
+    #[cfg(feature = "getrandom")]
+    pub fn pkcs1v15_encrypt(&self, plaintext: &[u8]) -> Result<Vec<u8>> {
+        self.pkcs1v15_encrypt_with_rng(&mut SysRng, plaintext)
+    }
+
+    /// Encrypt `plaintext` using PKCS#1 v1.5 and the provided RNG.
+    ///
+    /// Prefer [`Self::oaep_encrypt_with_rng`] for new protocols. See the
+    /// [`crate::pkcs1v15`] module's security notes.
+    ///
+    /// # Errors
+    /// Returns an error if the key is invalid, the plaintext is too long, or the RNG fails.
+    pub fn pkcs1v15_encrypt_with_rng<R>(&self, rng: &mut R, plaintext: &[u8]) -> Result<Vec<u8>>
+    where
+        R: TryCryptoRng + ?Sized,
+    {
+        encrypt(rng, self, plaintext)
+    }
+
+    /// Verify a PKCS#1 v1.5 signature after hashing `msg` with `D`.
+    ///
+    /// # Errors
+    /// Returns an error if the signature is invalid.
+    pub fn pkcs1v15_verify<D>(&self, msg: &[u8], sig: &[u8]) -> Result<()>
+    where
+        D: Digest + AssociatedOid,
+    {
+        self.pkcs1v15_verify_prehash::<D>(&D::digest(msg), sig)
+    }
+
+    /// Verify a PKCS#1 v1.5 signature over a message hash computed using `D`.
+    ///
+    /// The hash is verified directly, without hashing it again.
+    ///
+    /// # Errors
+    /// Returns [`Error::InputNotHashed`] if `hash` has the wrong length, or an error
+    /// if the signature is invalid.
+    pub fn pkcs1v15_verify_prehash<D>(&self, hash: &[u8], sig: &[u8]) -> Result<()>
+    where
+        D: Digest + AssociatedOid,
+    {
+        Pkcs1v15Sign::new::<D>().verify(self, hash, sig)
+    }
+}
+
+#[cfg(feature = "alloc")]
+impl PrivateKey {
+    /// Decrypt `ciphertext` using PKCS#1 v1.5 with implicit rejection.
+    ///
+    /// Invalid padding returns a deterministic synthetic message. `Ok` does not establish
+    /// authenticity; the enclosing protocol must authenticate the returned message.
+    /// See [`Pkcs1v15Encrypt`] and the [`crate::pkcs1v15`] module's security notes.
+    ///
+    /// Uses the operating system RNG for blinding when `getrandom` is enabled.
+    /// Otherwise, this operation is unblinded; use [`Self::pkcs1v15_decrypt_with_rng`]
+    /// to provide blinding randomness.
+    ///
+    /// # Errors
+    /// Returns an error for invalid keys, ciphertext lengths or representatives,
+    /// unsupported modulus lengths, or operational failures, including RNG failures.
+    pub fn pkcs1v15_decrypt(&self, ciphertext: &[u8]) -> Result<Vec<u8>> {
+        #[cfg(feature = "getrandom")]
+        {
+            self.pkcs1v15_decrypt_with_rng(&mut SysRng, ciphertext)
+        }
+        #[cfg(not(feature = "getrandom"))]
+        {
+            decrypt::<crate::dummy_rng::DummyRng>(None, self, ciphertext)
+        }
+    }
+
+    /// Decrypt `ciphertext` using PKCS#1 v1.5, using the provided RNG for blinding.
+    ///
+    /// Uses implicit rejection as described in [`Self::pkcs1v15_decrypt`]. The enclosing
+    /// protocol must authenticate the returned message, even when this returns `Ok`.
+    ///
+    /// # Errors
+    /// Returns the same errors as [`Self::pkcs1v15_decrypt`].
+    pub fn pkcs1v15_decrypt_with_rng<R>(&self, rng: &mut R, ciphertext: &[u8]) -> Result<Vec<u8>>
+    where
+        R: TryCryptoRng + ?Sized,
+    {
+        decrypt(Some(rng), self, ciphertext)
+    }
+
+    /// Sign `msg` using PKCS#1 v1.5 after hashing it with `D`.
+    ///
+    /// Uses the operating system RNG for blinding when `getrandom` is enabled.
+    /// Otherwise, this operation is unblinded; use [`Self::pkcs1v15_sign_with_rng`]
+    /// to provide blinding randomness. Blinding does not change the signature.
+    ///
+    /// # Errors
+    /// Returns an error if the key is too small for `D` or the private operation fails.
+    pub fn pkcs1v15_sign<D>(&self, msg: &[u8]) -> Result<Vec<u8>>
+    where
+        D: Digest + AssociatedOid,
+    {
+        self.pkcs1v15_sign_prehash::<D>(&D::digest(msg))
+    }
+
+    /// Sign a message hash computed using `D` with PKCS#1 v1.5.
+    ///
+    /// The hash is signed directly, without hashing it again. Blinding follows
+    /// [`Self::pkcs1v15_sign`].
+    ///
+    /// # Errors
+    /// Returns [`Error::InputNotHashed`] if `hash` has the wrong length, or an error
+    /// if the key is too small for `D` or the private operation fails.
+    pub fn pkcs1v15_sign_prehash<D>(&self, hash: &[u8]) -> Result<Vec<u8>>
+    where
+        D: Digest + AssociatedOid,
+    {
+        if hash.len() != <D as Digest>::output_size() {
+            return Err(Error::InputNotHashed);
+        }
+
+        sign_with_default_rng(self, &pkcs1v15_generate_prefix::<D>(), hash)
+    }
+
+    /// Sign `msg` using PKCS#1 v1.5 after hashing it with `D`, using the provided RNG
+    /// for blinding. Blinding does not change the signature.
+    ///
+    /// # Errors
+    /// Returns an error if the key is too small for `D` or the private operation fails,
+    /// including RNG failures.
+    pub fn pkcs1v15_sign_with_rng<D, R>(&self, rng: &mut R, msg: &[u8]) -> Result<Vec<u8>>
+    where
+        D: Digest + AssociatedOid,
+        R: TryCryptoRng + ?Sized,
+    {
+        self.pkcs1v15_sign_prehash_with_rng::<D, _>(rng, &D::digest(msg))
+    }
+
+    /// Sign a message hash computed using `D` with PKCS#1 v1.5, using the provided RNG
+    /// for blinding. The hash is signed directly, without hashing it again.
+    ///
+    /// # Errors
+    /// Returns [`Error::InputNotHashed`] if `hash` has the wrong length, or an error
+    /// if the key is too small for `D` or the private operation fails, including RNG failures.
+    pub fn pkcs1v15_sign_prehash_with_rng<D, R>(&self, rng: &mut R, hash: &[u8]) -> Result<Vec<u8>>
+    where
+        D: Digest + AssociatedOid,
+        R: TryCryptoRng + ?Sized,
+    {
+        if hash.len() != <D as Digest>::output_size() {
+            return Err(Error::InputNotHashed);
+        }
+
+        sign(Some(rng), self, &pkcs1v15_generate_prefix::<D>(), hash)
+    }
+}
 
 /// Encryption using PKCS#1 v1.5 padding. Decryption uses implicit rejection from
 /// [draft-irtf-cfrg-rsa-guidance-10 §7.2].
@@ -197,7 +361,7 @@ impl PaddingScheme for Pkcs1v15Encrypt {
     fn decrypt<Rng: TryCryptoRng + ?Sized>(
         self,
         rng: Option<&mut Rng>,
-        priv_key: &RsaPrivateKey,
+        priv_key: &PrivateKey,
         ciphertext: &[u8],
     ) -> Result<Vec<u8>> {
         decrypt(rng, priv_key, ciphertext)
@@ -269,7 +433,7 @@ impl SignatureScheme for Pkcs1v15Sign {
     fn sign<Rng: TryCryptoRng + ?Sized>(
         self,
         rng: Option<&mut Rng>,
-        priv_key: &RsaPrivateKey,
+        priv_key: &PrivateKey,
         hashed: &[u8],
     ) -> Result<Vec<u8>> {
         if let Some(hash_len) = self.hash_len {
@@ -338,7 +502,7 @@ where
 #[inline]
 fn decrypt<R: TryCryptoRng + ?Sized>(
     rng: Option<&mut R>,
-    priv_key: &RsaPrivateKey,
+    priv_key: &PrivateKey,
     ciphertext: &[u8],
 ) -> Result<Vec<u8>> {
     public_key::check_public(priv_key)?;
@@ -381,19 +545,10 @@ fn decrypt<R: TryCryptoRng + ?Sized>(
 
 /// Sign with the default source of blinding randomness, when enabled.
 #[cfg(feature = "alloc")]
-fn sign_with_default_rng(
-    priv_key: &RsaPrivateKey,
-    prefix: &[u8],
-    hashed: &[u8],
-) -> Result<Vec<u8>> {
+fn sign_with_default_rng(priv_key: &PrivateKey, prefix: &[u8], hashed: &[u8]) -> Result<Vec<u8>> {
     #[cfg(feature = "getrandom")]
     {
-        sign(
-            Some(&mut crypto_common::getrandom::SysRng),
-            priv_key,
-            prefix,
-            hashed,
-        )
+        sign(Some(&mut SysRng), priv_key, prefix, hashed)
     }
     #[cfg(not(feature = "getrandom"))]
     {
@@ -417,7 +572,7 @@ fn sign_with_default_rng(
 #[inline]
 fn sign<R: TryCryptoRng + ?Sized>(
     rng: Option<&mut R>,
-    priv_key: &RsaPrivateKey,
+    priv_key: &PrivateKey,
     prefix: &[u8],
     hashed: &[u8],
 ) -> Result<Vec<u8>> {
@@ -508,9 +663,9 @@ mod tests {
     use crate::traits::{
         Decryptor, EncryptingKeypair, PublicKeyParts, RandomizedDecryptor, RandomizedEncryptor,
     };
-    use crate::{RsaPrivateKey, RsaPublicKey};
+    use crate::{PrivateKey, PublicKey};
 
-    fn get_private_key() -> RsaPrivateKey {
+    fn get_private_key() -> PrivateKey {
         // In order to generate new test vectors you'll need the PEM form of this key:
         // -----BEGIN RSA PRIVATE KEY-----
         // MIIBOgIBAAJBALKZD0nEffqM1ACuak0bijtqE2QrI/KLADv7l3kK3ppMyCuLKoF0
@@ -522,7 +677,7 @@ mod tests {
         // tAboUGBxTDq3ZroNism3DaMIbKPyYrAqhKov1h5V
         // -----END RSA PRIVATE KEY-----
 
-        RsaPrivateKey::from_components(
+        PrivateKey::from_components(
             BoxedUint::from_be_hex("B2990F49C47DFA8CD400AE6A4D1B8A3B6A13642B23F28B003BFB97790ADE9A4CC82B8B2A81747DDEC08B6296E53A08C331687EF25C4BF4936BA1C0E6041E9D15", 512).unwrap(),
             BoxedUint::from(65_537u64),
             BoxedUint::from_be_hex("8ABD6A69F4D1A4B487F0AB8D7AAEFD38609405C999984E30F567E1E8AEEFF44E8B18BDB1EC78DFA31A55E32A48D7FB131F5AF1F44D7D6B2CED2A9DF5E5AE4535", 512).unwrap(),
@@ -572,7 +727,7 @@ mod tests {
                 input = input[0..k - 11].to_vec();
             }
 
-            let pub_key: RsaPublicKey = priv_key.clone().into();
+            let pub_key: PublicKey = priv_key.clone().into();
             let ciphertext = encrypt(&mut rng, &pub_key, &input).unwrap();
             assert_ne!(input, ciphertext);
 
@@ -636,7 +791,7 @@ mod tests {
 
     #[test]
     fn implicit_rejection_preserves_public_errors() {
-        let tiny_key = RsaPrivateKey::from_components(
+        let tiny_key = PrivateKey::from_components(
             BoxedUint::from(3233u64),
             BoxedUint::from(17u64),
             BoxedUint::from(413u64),
@@ -869,7 +1024,7 @@ mod tests {
     )]
     fn test_verify_pkcs1v15(#[case] text: &str, #[case] sig: [u8; 64], #[case] expected: bool) {
         let priv_key = get_private_key();
-        let pub_key: RsaPublicKey = priv_key.into();
+        let pub_key: PublicKey = priv_key.into();
 
         let digest = Sha1::digest(text.as_bytes()).to_vec();
 
@@ -906,7 +1061,7 @@ mod tests {
     ) {
         let priv_key = get_private_key();
 
-        let pub_key: RsaPublicKey = priv_key.into();
+        let pub_key: PublicKey = priv_key.into();
         let verifying_key = VerifyingKey::<Sha1>::new(pub_key);
 
         let result = verifying_key.verify(
@@ -945,7 +1100,7 @@ mod tests {
     ) {
         let priv_key = get_private_key();
 
-        let pub_key: RsaPublicKey = priv_key.into();
+        let pub_key: PublicKey = priv_key.into();
         let verifying_key = VerifyingKey::new(pub_key);
 
         let result = verifying_key.verify_digest(
@@ -972,7 +1127,7 @@ mod tests {
         let sig = priv_key.sign(Pkcs1v15Sign::new_unprefixed(), msg).unwrap();
         assert_eq!(expected_sig, sig);
 
-        let pub_key: RsaPublicKey = priv_key.into();
+        let pub_key: PublicKey = priv_key.into();
         pub_key
             .verify(Pkcs1v15Sign::new_unprefixed(), msg, &sig)
             .expect("failed to verify");

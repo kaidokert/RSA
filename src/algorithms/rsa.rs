@@ -678,6 +678,7 @@ pub(crate) fn compute_private_exponent_carmicheal(
 #[cfg(feature = "alloc")]
 mod tests {
     use super::*;
+    use core::mem;
 
     #[test]
     fn recover_primes_works() {
@@ -736,7 +737,7 @@ mod tests {
         let (mut p1, mut q1) = recover_primes(&CryptoNonZero::new(n).unwrap(), &e, &d).unwrap();
 
         if p1 < q1 {
-            core::mem::swap(&mut p1, &mut q1);
+            mem::swap(&mut p1, &mut q1);
         }
         assert_eq!(p, p1);
         assert_eq!(q, q1);

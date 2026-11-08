@@ -3,16 +3,22 @@
 
 use pkcs8::DecodePrivateKey;
 use rand_core::{TryCryptoRng, TryRng};
-use rsa::{Error, Pkcs1v15Sign, Pss, RsaPrivateKey, pkcs1v15, pss, traits::SignatureScheme};
+use rsa::{Error, PrivateKey, Pss, pss, traits::SignatureScheme};
 use sha2::{Digest, Sha256};
 use signature::{
-    DigestSigner, MultipartSigner, RandomizedDigestSigner, RandomizedMultipartSigner,
-    RandomizedSigner, SignatureEncoding, Signer,
-    hazmat::{PrehashSigner, RandomizedPrehashSigner},
+    RandomizedDigestSigner, RandomizedMultipartSigner, RandomizedSigner,
+    hazmat::RandomizedPrehashSigner,
 };
 
-fn key() -> RsaPrivateKey {
-    RsaPrivateKey::from_pkcs8_der(include_bytes!("examples/pkcs8/rsa2048-priv.der"))
+#[cfg(feature = "pkcs1v15")]
+use rsa::{Pkcs1v15Sign, pkcs1v15};
+
+// These are only tested with pkcs1v15
+#[cfg(feature = "pkcs1v15")]
+use signature::{DigestSigner, MultipartSigner, SignatureEncoding, Signer, hazmat::PrehashSigner};
+
+fn key() -> PrivateKey {
+    PrivateKey::from_pkcs8_der(include_bytes!("examples/pkcs8/rsa2048-priv.der"))
         .expect("valid fixture")
 }
 
@@ -105,7 +111,7 @@ fn default_rng_reaches_signature_scheme() {
         fn sign<R: TryCryptoRng + ?Sized>(
             self,
             rng: Option<&mut R>,
-            _: &RsaPrivateKey,
+            _: &PrivateKey,
             _: &[u8],
         ) -> rsa::Result<Vec<u8>> {
             assert_eq!(rng.is_some(), cfg!(feature = "getrandom"));
@@ -123,6 +129,7 @@ fn default_rng_reaches_signature_scheme() {
 }
 
 #[test]
+#[cfg(feature = "pkcs1v15")]
 fn pkcs1v15_default_signatures_are_unchanged() {
     let key = key();
     let digest = Sha256::digest(b"message");

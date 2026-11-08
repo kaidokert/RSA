@@ -1,7 +1,7 @@
 //! `RSASSA-PSS` signatures.
 
 #[cfg(feature = "alloc")]
-use crate::RsaPublicKey;
+use crate::PublicKey;
 #[cfg(feature = "alloc")]
 use alloc::boxed::Box;
 use core::fmt::{Debug, Display, Formatter, LowerHex, UpperHex};
@@ -70,14 +70,14 @@ where
 {
     /// Default maximum encoded signature length in bytes.
     ///
-    /// Corresponds to the default maximum modulus size, [`RsaPublicKey::MAX_SIZE`].
+    /// Corresponds to the default maximum modulus size, [`PublicKey::MAX_SIZE`].
     #[cfg(feature = "alloc")]
-    pub const MAX_LEN: usize = RsaPublicKey::MAX_SIZE.div_ceil(8);
+    pub const MAX_LEN: usize = PublicKey::MAX_SIZE.div_ceil(8);
 
     /// Decode a signature with an explicit maximum encoded length in bytes.
     ///
     /// The length is checked before allocating. This can be used to accept signatures
-    /// for keys larger than [`RsaPublicKey::MAX_SIZE`], or to impose a smaller limit.
+    /// for keys larger than [`PublicKey::MAX_SIZE`], or to impose a smaller limit.
     /// The exact length and value are checked against the key during verification.
     ///
     /// Signatures larger than [`Self::MAX_LEN`] must also use this method when

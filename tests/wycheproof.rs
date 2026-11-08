@@ -9,7 +9,7 @@ use std::{fmt::Debug, fs::File};
 
 use pkcs1::DecodeRsaPublicKey;
 use pkcs8::DecodePrivateKey;
-use rsa::{Oaep, RsaPrivateKey, RsaPublicKey, pkcs1v15, pss, signature::Verifier};
+use rsa::{Oaep, PrivateKey, PublicKey, pss, signature::Verifier};
 use rstest::rstest;
 use serde::Deserialize;
 use sha1::Sha1;
@@ -17,6 +17,9 @@ use sha2::{
     Sha224, Sha256, Sha384, Sha512, Sha512_224, Sha512_256,
     digest::{Digest, FixedOutputReset},
 };
+
+#[cfg(feature = "pkcs1v15")]
+use rsa::pkcs1v15;
 
 #[derive(Deserialize, Debug)]
 struct TestFile {
@@ -154,6 +157,7 @@ impl Drop for Summary {
 // #[case("rsa_signature_8192_sha256_test.json")] TODO: needs disabling of maxsize
 // #[case("rsa_signature_8192_sha384_test.json")] TODO: needs disabling of maxsize
 // #[case("rsa_signature_8192_sha512_test.json")] TODO: needs disabling of maxsize
+#[cfg(feature = "pkcs1v15")]
 fn test_rsa_pkcs1_verify(#[case] file: &str) {
     let path = format!("thirdparty/wycheproof/testvectors_v1/{file}");
     let data_file = File::open(&path)
@@ -169,7 +173,7 @@ fn test_rsa_pkcs1_verify(#[case] file: &str) {
     for group in tests.groups {
         summary.group(&group);
 
-        let key = RsaPublicKey::from_pkcs1_der(&group.public_key_asn).unwrap();
+        let key = PublicKey::from_pkcs1_der(&group.public_key_asn).unwrap();
         println!("key is {:?}", key);
 
         for test in group.tests {
@@ -225,7 +229,7 @@ fn test_rsa_pss_verify(#[case] file: &str) {
     for group in tests.groups {
         summary.group(&group);
 
-        let key = RsaPublicKey::from_pkcs1_der(&group.public_key_asn).unwrap();
+        let key = PublicKey::from_pkcs1_der(&group.public_key_asn).unwrap();
         println!("key is {:?}", key);
 
         for test in group.tests {
@@ -278,7 +282,7 @@ fn test_rsa_pss_verify(#[case] file: &str) {
     }
 }
 
-fn oaep_decrypt<D, MGD>(key: &RsaPrivateKey, label: &[u8], ct: &[u8]) -> rsa::Result<Vec<u8>>
+fn oaep_decrypt<D, MGD>(key: &PrivateKey, label: &[u8], ct: &[u8]) -> rsa::Result<Vec<u8>>
 where
     D: Digest + FixedOutputReset,
     MGD: Digest + FixedOutputReset,
@@ -292,7 +296,7 @@ where
 
 fn oaep_decrypt_with_mgf<D>(
     mgf_sha: &str,
-    key: &RsaPrivateKey,
+    key: &PrivateKey,
     label: &[u8],
     ct: &[u8],
 ) -> rsa::Result<Vec<u8>>
@@ -349,7 +353,7 @@ fn test_rsa_oaep_decrypt(#[case] file: &str) {
     for group in tests.groups {
         summary.group(&group);
 
-        let key = RsaPrivateKey::from_pkcs8_der(&group.private_key_pkcs8).unwrap();
+        let key = PrivateKey::from_pkcs8_der(&group.private_key_pkcs8).unwrap();
 
         for mut test in group.tests {
             // Skip first byte tests as CFRG's RSA guidance requires ignoring the first OAEP octet:

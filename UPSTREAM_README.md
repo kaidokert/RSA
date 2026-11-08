@@ -18,29 +18,26 @@ specified in [PKCS#1 v2.2 (RFC8017)][RFC8017].
 | RSASSA-PSS | Signatures | [RFC8017 §8.1][RSASSA-PSS] |
 | RSASSA-PKCS1-v1_5 | Signatures | [RFC8017 §8.2][RSASSA-PKCS1-v1_5] |
 
-PKCS#1 v1.5 encryption is provided for compatibility with legacy applications only.
-Prefer OAEP and PSS for new encryption applications.
+PKCS#1 v1.5 is provided as opt-in through feature `pkcs1v15` for compatibility
+ with legacy applications only. Prefer OAEP and PSS for new applications.
 
 See the security warning below for known implementation vulnerabilities.
 
 ## Example
 
 ```rust
-use rsa::{Oaep, RsaPrivateKey, RsaPublicKey};
-use sha2::Sha256;
+use rsa::{Generate, PrivateKey, sha2::Sha256};
 
-let mut rng = rand::rng();
-let bits = 2048;
-let priv_key = RsaPrivateKey::new(&mut rng, bits).expect("failed to generate a key");
-let pub_key = RsaPublicKey::from(&priv_key);
+let private_key = PrivateKey::generate();
+let public_key = private_key.to_public_key();
 
 // Encrypt
 let data = b"hello world";
-let enc_data = pub_key.encrypt(&mut rng, Oaep::<Sha256>::new(), &data[..]).expect("failed to encrypt");
+let enc_data = public_key.oaep_encrypt::<Sha256>(data).expect("failed to encrypt");
 assert_ne!(&data[..], &enc_data[..]);
 
 // Decrypt
-let dec_data = priv_key.decrypt_blinded(&mut rng, Oaep::<Sha256>::new(), &enc_data).expect("failed to decrypt");
+let dec_data = private_key.oaep_decrypt::<Sha256>(&enc_data).expect("failed to decrypt");
 assert_eq!(&data[..], &dec_data[..]);
 ```
 
@@ -54,13 +51,24 @@ assert_eq!(&data[..], &dec_data[..]);
 
 Though this crate has been [previously audited][audit] the implementation has
 diverged significantly since then, and several security issues have been
-discovered which we are still working to address.
+discovered which have been resolved in the 0.10 release.
 
 See the [open security issues] on our issue tracker for other known problems.
 This crate was previously vulnerable to the [Marvin Attack] which could enable
-private key recovery by a network attacker (see [RUSTSEC-2023-0071]).
+ private key recovery by a network attacker (see [RUSTSEC-2023-0071]).
 
 You can follow our work on constant-time hardening in [#711].
+
+Users are advised to migrate to 0.10 in order to avoid the discovered side channels.
+
+## ⚠️ PCKS#1 1.5 Warning
+
+Additionally legacy PKCS#1 1.5 implementations, including the implementation of
+it within this crate, has seen a long running source of Bleichenbacher and
+[Marvin Attacks](https://eprint.iacr.org/2023/1442) related vulnerabilities.
+
+For this reason, users who require the use of this legacy padding scheme i.e.
+ in legacy protocols must explicitly enable the `pkcs1v15` feature to use it.
 
 ## Minimum Supported Rust Version (MSRV) Policy
 

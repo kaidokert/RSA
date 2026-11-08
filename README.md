@@ -13,6 +13,8 @@ A microcontroller-friendly fork of the [RustCrypto RSA crate](https://github.com
 
 Focused on shrinking code size and stack usage. The heapless path covers verify (PKCS#1 v1.5, PSS), OAEP encrypt, and sign (PKCS#1 v1.5, PSS) — constant-time in the private exponent, with optional per-signature blinding.
 
+As upstream, PKCS#1 v1.5 is opt-in through the `pkcs1v15` feature, for compatibility with legacy protocols; prefer PSS and OAEP for new applications.
+
 Key generation stays off the heapless path — it needs the heavy `crypto-primes` stack, and embedded keys arrive from a provisioning path (PEM/PKCS#8, HSM, firmware constants) rather than being generated on-device. It is available behind the `keygen` feature (on by default) on the heap-allocating backend. Decryption on the heapless path is out of scope. Full upstream behavior remains available via the `alloc` feature; license, MSRV, and security advisories there follow the upstream crate, preserved verbatim in [`UPSTREAM_README.md`](UPSTREAM_README.md).
 
 Constant-time testing is documented in [`ct-verify/README.md`](https://github.com/kaidokert/RSA/blob/heapless/ct-verify/README.md).
@@ -34,8 +36,8 @@ PSS signature verification. The `u8` backend uses 8-bit limbs (more portable, wo
 #### Example (host, alloc)
 
 ```rust,ignore
-use rsa::{Pkcs1v15Encrypt, RsaPublicKey};
-let pub_key: RsaPublicKey = /* parse from DER/PEM via pkcs1/pkcs8 */;
+use rsa::{Pkcs1v15Encrypt, PublicKey};
+let pub_key: PublicKey = /* parse from DER/PEM via pkcs1/pkcs8 */;
 let mut rng = rand::rng();
 let enc = pub_key.encrypt(&mut rng, Pkcs1v15Encrypt, b"hello").unwrap();
 ```
