@@ -34,7 +34,7 @@ jobs:
         with:
           toolchain: ${{ matrix.rust }}
           targets: ${{ matrix.target }}
-      - run: cargo build --no-default-features --target ${{ matrix.target }}
+      - run: cargo build --no-default-features --features pkcs1v15 --target ${{ matrix.target }}
 
   test:
     runs-on: ubuntu-latest
@@ -56,6 +56,23 @@ jobs:
       - run: cargo test --release --features getrandom
       - run: cargo test --release --features serde
 
+  # Generate code coverage and report to codecov.io
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          submodules: recursive
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools
+      - uses: taiki-e/install-action@cargo-llvm-cov
+      - run: cargo llvm-cov -p rsa_heapless --all-features --lcov --output-path lcov.info
+      - uses: codecov/codecov-action@v7
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: true
+
   minimal-versions:
     runs-on: ubuntu-latest
     steps:
@@ -68,7 +85,7 @@ jobs:
           toolchain: nightly-2026-11-01
       - run: cargo update -Z minimal-versions
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo test --release --features getrandom,serde,pkcs5
+      - run: cargo test --release --features getrandom,serde,pkcs5,pkcs1v15
 
   nightly:
     runs-on: ubuntu-latest
@@ -80,4 +97,4 @@ jobs:
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: nightly-2026-11-01
-      - run: cargo build --benches
+      - run: cargo build --features pkcs1v15 --benches

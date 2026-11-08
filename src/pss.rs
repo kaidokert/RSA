@@ -36,9 +36,9 @@ use digest::{Digest, FixedOutputReset};
 use rand_core::TryCryptoRng;
 
 #[cfg(feature = "alloc")]
-use crate::RsaPrivateKey;
+use crate::PrivateKey;
 #[cfg(feature = "alloc")]
-use crate::RsaPublicKey;
+use crate::PublicKey;
 #[cfg(feature = "alloc")]
 use crate::algorithms::pad::i2osp;
 use crate::algorithms::pss::*;
@@ -47,6 +47,113 @@ use crate::algorithms::rsa::rsa_decrypt_and_check;
 use crate::algorithms::rsa::rsa_encrypt;
 use crate::errors::{Error, Result};
 use crate::traits::{PublicKeyParts, SignatureScheme, UnsignedModularInt};
+
+#[cfg(feature = "getrandom")]
+use crypto_common::getrandom::SysRng;
+
+#[cfg(feature = "alloc")]
+impl PublicKey {
+    /// Verify a PSS signature after hashing `msg` with `D`.
+    ///
+    /// Requires a salt of `D`'s output size. For other salt lengths or automatic
+    /// salt-length detection, use [`VerifyingKey`].
+    ///
+    /// # Errors
+    /// Returns an error if the signature is invalid, including an incorrect salt length.
+    pub fn pss_verify<D>(&self, msg: &[u8], sig: &[u8]) -> Result<()>
+    where
+        D: Digest + FixedOutputReset,
+    {
+        self.pss_verify_prehash::<D>(&D::digest(msg), sig)
+    }
+
+    /// Verify a PSS signature over a message hash computed using `D`.
+    ///
+    /// The hash is verified directly, without hashing it again. Requires a salt of
+    /// `D`'s output size. For other salt lengths or automatic salt-length detection,
+    /// use [`VerifyingKey`].
+    ///
+    /// # Errors
+    /// Returns an error if the hash has the wrong length or the signature is invalid,
+    /// including an incorrect salt length.
+    pub fn pss_verify_prehash<D>(&self, hash: &[u8], sig: &[u8]) -> Result<()>
+    where
+        D: Digest + FixedOutputReset,
+    {
+        Pss::<D>::new().verify(self, hash, sig)
+    }
+}
+
+#[cfg(feature = "alloc")]
+impl PrivateKey {
+    /// Sign `msg` using PSS after hashing it with `D`.
+    ///
+    /// Uses the operating system RNG for the salt and blinding. The salt length is
+    /// `D`'s output size. For other salt lengths, use [`SigningKey`].
+    ///
+    /// # Errors
+    /// Returns an error if the key is too small for `D` or the private operation fails,
+    /// including RNG failures.
+    #[cfg(feature = "getrandom")]
+    pub fn pss_sign<D>(&self, msg: &[u8]) -> Result<Vec<u8>>
+    where
+        D: Digest + FixedOutputReset,
+    {
+        self.pss_sign_with_rng::<D, _>(&mut SysRng, msg)
+    }
+
+    /// Sign a message hash computed using `D` with PSS, without hashing it again.
+    ///
+    /// Uses the operating system RNG for the salt and blinding. The salt length is
+    /// `D`'s output size. For other salt lengths, use [`SigningKey`].
+    ///
+    /// # Errors
+    /// Returns [`Error::InputNotHashed`] if `hash` has the wrong length, or an error
+    /// if the key is too small for `D` or the private operation fails, including RNG failures.
+    #[cfg(feature = "getrandom")]
+    pub fn pss_sign_prehash<D>(&self, hash: &[u8]) -> Result<Vec<u8>>
+    where
+        D: Digest + FixedOutputReset,
+    {
+        self.pss_sign_prehash_with_rng::<D, _>(&mut SysRng, hash)
+    }
+
+    /// Sign `msg` using PSS after hashing it with `D`.
+    ///
+    /// Uses the provided RNG for the salt and blinding. The salt length is `D`'s
+    /// output size. For other salt lengths, use [`SigningKey`].
+    ///
+    /// # Errors
+    /// Returns an error if the key is too small for `D` or the private operation fails,
+    /// including RNG failures.
+    pub fn pss_sign_with_rng<D, R>(&self, rng: &mut R, msg: &[u8]) -> Result<Vec<u8>>
+    where
+        D: Digest + FixedOutputReset,
+        R: TryCryptoRng + ?Sized,
+    {
+        self.pss_sign_prehash_with_rng::<D, _>(rng, &D::digest(msg))
+    }
+
+    /// Sign a message hash computed using `D` with PSS, without hashing it again.
+    ///
+    /// Uses the provided RNG for the salt and blinding. The salt length is `D`'s
+    /// output size. For other salt lengths, use [`SigningKey`].
+    ///
+    /// # Errors
+    /// Returns [`Error::InputNotHashed`] if `hash` has the wrong length, or an error
+    /// if the key is too small for `D` or the private operation fails, including RNG failures.
+    pub fn pss_sign_prehash_with_rng<D, R>(&self, rng: &mut R, hash: &[u8]) -> Result<Vec<u8>>
+    where
+        D: Digest + FixedOutputReset,
+        R: TryCryptoRng + ?Sized,
+    {
+        if hash.len() != <D as Digest>::output_size() {
+            return Err(Error::InputNotHashed);
+        }
+
+        sign_digest::<_, D>(rng, true, self, hash, <D as Digest>::output_size())
+    }
+}
 
 /// DEPRECATED: type alias for legacy blinded signing key. Blinding is now applied automatically
 /// when available.
@@ -141,7 +248,7 @@ where
     fn sign<Rng: TryCryptoRng + ?Sized>(
         mut self,
         rng: Option<&mut Rng>,
-        priv_key: &RsaPrivateKey,
+        priv_key: &PrivateKey,
         hashed: &[u8],
     ) -> Result<Vec<u8>> {
         sign(
@@ -188,7 +295,7 @@ impl<D> Debug for Pss<D> {
 #[cfg(feature = "alloc")]
 #[allow(dead_code)]
 pub(crate) fn verify<D>(
-    pub_key: &RsaPublicKey,
+    pub_key: &PublicKey,
     hashed: &[u8],
     sig: &BoxedUint,
     sig_len: usize,
@@ -206,7 +313,7 @@ where
 #[cfg(feature = "alloc")]
 #[allow(dead_code)]
 pub(crate) fn verify_digest<D>(
-    pub_key: &RsaPublicKey,
+    pub_key: &PublicKey,
     hashed: &[u8],
     sig: &BoxedUint,
     salt_len: Option<usize>,
@@ -263,7 +370,7 @@ where
 
 /// Performs the length, RSAVP1, and I2OSP steps of RFC8017 §8.1.2.
 #[cfg(feature = "alloc")]
-fn decode_signature(pub_key: &RsaPublicKey, sig: &BoxedUint, sig_len: usize) -> Result<Vec<u8>> {
+fn decode_signature(pub_key: &PublicKey, sig: &BoxedUint, sig_len: usize) -> Result<Vec<u8>> {
     // Step 1: `S` must be exactly `k` octets, independently of integer storage precision.
     if sig_len != pub_key.size() {
         return Err(Error::Verification);
@@ -296,7 +403,7 @@ fn decode_signature(pub_key: &RsaPublicKey, sig: &BoxedUint, sig_len: usize) -> 
 pub(crate) fn sign<T, D>(
     rng: &mut T,
     blind: bool,
-    priv_key: &RsaPrivateKey,
+    priv_key: &PrivateKey,
     hashed: &[u8],
     salt_len: usize,
     digest: &mut D,
@@ -315,7 +422,7 @@ where
 pub(crate) fn sign_digest<T, D>(
     rng: &mut T,
     blind: bool,
-    priv_key: &RsaPrivateKey,
+    priv_key: &PrivateKey,
     hashed: &[u8],
     salt_len: usize,
 ) -> Result<Vec<u8>>
@@ -337,7 +444,7 @@ where
 #[cfg(feature = "alloc")]
 fn sign_pss_with_salt<T, D>(
     blind_rng: Option<&mut T>,
-    priv_key: &RsaPrivateKey,
+    priv_key: &PrivateKey,
     hashed: &[u8],
     salt: &[u8],
     digest: &mut D,
@@ -358,7 +465,7 @@ where
 #[cfg(feature = "alloc")]
 fn sign_pss_with_salt_digest<T, D>(
     blind_rng: Option<&mut T>,
-    priv_key: &RsaPrivateKey,
+    priv_key: &PrivateKey,
     hashed: &[u8],
     salt: &[u8],
 ) -> Result<Vec<u8>>
@@ -404,7 +511,7 @@ where
 #[cfg(all(test, feature = "encoding"))]
 mod test {
     use crate::pss::{Pss, Signature, SigningKey, VerifyingKey};
-    use crate::{RsaPrivateKey, RsaPublicKey};
+    use crate::{PrivateKey, PublicKey};
 
     use crate::traits::PublicKeyParts;
     use hex_literal::hex;
@@ -419,7 +526,7 @@ mod test {
     use super::get_default_pss_signature_algo_id;
     use spki::DynSignatureAlgorithmIdentifier;
 
-    fn get_private_key() -> RsaPrivateKey {
+    fn get_private_key() -> PrivateKey {
         // In order to generate new test vectors you'll need the PEM form of this key:
         // -----BEGIN RSA PRIVATE KEY-----
         // MIIBOgIBAAJBALKZD0nEffqM1ACuak0bijtqE2QrI/KLADv7l3kK3ppMyCuLKoF0
@@ -442,7 +549,7 @@ IU2snfRJ6Nq2CQIgFrPsWRCkV+gOYcajD17rEqmuLrdIRexpg8N1DOSXoJ8CIGlS
 tAboUGBxTDq3ZroNism3DaMIbKPyYrAqhKov1h5V
 -----END RSA PRIVATE KEY-----"#;
 
-        RsaPrivateKey::from_pkcs1_pem(pem).unwrap()
+        PrivateKey::from_pkcs1_pem(pem).unwrap()
     }
 
     #[rstest]
@@ -464,7 +571,7 @@ tAboUGBxTDq3ZroNism3DaMIbKPyYrAqhKov1h5V
     )]
     fn test_verify_pss(#[case] text: &str, #[case] sig: [u8; 64], #[case] expected: bool) {
         let priv_key = get_private_key();
-        let pub_key: RsaPublicKey = priv_key.into();
+        let pub_key: PublicKey = priv_key.into();
 
         let digest = Sha1::digest(text.as_bytes()).to_vec();
         let result = pub_key.verify(Pss::<Sha1>::new(), &digest, &sig);
@@ -496,7 +603,7 @@ tAboUGBxTDq3ZroNism3DaMIbKPyYrAqhKov1h5V
     )]
     fn test_verify_pss_signer(#[case] text: &str, #[case] sig: [u8; 64], #[case] expected: bool) {
         let priv_key = get_private_key();
-        let pub_key: RsaPublicKey = priv_key.into();
+        let pub_key: PublicKey = priv_key.into();
         let verifying_key: VerifyingKey<Sha1> = VerifyingKey::new(pub_key);
 
         let result = verifying_key.verify(
@@ -534,7 +641,7 @@ tAboUGBxTDq3ZroNism3DaMIbKPyYrAqhKov1h5V
         #[case] expected: bool,
     ) {
         let priv_key = get_private_key();
-        let pub_key: RsaPublicKey = priv_key.into();
+        let pub_key: PublicKey = priv_key.into();
         let verifying_key = VerifyingKey::new(pub_key);
 
         let result = verifying_key.verify_digest(
@@ -647,7 +754,7 @@ tAboUGBxTDq3ZroNism3DaMIbKPyYrAqhKov1h5V
         let text = Sha1::digest(text);
         let priv_key = get_private_key();
 
-        let pub_key: RsaPublicKey = priv_key.into();
+        let pub_key: PublicKey = priv_key.into();
         let verifying_key = VerifyingKey::<Sha1>::new(pub_key);
 
         let result = verifying_key
@@ -684,9 +791,8 @@ tAboUGBxTDq3ZroNism3DaMIbKPyYrAqhKov1h5V
     fn test_sign_and_verify_2049bit_key() {
         let plaintext = "Hello\n";
         let mut rng = ChaCha8Rng::from_seed([42; 32]);
-        for i in 0..10 {
-            println!("round {i}");
-            let priv_key = RsaPrivateKey::new(&mut rng, 2049).unwrap();
+        for _ in 0..10 {
+            let priv_key = PrivateKey::new(&mut rng, 2049).unwrap();
 
             let digest = Sha1::digest(plaintext.as_bytes()).to_vec();
             let sig = priv_key

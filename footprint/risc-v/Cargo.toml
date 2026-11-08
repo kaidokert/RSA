@@ -28,7 +28,7 @@ riscv-rt = "0.13"
 krabi-caliper = { version = "0.1.0", features = ["stack", "risc-v", "uart"] }
 
 fixed-bigint = { version = "0.6.0", default-features = false, features = ["zeroize", "use-unsafe", "cios"] }
-rsa = { path = "../..", package = "rsa_heapless", default-features = false, features = ["modmath"] }
+rsa = { path = "../..", package = "rsa_heapless", default-features = false, features = ["modmath", "pkcs1v15"] }
 sha1 = { version = "0.11.0-rc.5", default-features = false, features = ["oid"] }
 sha2 = { version = "0.11.0-rc.5", default-features = false, features = ["oid"] }
 

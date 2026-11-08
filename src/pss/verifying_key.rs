@@ -1,5 +1,5 @@
 use super::{GenericSignature, verify_digest_into};
-use crate::public_key::GenericRsaPublicKey;
+use crate::public_key::GenericPublicKey;
 use crate::traits::{PublicKeyParts, UnsignedModularInt, modular::ModulusParams};
 use core::marker::PhantomData;
 #[cfg(feature = "alloc")]
@@ -8,7 +8,7 @@ use digest::{Digest, FixedOutputReset, Update};
 use signature::{DigestVerifier, Verifier, hazmat::PrehashVerifier};
 
 #[cfg(all(feature = "alloc", feature = "encoding"))]
-use crate::RsaPublicKey;
+use crate::PublicKey;
 #[cfg(feature = "encoding")]
 use {
     crate::encoding::ID_RSASSA_PSS,
@@ -33,7 +33,7 @@ where
     T: UnsignedModularInt,
     M: ModulusParams<Modulus = T>,
 {
-    pub(super) inner: GenericRsaPublicKey<T, M>,
+    pub(super) inner: GenericPublicKey<T, M>,
     pub(super) salt_len: Option<usize>,
     pub(super) phantom: PhantomData<D>,
 }
@@ -50,12 +50,12 @@ where
 {
     /// Create a new RSASSA-PSS verifying key.
     /// Digest output size is used as a salt length.
-    pub fn new(key: GenericRsaPublicKey<T, M>) -> Self {
+    pub fn new(key: GenericPublicKey<T, M>) -> Self {
         Self::new_with_salt_len(key, <D as Digest>::output_size())
     }
 
     /// Create a new RSASSA-PSS verifying key.
-    pub fn new_with_salt_len(key: GenericRsaPublicKey<T, M>, salt_len: usize) -> Self {
+    pub fn new_with_salt_len(key: GenericPublicKey<T, M>, salt_len: usize) -> Self {
         Self {
             inner: key,
             salt_len: Some(salt_len),
@@ -65,7 +65,7 @@ where
 
     /// Create a new RSASSA-PSS verifying key.
     /// Attempts to automatically detect the salt length.
-    pub fn new_with_auto_salt_len(key: GenericRsaPublicKey<T, M>) -> Self {
+    pub fn new_with_auto_salt_len(key: GenericPublicKey<T, M>) -> Self {
         Self {
             inner: key,
             salt_len: None,
@@ -154,13 +154,13 @@ where
 // Other trait impls
 //
 
-impl<D, T, M> AsRef<GenericRsaPublicKey<T, M>> for GenericVerifyingKey<D, T, M>
+impl<D, T, M> AsRef<GenericPublicKey<T, M>> for GenericVerifyingKey<D, T, M>
 where
     D: Digest,
     T: UnsignedModularInt,
     M: ModulusParams<Modulus = T>,
 {
-    fn as_ref(&self) -> &GenericRsaPublicKey<T, M> {
+    fn as_ref(&self) -> &GenericPublicKey<T, M> {
         &self.inner
     }
 }
@@ -203,18 +203,18 @@ where
     }
 }
 
-impl<D, T, M> From<GenericRsaPublicKey<T, M>> for GenericVerifyingKey<D, T, M>
+impl<D, T, M> From<GenericPublicKey<T, M>> for GenericVerifyingKey<D, T, M>
 where
     D: Digest,
     T: UnsignedModularInt,
     M: ModulusParams<Modulus = T>,
 {
-    fn from(key: GenericRsaPublicKey<T, M>) -> Self {
+    fn from(key: GenericPublicKey<T, M>) -> Self {
         Self::new(key)
     }
 }
 
-impl<D, T, M> From<GenericVerifyingKey<D, T, M>> for GenericRsaPublicKey<T, M>
+impl<D, T, M> From<GenericVerifyingKey<D, T, M>> for GenericPublicKey<T, M>
 where
     D: Digest,
     T: UnsignedModularInt,
@@ -243,7 +243,7 @@ where
             }
         }
 
-        RsaPublicKey::try_from(spki).map(Self::new)
+        PublicKey::try_from(spki).map(Self::new)
     }
 }
 
@@ -299,7 +299,7 @@ mod tests {
         use sha2::Sha256;
 
         let der = include_bytes!("../../tests/examples/pkcs8/rsa2048-pub.der");
-        let pub_key = RsaPublicKey::from_public_key_der(der).unwrap();
+        let pub_key = PublicKey::from_public_key_der(der).unwrap();
         let encoded = include_str!("../../tests/examples/pkcs8/rsa2048-pub.hex").trim();
         let verifying_key = VerifyingKey::<Sha256>::new(pub_key);
 

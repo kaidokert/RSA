@@ -16,17 +16,17 @@ use krabi_caliper::protocol::rtt;
 #[cfg(not(feature = "etm-single-trial"))]
 use krabi_caliper::report::Field;
 #[cfg(not(feature = "etm-single-trial"))]
-use krabi_caliper::stack::{paint_cortex_m_runtime, StackProbe};
+use krabi_caliper::stack::{StackProbe, paint_cortex_m_runtime};
 #[cfg(not(feature = "etm-single-trial"))]
 use krabi_caliper::suite::{PairedSuite, PairedSuiteConfig, PairedSuiteFields};
 use rand_chacha::ChaCha12Rng;
 use rand_core::{SeedableRng, TryCryptoRng, TryRng};
-use rsa::modmath_support::{public_key_ct_from_be_bytes, ModMathParams};
+use rsa::GenericPrivateKey;
+use rsa::modmath_support::{ModMathParams, public_key_ct_from_be_bytes};
 use rsa::pkcs1v15::GenericSigningKey;
 #[cfg(all(feature = "rsa768", not(feature = "etm-single-trial")))]
 use rsa::pss::GenericSigningKey as PssGenericSigningKey;
 use rsa::traits::FixedWidthUnsignedInt;
-use rsa::GenericRsaPrivateKey;
 use sha2::Sha256;
 
 include!("../../../tests/fixtures/test_keys.rs");
@@ -321,7 +321,7 @@ fn prepare_key(input: &KeyInput) -> Option<SigningKey> {
         return None;
     };
     Some(GenericSigningKey::<Sha256, _, _>::new(
-        GenericRsaPrivateKey::from_public_and_d(public_key, d),
+        GenericPrivateKey::from_public_and_d(public_key, d),
     ))
 }
 
@@ -355,7 +355,7 @@ fn prepare_pss_key(input: &KeyInput) -> Option<PssSigningKey> {
         return None;
     };
     Some(PssGenericSigningKey::<Sha256, _, _>::new(
-        GenericRsaPrivateKey::from_public_and_d(public_key, d),
+        GenericPrivateKey::from_public_and_d(public_key, d),
     ))
 }
 
