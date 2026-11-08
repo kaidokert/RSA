@@ -89,12 +89,16 @@ cargo krabi-caliper ctgrind target/release/ct-ctgrind \
 ```
 
 Suppressions ([`ct-ctgrind.supp`](ct-ctgrind/ct-ctgrind.supp)) are
-individually reviewed declassifications, not blanket: data-oblivious
-`memcpy` shadow-propagation artifacts, and the leading-zero trim of the
+individually reviewed, not blanket: data-oblivious `memcpy`
+shadow-propagation artifacts, and the leading-zero trim of the
 signature — secret-*derived* but public-by-design (it is what the
-caller publishes). Every entry requires a sign-fixture frame, and every
-CT-critical primitive is a separate symbol never matched by any entry,
-so a real leak in the crypto path always surfaces.
+caller publishes). Fat LTO inlines most of the crypto path into the
+fixture, so every entry names the routine it covers as the innermost
+frame and none matches on the fixture frame alone. The verify-after-sign
+outcome, also public by design, is declassified in the library instead:
+the private op passes it to `ct_probe::declassify` (feature
+`ct-declassify`, which only this harness enables), and the harness
+untaints exactly that value.
 
 **Panic-free audit** ([`panic-free-audit`](panic-free-audit/)).
 Cross-builds the whole sign as a DCE'd staticlib and asserts via

@@ -6,8 +6,13 @@
 //! boundary so a hardware harness (e.g. a Cortex-M DWT reader) can localize
 //! which stage a per-key timing delta lands in. The probe cost is identical on
 //! every call, so it cancels when comparing two keys' per-stage deltas.
+//!
+//! `ct-declassify` adds the taint-analysis counterpart: a Valgrind harness
+//! registers a declassifier with `set_declassifier`, and the private op calls
+//! [`declassify`] on values that are public by design but computed from the
+//! secret, so a branch on them is not reported as a leak.
 
-#[cfg(feature = "ct-cycle-probe")]
+#[cfg(any(feature = "ct-cycle-probe", feature = "ct-declassify"))]
 use core::sync::atomic::{AtomicUsize, Ordering};
 
 /// Registered probe, stored as a `fn(u32)` reinterpreted as `usize` (0 = none).
@@ -36,6 +41,37 @@ pub fn mark(stage: u32) {
 /// No-op marker for the default (non-measurement) build.
 #[cfg(not(feature = "ct-cycle-probe"))]
 pub fn mark(_stage: u32) {}
+
+/// Registered declassifier, stored as a `fn(*const u8, usize)` reinterpreted
+/// as `usize` (0 = none).
+#[cfg(feature = "ct-declassify")]
+static DECLASSIFIER: AtomicUsize = AtomicUsize::new(0);
+
+/// Register the declassifier for a taint-analysis run. It receives the address
+/// and size of each declassified value. Set once before the analysed region.
+#[cfg(feature = "ct-declassify")]
+pub fn set_declassifier(declassifier: fn(*const u8, usize)) {
+    DECLASSIFIER.store(declassifier as usize, Ordering::Relaxed);
+}
+
+/// Mark `value` as public for taint analysis. No-op unless a declassifier is
+/// registered. Takes `&mut` so the caller reloads the value from memory after
+/// the call instead of reusing a register copy the analysis still sees as
+/// secret.
+#[cfg(feature = "ct-declassify")]
+pub fn declassify<T>(value: &mut T) {
+    let raw = DECLASSIFIER.load(Ordering::Relaxed);
+    if raw != 0 {
+        // SAFETY: `raw` is non-zero only after `set_declassifier` stored a
+        // valid `fn(*const u8, usize)` here, so reinterpreting it is sound.
+        let declassifier: fn(*const u8, usize) = unsafe { core::mem::transmute(raw) };
+        declassifier(core::ptr::from_mut(value).cast::<u8>(), size_of::<T>());
+    }
+}
+
+/// No-op declassifier for the default build.
+#[cfg(not(feature = "ct-declassify"))]
+pub fn declassify<T>(_value: &mut T) {}
 
 /// Stage identifiers emitted by the blinded private op, in execution order.
 pub mod stage {

@@ -1,14 +1,16 @@
 # Valgrind memcheck suppressions for ct-ctgrind — reviewed, not blanket.
 #
 # Each entry below has been traced to a specific non-leak and is scoped
-# as narrowly as Valgrind frame-matching allows. The load-bearing safety
-# argument for ALL of them: every constant-time-critical primitive is a
-# SEPARATE symbol in the binary — `rsa_private_op_and_check_blinded`,
-# `rsa_private_op_blinded`, `Field::<Ct>::exp` (the secret-exponent
-# ladder), `cios_mont_mul_ct`, `invert_ct`, `try_random_mod`. None of
-# those are inlined into the sign fixture, so a real secret-dependent
-# branch in the crypto path surfaces at one of those symbols and is NOT
-# matched by any suppression here. These only cover byte-plumbing glue.
+# as narrowly as Valgrind frame-matching allows. Fat LTO inlines most of
+# the crypto path (the private op, the exponent ladder, unblinding) into
+# the sign fixture at both opt-levels, so no entry may match on the
+# fixture frame alone: each one names the routine it covers as the
+# innermost frame. A secret-dependent branch anywhere else in the
+# fixture, inlined or not, is reported.
+#
+# The one value that is public by design but computed from the secret,
+# the verify-after-sign outcome, is declassified in the library through
+# `ct_probe::declassify` (feature `ct-declassify`), not suppressed here.
 #
 # ---------------------------------------------------------------------
 # (1) memcpy / memmove of tainted bytes.
@@ -22,9 +24,9 @@
 # memcpy never branches on the data it copies. A secret-dependent
 # *address* would appear in the caller's address computation, a frame
 # above — not matched here. Scoped to the sign fixture as the direct
-# caller so a `memcpy` in any *crypto* primitive (all separate symbols)
-# stays fully checked; only the fixture's own byte-parse/serialize
-# copies are suppressed.
+# caller; with the crypto path inlined that covers its copies too,
+# which is safe for the same reason: the copy never branches on the
+# bytes.
 {
    memcpy-tainted-data-from-sign-fixture-cond
    Memcheck:Cond
@@ -62,24 +64,10 @@
 # can't see through the "now public" declassification because we can't
 # untaint mid-operation without instrumenting the sign.
 #
-# The serialization path surfaces in one of two shapes depending on
-# inlining: fully inlined into a fixture (innermost frame = the fixture
-# symbol), or as a shared `try_be_pad_into` symbol when several fixture
-# widths call it (innermost frame = `try_be_pad_into`, direct caller = a
-# fixture). Entries below cover Cond and Value8 for both shapes. Every
-# entry requires a sign-fixture frame, so slice indexing anywhere else —
-# in particular inside any crypto primitive, all separate symbols — stays
-# fully checked.
-{
-   sig-serialize-inlined-cond
-   Memcheck:Cond
-   fun:ct_fix__pkcs1v15_blinded_sign*
-}
-{
-   sig-serialize-inlined-value
-   Memcheck:Value8
-   fun:ct_fix__pkcs1v15_blinded_sign*
-}
+# The entries cover Cond and Value8 when `try_be_pad_into` is a shared
+# symbol called from a fixture. When it is inlined into the fixture the
+# branch is not suppressed; if a build ever reports it there, give it its
+# own declassification rather than matching the fixture frame.
 {
    sig-serialize-try_be_pad_into-cond
    Memcheck:Cond

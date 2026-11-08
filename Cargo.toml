@@ -118,6 +118,11 @@ modmath = ["dep:modmath", "dep:modmath-cios"]
 # probe (`ct_probe::set_probe`) that the blinded private op calls to localize a
 # timing delta. Off by default; shipped builds carry nothing.
 ct-cycle-probe = []
+# Constant-time *taint* hook: lets a Valgrind taint harness register a
+# declassifier (`ct_probe::set_declassifier`) for values that are public by
+# design but computed from the secret. Off by default; shipped builds carry
+# nothing.
+ct-declassify = []
 
 [lints.clippy]
 borrow_as_ptr = "warn"
