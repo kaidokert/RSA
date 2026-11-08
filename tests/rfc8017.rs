@@ -3,19 +3,19 @@
 
 use rand::{SeedableRng, rngs::ChaCha8Rng};
 use rsa::{
-    BoxedUint, Pss, RsaPrivateKey, RsaPublicKey, pss,
+    BoxedUint, PrivateKey, Pss, PublicKey, pss,
     signature::{DigestVerifier, Verifier, hazmat::PrehashVerifier},
     traits::PublicKeyParts,
 };
 use sha2::{Digest, Sha256};
 
-fn private_key() -> RsaPrivateKey {
+fn private_key() -> PrivateKey {
     // 1025 bits makes both k != storage width and PSS emLen != k.
     let mut rng = ChaCha8Rng::from_seed([42; 32]);
-    RsaPrivateKey::new(&mut rng, 1025).unwrap()
+    PrivateKey::new(&mut rng, 1025).unwrap()
 }
 
-fn check_pss(key: &RsaPublicKey, message: &[u8], bytes: &[u8], valid: bool) {
+fn check_pss(key: &PublicKey, message: &[u8], bytes: &[u8], valid: bool) {
     let digest = Sha256::digest(message);
     let signature = pss::Signature::try_from(bytes).unwrap();
     let verifier = pss::VerifyingKey::<Sha256>::new(key.clone());

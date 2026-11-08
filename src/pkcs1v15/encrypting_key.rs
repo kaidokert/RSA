@@ -1,7 +1,7 @@
 use super::encrypt_into;
 use crate::{
     Result,
-    public_key::GenericRsaPublicKey,
+    public_key::GenericPublicKey,
     traits::{
         PublicKeyParts, RandomizedEncryptor, UnsignedModularInt,
         modular::{CtModulusParams, ModulusParams},
@@ -23,8 +23,8 @@ use serde::{Deserialize, Serialize};
 #[cfg_attr(
     feature = "serde",
     serde(bound(
-        serialize = "GenericRsaPublicKey<T, M>: Serialize",
-        deserialize = "GenericRsaPublicKey<T, M>: serde::de::DeserializeOwned"
+        serialize = "GenericPublicKey<T, M>: Serialize",
+        deserialize = "GenericPublicKey<T, M>: serde::de::DeserializeOwned"
     ))
 )]
 pub struct GenericEncryptingKey<T, M>
@@ -32,7 +32,7 @@ where
     T: UnsignedModularInt,
     M: ModulusParams<Modulus = T>,
 {
-    pub(super) inner: GenericRsaPublicKey<T, M>,
+    pub(super) inner: GenericPublicKey<T, M>,
 }
 
 /// Boxed PKCS#1 v1.5 encrypting key alias.
@@ -45,7 +45,7 @@ where
     M: ModulusParams<Modulus = T>,
 {
     /// Create a new encrypting key from an RSA public key.
-    pub fn new(key: GenericRsaPublicKey<T, M>) -> Self {
+    pub fn new(key: GenericPublicKey<T, M>) -> Self {
         Self { inner: key }
     }
 }
@@ -82,12 +82,12 @@ mod tests {
     #[cfg(feature = "serde")]
     fn test_serde() {
         use super::*;
-        use crate::RsaPublicKey;
+        use crate::PublicKey;
         use pkcs8::DecodePublicKey;
         use serde_test::{Configure, Token, assert_tokens};
 
         let der = include_bytes!("../../tests/examples/pkcs8/rsa2048-pub.der");
-        let pub_key = RsaPublicKey::from_public_key_der(der).unwrap();
+        let pub_key = PublicKey::from_public_key_der(der).unwrap();
         let encoded = include_str!("../../tests/examples/pkcs8/rsa2048-pub.hex").trim();
         let encrypting_key = GenericEncryptingKey::new(pub_key);
 

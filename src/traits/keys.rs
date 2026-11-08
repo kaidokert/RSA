@@ -8,12 +8,12 @@ use alloc::boxed::Box;
 use crate::traits::{NonZero, UnsignedModularInt, modular::ModulusParams};
 
 /// Marker trait gating the raw `(public_key, d)` constructor
-/// [`crate::private_key::GenericRsaPrivateKey::from_public_and_d`]. Backends opt
+/// [`crate::private_key::GenericPrivateKey::from_public_and_d`]. Backends opt
 /// in to building private keys without `primes` or CRT precompute — the
 /// heapless path, where the caller already holds validated `(n, e, d)`.
 ///
 /// **Not impl'd for [`BoxedUint`]**: alloc callers must use the validated
-/// `RsaPrivateKey::from_components` / `from_p_q` / `from_primes` paths, so
+/// `PrivateKey::from_components` / `from_p_q` / `from_primes` paths, so
 /// empty `primes` can't leak into CRT-aware APIs as a `primes[0]` panic.
 pub trait RawPrivateKeyConstructible: UnsignedModularInt {}
 
@@ -79,7 +79,7 @@ pub trait PublicKeyParts<T: UnsignedModularInt> {
 /// Implementations used for private operations must choose all storage precisions from public
 /// parameters, not from the significant bits of secret components. In particular, `d`, `dp`, and
 /// `dq` are processed for their full storage precision. Prime and Montgomery-parameter precisions
-/// must follow the same public policy. `RsaPrivateKey` enforces this during construction.
+/// must follow the same public policy. `PrivateKey` enforces this during construction.
 pub trait PrivateKeyParts<T>: PublicKeyParts<T>
 where
     T: UnsignedModularInt,

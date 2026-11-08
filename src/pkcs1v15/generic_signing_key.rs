@@ -3,7 +3,7 @@
 //! [`super::GenericVerifyingKey`] on the verify side.
 //!
 //! Compatible with the no_alloc build path —
-//! [`GenericRsaPrivateKey<T, M>`] storage, fixed-size [`Prefix`] for
+//! [`GenericPrivateKey<T, M>`] storage, fixed-size [`Prefix`] for
 //! the DigestInfo prefix, caller-supplied scratch buffers for the EM
 //! and signature output.
 
@@ -14,7 +14,7 @@ use super::{GenericVerifyingKey, sign_into, sign_with_rng_into};
 use super::{Prefix, pkcs1v15_generate_prefix_helper};
 use crate::{
     errors::Result,
-    private_key::GenericRsaPrivateKey,
+    private_key::GenericPrivateKey,
     traits::{
         PublicKeyParts, UnsignedModularInt,
         modular::{ModulusParams, Pow, PowBoundedExp},
@@ -31,7 +31,7 @@ use zeroize::Zeroize;
 /// Signing key for `RSASSA-PKCS1-v1_5` signatures — heapless variant.
 ///
 /// Generic over the digest `D`, integer type `T`, and Montgomery parameters
-/// `M`. Holds a [`GenericRsaPrivateKey<T, M>`] plus the precomputed
+/// `M`. Holds a [`GenericPrivateKey<T, M>`] plus the precomputed
 /// DigestInfo prefix for `D`.
 pub struct GenericSigningKey<D, T, M>
 where
@@ -39,7 +39,7 @@ where
     T: UnsignedModularInt + Zeroize,
     M: ModulusParams<Modulus = T>,
 {
-    pub(super) inner: GenericRsaPrivateKey<T, M>,
+    pub(super) inner: GenericPrivateKey<T, M>,
     #[cfg(feature = "alloc")]
     pub(super) prefix: Vec<u8>,
     #[cfg(not(feature = "alloc"))]
@@ -54,7 +54,7 @@ where
     D: Digest,
     T: UnsignedModularInt + Zeroize,
     M: ModulusParams<Modulus = T>,
-    GenericRsaPrivateKey<T, M>: fmt::Debug,
+    GenericPrivateKey<T, M>: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("GenericSigningKey")
@@ -66,7 +66,7 @@ where
 
 // Manual Clone impls — split by `alloc` cfg to avoid imposing
 // the `M::MontgomeryForm: Clone` bound on heapless backends where it
-// isn't needed (only `GenericRsaPrivateKey`'s `precomputed` field
+// isn't needed (only `GenericPrivateKey`'s `precomputed` field
 // requires it, and that field is `cfg(alloc)`).
 #[cfg(feature = "alloc")]
 impl<D, T, M> Clone for GenericSigningKey<D, T, M>
@@ -108,7 +108,7 @@ where
     M: ModulusParams<Modulus = T>,
 {
     /// Create a new signing key with a precomputed prefix for digest `D`.
-    pub fn new(key: GenericRsaPrivateKey<T, M>) -> Self {
+    pub fn new(key: GenericPrivateKey<T, M>) -> Self {
         Self {
             inner: key,
             #[cfg(feature = "alloc")]
@@ -128,7 +128,7 @@ where
 {
     /// Create a new signing key with an empty prefix (raw signatures, no
     /// DigestInfo wrapper). Unusual — most callers want [`new`] instead.
-    pub fn new_unprefixed(key: GenericRsaPrivateKey<T, M>) -> Self {
+    pub fn new_unprefixed(key: GenericPrivateKey<T, M>) -> Self {
         Self {
             inner: key,
             #[cfg(feature = "alloc")]
@@ -141,14 +141,14 @@ where
 }
 
 // Borrow the inner private-key components — `AsRef` impl mirrors
-// the verifier's `AsRef<GenericRsaPublicKey<T, M>>`.
-impl<D, T, M> AsRef<GenericRsaPrivateKey<T, M>> for GenericSigningKey<D, T, M>
+// the verifier's `AsRef<GenericPublicKey<T, M>>`.
+impl<D, T, M> AsRef<GenericPrivateKey<T, M>> for GenericSigningKey<D, T, M>
 where
     D: Digest,
     T: UnsignedModularInt + Zeroize,
     M: ModulusParams<Modulus = T>,
 {
-    fn as_ref(&self) -> &GenericRsaPrivateKey<T, M> {
+    fn as_ref(&self) -> &GenericPrivateKey<T, M> {
         &self.inner
     }
 }
@@ -292,7 +292,7 @@ where
 
 // Allow callers to wrap a `GenericSigningKey` in `zeroize::Zeroizing<_>`
 // or invoke `.zeroize()` directly. The prefix is public DigestInfo
-// material; only the inner `GenericRsaPrivateKey` carries secret bytes.
+// material; only the inner `GenericPrivateKey` carries secret bytes.
 impl<D, T, M> Zeroize for GenericSigningKey<D, T, M>
 where
     D: Digest,
@@ -318,7 +318,7 @@ where
     /// method-call syntax.
     pub fn to_verifying_key(&self) -> GenericVerifyingKey<D, T, M>
     where
-        crate::public_key::GenericRsaPublicKey<T, M>: Clone,
+        crate::public_key::GenericPublicKey<T, M>: Clone,
     {
         GenericVerifyingKey {
             inner: self.inner.as_public().clone(),

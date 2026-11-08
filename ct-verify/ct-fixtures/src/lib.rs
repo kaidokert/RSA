@@ -29,10 +29,10 @@ fn panic(_: &core::panic::PanicInfo) -> ! {
 use const_num_traits::Ct;
 use core::hint::black_box;
 use fixed_bigint::FixedUInt;
+use rsa::GenericPrivateKey;
 use rsa::modmath_support::public_key_ct_from_be_bytes;
 use rsa::pkcs1v15::GenericSigningKey;
 use rsa::traits::FixedWidthUnsignedInt;
-use rsa::GenericRsaPrivateKey;
 use sha2::Sha256;
 
 /// 512-bit Ct carrier (`u8` limbs — the most portable backend, and the
@@ -84,7 +84,7 @@ pub unsafe extern "C" fn ct_fix__pkcs1v15_blinded_sign__fb8__N64(
     let pubkey = public_key_ct_from_be_bytes::<Carrier>(&N_512, 65537).unwrap();
     let d = Carrier::try_from_be_bytes_vartime(&d_bytes).unwrap();
     let signing_key =
-        GenericSigningKey::<Sha256, _, _>::new(GenericRsaPrivateKey::from_public_and_d(pubkey, d));
+        GenericSigningKey::<Sha256, _, _>::new(GenericPrivateKey::from_public_and_d(pubkey, d));
 
     let mut rng = FixedRng(0);
     let mut em = [0u8; 64];
@@ -111,7 +111,7 @@ pub unsafe extern "C" fn ct_fix__pkcs1v15_blinded_sign__fb32__N64(
     let pubkey = public_key_ct_from_be_bytes::<CarrierW>(&N_2048, 65537).unwrap();
     let d = CarrierW::try_from_be_bytes_vartime(&d_bytes).unwrap();
     let signing_key =
-        GenericSigningKey::<Sha256, _, _>::new(GenericRsaPrivateKey::from_public_and_d(pubkey, d));
+        GenericSigningKey::<Sha256, _, _>::new(GenericPrivateKey::from_public_and_d(pubkey, d));
 
     let mut rng = FixedRng(0);
     let mut em = [0u8; 256];
@@ -136,7 +136,7 @@ pub unsafe extern "C" fn ct_fix__pkcs1v15_blinded_sign__fb8__N256(
     let pubkey = public_key_ct_from_be_bytes::<CarrierW8>(&N_2048, 65537).unwrap();
     let d = CarrierW8::try_from_be_bytes_vartime(&d_bytes).unwrap();
     let signing_key =
-        GenericSigningKey::<Sha256, _, _>::new(GenericRsaPrivateKey::from_public_and_d(pubkey, d));
+        GenericSigningKey::<Sha256, _, _>::new(GenericPrivateKey::from_public_and_d(pubkey, d));
 
     let mut rng = FixedRng(0);
     let mut em = [0u8; 256];
@@ -160,7 +160,7 @@ pub unsafe extern "C" fn ct_fix__pkcs1v15_blinded_sign__fb64__N32(
     let pubkey = public_key_ct_from_be_bytes::<CarrierW64>(&N_2048, 65537).unwrap();
     let d = CarrierW64::try_from_be_bytes_vartime(&d_bytes).unwrap();
     let signing_key =
-        GenericSigningKey::<Sha256, _, _>::new(GenericRsaPrivateKey::from_public_and_d(pubkey, d));
+        GenericSigningKey::<Sha256, _, _>::new(GenericPrivateKey::from_public_and_d(pubkey, d));
 
     let mut rng = FixedRng(0);
     let mut em = [0u8; 256];

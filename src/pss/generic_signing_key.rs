@@ -11,7 +11,7 @@
 use crate::{
     algorithms::pss::{sign_into, sign_with_rng_into},
     errors::{Error, Result},
-    private_key::GenericRsaPrivateKey,
+    private_key::GenericPrivateKey,
     traits::{
         PublicKeyParts, UnsignedModularInt,
         modular::{ModulusParams, Pow, PowBoundedExp},
@@ -26,7 +26,7 @@ use zeroize::Zeroize;
 /// Signing key for RSASSA-PSS — heapless variant.
 ///
 /// Generic over the digest `D`, integer type `T`, and Montgomery parameters
-/// `M`. Holds a [`GenericRsaPrivateKey<T, M>`] plus the salt length to use
+/// `M`. Holds a [`GenericPrivateKey<T, M>`] plus the salt length to use
 /// when signing (caller-chosen at construction; defaults to
 /// `<D as Digest>::output_size()` via [`new`](Self::new)).
 ///
@@ -38,7 +38,7 @@ where
     T: UnsignedModularInt + Zeroize,
     M: ModulusParams<Modulus = T>,
 {
-    pub(super) inner: GenericRsaPrivateKey<T, M>,
+    pub(super) inner: GenericPrivateKey<T, M>,
     pub(super) salt_len: usize,
     pub(super) phantom: PhantomData<D>,
 }
@@ -50,7 +50,7 @@ where
     D: Digest,
     T: UnsignedModularInt + Zeroize,
     M: ModulusParams<Modulus = T>,
-    GenericRsaPrivateKey<T, M>: fmt::Debug,
+    GenericPrivateKey<T, M>: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("GenericSigningKey")
@@ -62,7 +62,7 @@ where
 
 // Manual Clone impls — split by `alloc` cfg to avoid imposing
 // the `M::MontgomeryForm: Clone` bound on heapless backends where it
-// isn't needed (only `GenericRsaPrivateKey`'s `precomputed` field
+// isn't needed (only `GenericPrivateKey`'s `precomputed` field
 // requires it, and that field is `cfg(alloc)`).
 #[cfg(feature = "alloc")]
 impl<D, T, M> Clone for GenericSigningKey<D, T, M>
@@ -105,7 +105,7 @@ where
 {
     /// Construct with salt length = `D::output_size()` (standard choice
     /// per RFC 8017 § 8.1).
-    pub fn new(key: GenericRsaPrivateKey<T, M>) -> Self {
+    pub fn new(key: GenericPrivateKey<T, M>) -> Self {
         Self {
             inner: key,
             salt_len: <D as Digest>::output_size(),
@@ -114,7 +114,7 @@ where
     }
 
     /// Construct with a custom salt length.
-    pub fn new_with_salt_len(key: GenericRsaPrivateKey<T, M>, salt_len: usize) -> Self {
+    pub fn new_with_salt_len(key: GenericPrivateKey<T, M>, salt_len: usize) -> Self {
         Self {
             inner: key,
             salt_len,
@@ -129,14 +129,14 @@ where
 }
 
 // Borrow the inner private-key components — `AsRef` impl mirrors
-// the verifier's `AsRef<GenericRsaPublicKey<T, M>>`.
-impl<D, T, M> AsRef<GenericRsaPrivateKey<T, M>> for GenericSigningKey<D, T, M>
+// the verifier's `AsRef<GenericPublicKey<T, M>>`.
+impl<D, T, M> AsRef<GenericPrivateKey<T, M>> for GenericSigningKey<D, T, M>
 where
     D: Digest,
     T: UnsignedModularInt + Zeroize,
     M: ModulusParams<Modulus = T>,
 {
-    fn as_ref(&self) -> &GenericRsaPrivateKey<T, M> {
+    fn as_ref(&self) -> &GenericPrivateKey<T, M> {
         &self.inner
     }
 }
@@ -272,7 +272,7 @@ where
 
 // Allow callers to wrap a `GenericSigningKey` in `zeroize::Zeroizing<_>`
 // or invoke `.zeroize()` directly. The salt_len is public; only the
-// inner `GenericRsaPrivateKey` carries secret bytes.
+// inner `GenericPrivateKey` carries secret bytes.
 impl<D, T, M> Zeroize for GenericSigningKey<D, T, M>
 where
     D: Digest,
@@ -297,7 +297,7 @@ mod tests {
     #[test]
     #[cfg(feature = "encoding")]
     fn signing_key_try_sign_with_rng_into_round_trip() {
-        use crate::RsaPrivateKey;
+        use crate::PrivateKey;
         use crate::pss::{Signature, SigningKey, VerifyingKey};
         use pkcs1::DecodeRsaPrivateKey;
         use rand::rngs::ChaCha8Rng;
@@ -308,7 +308,7 @@ mod tests {
         const PRIV_KEY_PKCS1_PEM: &str =
             include_str!("../../tests/examples/pkcs1/rsa2048-priv.pem");
 
-        let priv_key = RsaPrivateKey::from_pkcs1_pem(PRIV_KEY_PKCS1_PEM).unwrap();
+        let priv_key = PrivateKey::from_pkcs1_pem(PRIV_KEY_PKCS1_PEM).unwrap();
         let signing_key = SigningKey::<Sha256>::new(priv_key.clone());
         let verifying_key = VerifyingKey::<Sha256>::new(priv_key.to_public_key());
 

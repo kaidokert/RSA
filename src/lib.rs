@@ -17,17 +17,33 @@
 //!
 //! # Usage
 //!
+//! ## Key generation
+//!
+//! [`Generate`] creates 3072-bit RSA keys with public exponent 65537. This targets an estimated
+//! 128-bit security strength; see [`PrivateKey::DEFAULT_BITS`] for the rationale. Use
+//! [`PrivateKey::new`] to select a different key size.
+//!
+#![cfg_attr(feature = "keygen", doc = "```")]
+#![cfg_attr(not(feature = "keygen"), doc = "```ignore")]
+//! use rsa::{Generate, PrivateKey};
+//!
+//! let private_key = PrivateKey::generate_from_rng(&mut rand::rng());
+//! ```
+//!
+//! With the `getrandom` feature (enabled by default), `Generate::generate` and
+//! `Generate::try_generate` use the operating system RNG.
+//!
 //! ## OAEP encryption
 //!
 #![cfg_attr(feature = "keygen", doc = "```")]
 #![cfg_attr(not(feature = "keygen"), doc = "```ignore")]
-//! use rsa::{RsaPrivateKey, RsaPublicKey, Oaep, sha2::Sha256};
+//! use rsa::{PrivateKey, PublicKey, Oaep, sha2::Sha256};
 //!
 //! let mut rng = rand::rng();
 //!
 //! let bits = 2048;
-//! let private_key = RsaPrivateKey::new(&mut rng, bits).expect("failed to generate a key");
-//! let public_key = RsaPublicKey::from(&private_key);
+//! let private_key = PrivateKey::new(&mut rng, bits).expect("failed to generate a key");
+//! let public_key = PublicKey::from(&private_key);
 //!
 //! // Encrypt
 //! let data = b"hello world";
@@ -51,13 +67,13 @@
 //!
 #![cfg_attr(all(feature = "keygen", feature = "pkcs1v15"), doc = "```")]
 #![cfg_attr(not(all(feature = "keygen", feature = "pkcs1v15")), doc = "```ignore")]
-//! use rsa::{RsaPrivateKey, RsaPublicKey, Pkcs1v15Encrypt};
+//! use rsa::{PrivateKey, PublicKey, Pkcs1v15Encrypt};
 //!
 //! let mut rng = rand::rng();
 //!
 //! let bits = 2048;
-//! let private_key = RsaPrivateKey::new(&mut rng, bits).expect("failed to generate a key");
-//! let public_key = RsaPublicKey::from(&private_key);
+//! let private_key = PrivateKey::new(&mut rng, bits).expect("failed to generate a key");
+//! let public_key = PublicKey::from(&private_key);
 //!
 //! // Encrypt
 //! let data = b"hello world";
@@ -78,7 +94,7 @@
 //!
 #![cfg_attr(all(feature = "keygen", feature = "pkcs1v15"), doc = "```")]
 #![cfg_attr(not(all(feature = "keygen", feature = "pkcs1v15")), doc = "```ignore")]
-//! use rsa::RsaPrivateKey;
+//! use rsa::PrivateKey;
 //! use rsa::pkcs1v15::{SigningKey, VerifyingKey};
 //! use rsa::signature::{Keypair, RandomizedSigner, SignatureEncoding, Verifier};
 //! use rsa::sha2::{Digest, Sha256};
@@ -86,7 +102,7 @@
 //! let mut rng = rand::rng();
 //!
 //! let bits = 2048;
-//! let private_key = RsaPrivateKey::new(&mut rng, bits).expect("failed to generate a key");
+//! let private_key = PrivateKey::new(&mut rng, bits).expect("failed to generate a key");
 //! let signing_key = SigningKey::<Sha256>::new(private_key);
 //! let verifying_key = signing_key.verifying_key();
 //!
@@ -103,7 +119,7 @@
 //!
 #![cfg_attr(feature = "keygen", doc = "```")]
 #![cfg_attr(not(feature = "keygen"), doc = "```ignore")]
-//! use rsa::RsaPrivateKey;
+//! use rsa::PrivateKey;
 //! use rsa::pss::{BlindedSigningKey, VerifyingKey};
 //! use rsa::signature::{Keypair,RandomizedSigner, SignatureEncoding, Verifier};
 //! use rsa::sha2::{Digest, Sha256};
@@ -111,7 +127,7 @@
 //! let mut rng = rand::rng();
 //!
 //! let bits = 2048;
-//! let private_key = RsaPrivateKey::new(&mut rng, bits).expect("failed to generate a key");
+//! let private_key = PrivateKey::new(&mut rng, bits).expect("failed to generate a key");
 //! let signing_key = BlindedSigningKey::<Sha256>::new(private_key);
 //! let verifying_key = signing_key.verifying_key();
 //!
@@ -138,8 +154,8 @@
 //!
 //! Most modern applications use the newer PKCS#8 format instead (see below).
 //!
-//! The following traits can be used to decode/encode [`RsaPrivateKey`] and
-//! [`RsaPublicKey`] as PKCS#1. Note that [`pkcs1`] is re-exported from the
+//! The following traits can be used to decode/encode [`PrivateKey`] and
+//! [`PublicKey`] as PKCS#1. Note that [`pkcs1`] is re-exported from the
 //! toplevel of the `rsa` crate:
 //!
 //! - [`pkcs1::DecodeRsaPrivateKey`]: decode RSA private keys from PKCS#1
@@ -153,7 +169,7 @@
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! # #[cfg(all(feature = "encoding", feature = "std"))]
 //! # {
-//! use rsa::{RsaPublicKey, pkcs1::DecodeRsaPublicKey};
+//! use rsa::{PublicKey, pkcs1::DecodeRsaPublicKey};
 //!
 //! let pem = "-----BEGIN RSA PUBLIC KEY-----
 //! MIIBCgKCAQEAtsQsUV8QpqrygsY+2+JCQ6Fw8/omM71IM2N/R8pPbzbgOl0p78MZ
@@ -164,7 +180,7 @@
 //! cFjqJbE/Xilcvqxt6DirjFCvYeKYl1uHLwIDAQAB
 //! -----END RSA PUBLIC KEY-----";
 //!
-//! let public_key = RsaPublicKey::from_pkcs1_pem(pem)?;
+//! let public_key = PublicKey::from_pkcs1_pem(pem)?;
 //! # }
 //! # Ok(())
 //! # }
@@ -182,8 +198,8 @@
 //! -----BEGIN PRIVATE KEY-----
 //! ```
 //!
-//! The following traits can be used to decode/encode [`RsaPrivateKey`] and
-//! [`RsaPublicKey`] as PKCS#8. Note that [`pkcs8`] is re-exported from the
+//! The following traits can be used to decode/encode [`PrivateKey`] and
+//! [`PublicKey`] as PKCS#8. Note that [`pkcs8`] is re-exported from the
 //! toplevel of the `rsa` crate:
 //!
 //! - [`pkcs8::DecodePrivateKey`]: decode private keys from PKCS#8
@@ -197,7 +213,7 @@
 //! # fn main() -> Result<(), Box<dyn std::error::Error>> {
 //! # #[cfg(all(feature = "encoding", feature = "std"))]
 //! # {
-//! use rsa::{RsaPublicKey, pkcs8::DecodePublicKey};
+//! use rsa::{PublicKey, pkcs8::DecodePublicKey};
 //!
 //! let pem = "-----BEGIN PUBLIC KEY-----
 //! MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtsQsUV8QpqrygsY+2+JC
@@ -209,7 +225,7 @@
 //! LwIDAQAB
 //! -----END PUBLIC KEY-----";
 //!
-//! let public_key = RsaPublicKey::from_public_key_pem(pem)?;
+//! let public_key = PublicKey::from_public_key_pem(pem)?;
 //! # }
 //! # Ok(())
 //! # }
@@ -232,6 +248,8 @@ extern crate std;
 
 #[cfg(feature = "alloc")]
 pub use crypto_bigint::BoxedUint;
+#[cfg(feature = "keygen")]
+pub use crypto_common::Generate;
 pub use rand_core;
 pub use signature;
 
@@ -266,15 +284,15 @@ pub use pkcs8;
 pub use sha2;
 
 #[cfg(feature = "alloc")]
-pub use crate::public_key::RsaPublicKey;
+pub use crate::public_key::PublicKey;
 pub use crate::{
     errors::{Error, Result},
-    public_key::GenericRsaPublicKey,
+    public_key::GenericPublicKey,
 };
 
-pub use crate::private_key::GenericRsaPrivateKey;
+pub use crate::private_key::GenericPrivateKey;
 #[cfg(feature = "alloc")]
-pub use crate::private_key::RsaPrivateKey;
+pub use crate::private_key::PrivateKey;
 
 #[cfg(feature = "alloc")]
 pub use crate::oaep::Oaep;
@@ -286,3 +304,21 @@ pub use crate::pkcs1v15::{Pkcs1v15Encrypt, Pkcs1v15Sign};
 
 #[cfg(all(feature = "hazmat", feature = "alloc"))]
 pub mod hazmat;
+
+/// Deprecated alias for [`PrivateKey`].
+#[cfg(feature = "alloc")]
+#[deprecated(since = "0.10.0", note = "use `rsa::PrivateKey` instead")]
+pub type RsaPrivateKey = PrivateKey;
+
+/// Deprecated alias for [`PublicKey`].
+#[cfg(feature = "alloc")]
+#[deprecated(since = "0.10.0", note = "use `rsa::PublicKey` instead")]
+pub type RsaPublicKey = PublicKey;
+
+/// Deprecated alias for [`GenericPrivateKey`].
+#[deprecated(since = "0.6.0", note = "use `rsa::GenericPrivateKey` instead")]
+pub type GenericRsaPrivateKey<T, M> = GenericPrivateKey<T, M>;
+
+/// Deprecated alias for [`GenericPublicKey`].
+#[deprecated(since = "0.6.0", note = "use `rsa::GenericPublicKey` instead")]
+pub type GenericRsaPublicKey<T, M> = GenericPublicKey<T, M>;
