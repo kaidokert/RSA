@@ -6,10 +6,9 @@ There are five layers. Each checks something the others cannot.
 This is a nested cargo workspace, excluded from the published crate. Its
 release profile in [`Cargo.toml`](Cargo.toml) is `lto = "fat"`,
 `codegen-units = 1`, `opt-level = "z"`, `panic = "abort"`, which is what
-a size-conscious embedded build uses. CI pins rustc 1.88.0, the minimum
-krabi-caliper 0.2 supports; the crate itself still supports 1.87. With
-the toolchain and profile fixed, a codegen change shows up as a failing
-or changed gate rather than going unnoticed.
+a size-conscious embedded build uses. CI pins the toolchain too, so a
+codegen change shows up as a failing or changed gate rather than going
+unnoticed.
 
 Cargo ignores a dependency's `[profile]`, so a deployment picks its own
 opt-level. CI runs the ladder check, the panic audit, the taint gate and
@@ -122,12 +121,6 @@ cargo krabi-caliper panic-audit --workspace . --package panic-free-audit \
   --expect-negative panic_audit__neg__unwrap \
   --expect-negative panic_audit__neg__expect
 ```
-
-This layer found two bugs at deployment widths: slice indexing in
-fixed-bigint 0.5.0's `holder_be`, and a `copy_from_slice` length that
-rustc 1.87 could not prove in range for some limb counts in 0.5.1. The
-no-panic property needs fixed-bigint 0.5.2 or later, where the byte
-serialization cannot panic regardless of what the optimizer proves.
 
 **Hardware cycle counts** ([`cyccnt-hardware`](cyccnt-hardware/)).
 Runs whole blinded signing with two independent real keypairs on a
