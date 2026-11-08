@@ -154,8 +154,7 @@ Where the finding is decides what happens:
    fork keeps its diff with upstream small. Record it and raise it
    upstream.
 3. **A dependency** (fixed-bigint, modmath): fix it in that crate,
-   release, and raise the minimum version here. This has happened twice
-   (fixed-bigint 0.5.1 and 0.5.2).
+   release, and raise the minimum version here.
 
 ## Known gaps
 
