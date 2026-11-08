@@ -1,4 +1,4 @@
-#![cfg_attr(not(test), no_std)]
+#![no_std]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![cfg_attr(not(all(feature = "alloc", feature = "keygen")), allow(unused))]
 #![doc = include_str!("../README.md")]
@@ -17,44 +17,58 @@
 //!
 //! # Usage
 //!
+//! [`PublicKey`] and [`PrivateKey`] provide algorithm-specific methods for
+//! encryption, decryption, signing, and verification. Signing and verification
+//! methods hash the message; their `_prehash` counterparts accept a digest instead.
+//!
+//! Methods ending in `_with_rng` accept a caller-provided [`rand_core::TryCryptoRng`].
+//! With the default `getrandom` feature, encryption, decryption, and signing methods
+//! without an RNG argument use the operating system RNG. Without that feature,
+//! encryption and PSS signing require `_with_rng`; decryption and PKCS#1 v1.5
+//! signing remain available without blinding.
+//!
+//! The algorithm-specific key types in [`oaep`], `pkcs1v15`, and [`pss`] also
+//! implement encryption and signature traits. Use these types for configurable
+//! OAEP labels and MGF1 digests, PSS salt lengths, or unprefixed PKCS#1 v1.5 signatures.
+//! PKCS#1 v1.5 methods and key types require the `pkcs1v15` feature.
+//!
 //! ## Key generation
 //!
 //! [`Generate`] creates 3072-bit RSA keys with public exponent 65537. This targets an estimated
 //! 128-bit security strength; see [`PrivateKey::DEFAULT_BITS`] for the rationale. Use
 //! [`PrivateKey::new`] to select a different key size.
 //!
-#![cfg_attr(feature = "keygen", doc = "```")]
-#![cfg_attr(not(feature = "keygen"), doc = "```ignore")]
+#![cfg_attr(all(feature = "keygen", feature = "getrandom"), doc = "```")]
+#![cfg_attr(not(all(feature = "keygen", feature = "getrandom")), doc = "```ignore")]
 //! use rsa::{Generate, PrivateKey};
 //!
-//! let private_key = PrivateKey::generate_from_rng(&mut rand::rng());
+//! let private_key = PrivateKey::generate();
 //! ```
 //!
 //! With the `getrandom` feature (enabled by default), `Generate::generate` and
-//! `Generate::try_generate` use the operating system RNG.
+//! `Generate::try_generate` use the operating system RNG. Use `Generate::generate_from_rng`
+//! or `Generate::try_generate_from_rng` to supply an RNG explicitly.
 //!
 //! ## OAEP encryption
 //!
-#![cfg_attr(feature = "keygen", doc = "```")]
-#![cfg_attr(not(feature = "keygen"), doc = "```ignore")]
-//! use rsa::{PrivateKey, PublicKey, Oaep, sha2::Sha256};
+#![cfg_attr(all(feature = "keygen", feature = "getrandom"), doc = "```")]
+#![cfg_attr(not(all(feature = "keygen", feature = "getrandom")), doc = "```ignore")]
+//! # fn main() -> Result<(), rsa::Error> {
+//! use rsa::{Generate, PrivateKey, sha2::Sha256};
 //!
-//! let mut rng = rand::rng();
-//!
-//! let bits = 2048;
-//! let private_key = PrivateKey::new(&mut rng, bits).expect("failed to generate a key");
-//! let public_key = PublicKey::from(&private_key);
+//! let private_key = PrivateKey::generate();
+//! let public_key = private_key.to_public_key();
 //!
 //! // Encrypt
 //! let data = b"hello world";
-//! let padding = Oaep::<Sha256>::new();
-//! let enc_data = public_key.encrypt(&mut rng, padding, &data[..]).expect("failed to encrypt");
+//! let enc_data = public_key.oaep_encrypt::<Sha256>(data)?;
 //! assert_ne!(&data[..], &enc_data[..]);
 //!
 //! // Decrypt
-//! let padding = Oaep::<Sha256>::new();
-//! let dec_data = private_key.decrypt(padding, &enc_data).expect("failed to decrypt");
+//! let dec_data = private_key.oaep_decrypt::<Sha256>(&enc_data)?;
 //! assert_eq!(&data[..], &dec_data[..]);
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! ## PKCS#1 v1.5 encryption
@@ -65,24 +79,30 @@
 //! <code><a href="./pkcs1v15/index.html">pkcs1v15</a></code> module.
 //! </div>
 //!
-#![cfg_attr(all(feature = "keygen", feature = "pkcs1v15"), doc = "```")]
-#![cfg_attr(not(all(feature = "keygen", feature = "pkcs1v15")), doc = "```ignore")]
-//! use rsa::{PrivateKey, PublicKey, Pkcs1v15Encrypt};
+#![cfg_attr(
+    all(feature = "keygen", feature = "getrandom", feature = "pkcs1v15"),
+    doc = "```"
+)]
+#![cfg_attr(
+    not(all(feature = "keygen", feature = "getrandom", feature = "pkcs1v15")),
+    doc = "```ignore"
+)]
+//! # fn main() -> Result<(), rsa::Error> {
+//! use rsa::{Generate, PrivateKey};
 //!
-//! let mut rng = rand::rng();
-//!
-//! let bits = 2048;
-//! let private_key = PrivateKey::new(&mut rng, bits).expect("failed to generate a key");
-//! let public_key = PublicKey::from(&private_key);
+//! let private_key = PrivateKey::generate();
+//! let public_key = private_key.to_public_key();
 //!
 //! // Encrypt
 //! let data = b"hello world";
-//! let enc_data = public_key.encrypt(&mut rng, Pkcs1v15Encrypt, &data[..]).expect("failed to encrypt");
+//! let enc_data = public_key.pkcs1v15_encrypt(data)?;
 //! assert_ne!(&data[..], &enc_data[..]);
 //!
 //! // Decrypt
-//! let dec_data = private_key.decrypt(Pkcs1v15Encrypt, &enc_data).expect("failed to decrypt");
+//! let dec_data = private_key.pkcs1v15_decrypt(&enc_data)?;
 //! assert_eq!(&data[..], &dec_data[..]);
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! ## PKCS#1 v1.5 signatures
@@ -92,52 +112,48 @@
 //! See security notes in the <code><a href="./pkcs1v15/index.html">pkcs1v15</a></code> module.
 //! </div>
 //!
-#![cfg_attr(all(feature = "keygen", feature = "pkcs1v15"), doc = "```")]
-#![cfg_attr(not(all(feature = "keygen", feature = "pkcs1v15")), doc = "```ignore")]
-//! use rsa::PrivateKey;
-//! use rsa::pkcs1v15::{SigningKey, VerifyingKey};
-//! use rsa::signature::{Keypair, RandomizedSigner, SignatureEncoding, Verifier};
-//! use rsa::sha2::{Digest, Sha256};
+#![cfg_attr(
+    all(feature = "keygen", feature = "getrandom", feature = "pkcs1v15"),
+    doc = "```"
+)]
+#![cfg_attr(
+    not(all(feature = "keygen", feature = "getrandom", feature = "pkcs1v15")),
+    doc = "```ignore"
+)]
+//! # fn main() -> Result<(), rsa::Error> {
+//! use rsa::{Generate, PrivateKey, sha2::Sha256};
 //!
-//! let mut rng = rand::rng();
-//!
-//! let bits = 2048;
-//! let private_key = PrivateKey::new(&mut rng, bits).expect("failed to generate a key");
-//! let signing_key = SigningKey::<Sha256>::new(private_key);
-//! let verifying_key = signing_key.verifying_key();
+//! let private_key = PrivateKey::generate();
+//! let public_key = private_key.to_public_key();
 //!
 //! // Sign
 //! let data = b"hello world";
-//! let signature = signing_key.sign_with_rng(&mut rng, data);
-//! assert_ne!(signature.to_bytes().as_ref(), data.as_slice());
+//! let signature = private_key.pkcs1v15_sign::<Sha256>(data)?;
 //!
 //! // Verify
-//! verifying_key.verify(data, &signature).expect("failed to verify");
+//! public_key.pkcs1v15_verify::<Sha256>(data, &signature)?;
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! ## PSS signatures
 //!
-#![cfg_attr(feature = "keygen", doc = "```")]
-#![cfg_attr(not(feature = "keygen"), doc = "```ignore")]
-//! use rsa::PrivateKey;
-//! use rsa::pss::{BlindedSigningKey, VerifyingKey};
-//! use rsa::signature::{Keypair,RandomizedSigner, SignatureEncoding, Verifier};
-//! use rsa::sha2::{Digest, Sha256};
+#![cfg_attr(all(feature = "keygen", feature = "getrandom"), doc = "```")]
+#![cfg_attr(not(all(feature = "keygen", feature = "getrandom")), doc = "```ignore")]
+//! # fn main() -> Result<(), rsa::Error> {
+//! use rsa::{Generate, PrivateKey, sha2::Sha256};
 //!
-//! let mut rng = rand::rng();
-//!
-//! let bits = 2048;
-//! let private_key = PrivateKey::new(&mut rng, bits).expect("failed to generate a key");
-//! let signing_key = BlindedSigningKey::<Sha256>::new(private_key);
-//! let verifying_key = signing_key.verifying_key();
+//! let private_key = PrivateKey::generate();
+//! let public_key = private_key.to_public_key();
 //!
 //! // Sign
 //! let data = b"hello world";
-//! let signature = signing_key.sign_with_rng(&mut rng, data);
-//! assert_ne!(signature.to_bytes().as_ref(), data);
+//! let signature = private_key.pss_sign::<Sha256>(data)?;
 //!
 //! // Verify
-//! verifying_key.verify(data, &signature).expect("failed to verify");
+//! public_key.pss_verify::<Sha256>(data, &signature)?;
+//! # Ok(())
+//! # }
 //! ```
 //!
 //! ## PKCS#1 RSA Key Encoding
@@ -165,10 +181,9 @@
 //!
 //! ### Example
 //!
-//! ```
-//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! # #[cfg(all(feature = "encoding", feature = "std"))]
-//! # {
+#![cfg_attr(feature = "encoding", doc = "```")]
+#![cfg_attr(not(feature = "encoding"), doc = "```ignore")]
+//! # fn main() -> Result<(), rsa::Error> {
 //! use rsa::{PublicKey, pkcs1::DecodeRsaPublicKey};
 //!
 //! let pem = "-----BEGIN RSA PUBLIC KEY-----
@@ -181,7 +196,6 @@
 //! -----END RSA PUBLIC KEY-----";
 //!
 //! let public_key = PublicKey::from_pkcs1_pem(pem)?;
-//! # }
 //! # Ok(())
 //! # }
 //! ```
@@ -209,10 +223,9 @@
 //!
 //! ### Example
 //!
-//! ```
-//! # fn main() -> Result<(), Box<dyn std::error::Error>> {
-//! # #[cfg(all(feature = "encoding", feature = "std"))]
-//! # {
+#![cfg_attr(feature = "encoding", doc = "```")]
+#![cfg_attr(not(feature = "encoding"), doc = "```ignore")]
+//! # fn main() -> Result<(), rsa::pkcs8::Error> {
 //! use rsa::{PublicKey, pkcs8::DecodePublicKey};
 //!
 //! let pem = "-----BEGIN PUBLIC KEY-----
@@ -226,7 +239,6 @@
 //! -----END PUBLIC KEY-----";
 //!
 //! let public_key = PublicKey::from_public_key_pem(pem)?;
-//! # }
 //! # Ok(())
 //! # }
 //! ```
