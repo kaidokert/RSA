@@ -45,6 +45,9 @@ jobs:
         rust:
           - 1.87.0 # MSRV
           - stable
+        # The fork's extra features make the powerset several times larger
+        # than upstream's; split it across jobs so wall-clock stays bounded.
+        partition: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -54,9 +57,18 @@ jobs:
         with:
           toolchain: ${{ matrix.rust }}
       - uses: RustCrypto/actions/cargo-hack-install@master
-      - run: cargo hack test -p rsa_heapless --release --feature-powerset --exclude-features getrandom,serde
-      - run: cargo test --release --features getrandom
-      - run: cargo test --release --features serde
+      # `ct-cycle-probe` and `ct-declassify` are measurement hooks, no-ops
+      # unless a harness registers a callback; one run below covers them.
+      - run: >-
+          cargo hack test -p rsa_heapless --release --feature-powerset
+          --exclude-features getrandom,serde,ct-cycle-probe,ct-declassify
+          --partition ${{ matrix.partition }}/4
+      - if: matrix.partition == 1
+        run: cargo test --release --features getrandom
+      - if: matrix.partition == 2
+        run: cargo test --release --features serde
+      - if: matrix.partition == 3
+        run: cargo test --release --features ct-cycle-probe,ct-declassify
 
   # Generate code coverage and report to codecov.io
   coverage:
