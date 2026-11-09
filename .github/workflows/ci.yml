@@ -45,9 +45,6 @@ jobs:
         rust:
           - 1.87.0 # MSRV
           - stable
-        # The fork's extra features make the powerset several times larger
-        # than upstream's; split it across jobs so wall-clock stays bounded.
-        partition: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -57,18 +54,19 @@ jobs:
         with:
           toolchain: ${{ matrix.rust }}
       - uses: RustCrypto/actions/cargo-hack-install@master
-      # `ct-cycle-probe` and `ct-declassify` are measurement hooks, no-ops
-      # unless a harness registers a callback; one run below covers them.
+      # Powerset over upstream's own features. The fork's features are off,
+      # so this is the alloc path upstream tests.
       - run: >-
           cargo hack test -p rsa_heapless --release --feature-powerset
-          --exclude-features getrandom,serde,ct-cycle-probe,ct-declassify
-          --partition ${{ matrix.partition }}/4
-      - if: matrix.partition == 1
-        run: cargo test --release --features getrandom
-      - if: matrix.partition == 2
-        run: cargo test --release --features serde
-      - if: matrix.partition == 3
-        run: cargo test --release --features ct-cycle-probe,ct-declassify
+          --include-features std,encoding,hazmat,pkcs1v15,pkcs5
+      # The no-alloc `modmath` path.
+      - run: cargo test --release --no-default-features --features modmath
+      - run: >-
+          cargo hack test -p rsa_heapless --release --features modmath
+          --feature-powerset --include-features pkcs1v15,hazmat
+      # Fork defaults (modmath, keygen, getrandom), then everything.
+      - run: cargo test --release
+      - run: cargo test --release --all-features
 
   # Generate code coverage and report to codecov.io
   coverage:
