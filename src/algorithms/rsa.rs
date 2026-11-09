@@ -51,7 +51,7 @@ where
     K: PublicKeyParts<T>,
 {
     let e = key.e();
-    let res = pow_mod_params_vartime_exp_bits(m, e, e.bits(), key.n_params());
+    let res = pow_mod_params_vartime_exp_bits(m, e, e.bit_width(), key.n_params());
     Ok(res)
 }
 
@@ -255,7 +255,7 @@ fn blind<R: TryCryptoRng + ?Sized, K: PublicKeyParts<BoxedUint, MontyParams = Bo
     let blinded = {
         // r^e (mod n)
         let e = key.e();
-        let mut rpowe = pow_mod_params_vartime_exp_bits(&r, e, e.bits(), n_params);
+        let mut rpowe = pow_mod_params_vartime_exp_bits(&r, e, e.bit_width(), n_params);
         // c * r^e (mod n)
         let c = c.mul_mod(&rpowe, n_params.modulus().as_nz_ref());
         rpowe.zeroize();
@@ -332,7 +332,7 @@ where
     // `from_value` would do.
     let m_sized = m.clone().resize_unchecked(n_params.bits_precision());
     let m_mont = M::MontgomeryForm::from_reduced(m_sized, n_params);
-    let check = m_mont.pow_bounded_exp(e, e.bits()).retrieve();
+    let check = m_mont.pow_bounded_exp(e, e.bit_width()).retrieve();
     if *c != check {
         // `m` is secret material (would-be plaintext or signature).
         // Wipe before returning `Err` — the failure path indicates a
@@ -409,7 +409,7 @@ where
     crate::ct_probe::mark(crate::ct_probe::stage::INVERT_R);
     // r^e (in Montgomery form). Public exponent `e`, so
     // `pow_bounded_exp` (variable-time-in-exponent semantics) is fine.
-    let r_e_mont = r_mont.pow_bounded_exp(e, e.bits());
+    let r_e_mont = r_mont.pow_bounded_exp(e, e.bit_width());
     crate::ct_probe::mark(crate::ct_probe::stage::R_POW_E);
     // c → Montgomery form via `from_reduced` (same reason as `r`).
     let c_sized = c.clone().resize_unchecked(n_params.bits_precision());
@@ -479,7 +479,7 @@ where
         // `from_reduced` is safe.
         let m_sized = m.clone().resize_unchecked(n_params.bits_precision());
         let m_mont = M::MontgomeryForm::from_reduced(m_sized, n_params);
-        let check = m_mont.pow_bounded_exp(e, e.bits()).retrieve();
+        let check = m_mont.pow_bounded_exp(e, e.bit_width()).retrieve();
         crate::ct_probe::mark(crate::ct_probe::stage::VERIFY);
         // The outcome is public: a valid signature recomputes `c` exactly,
         // and only a fault makes it differ. Taint analysis cannot see that,

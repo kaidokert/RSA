@@ -33,6 +33,7 @@ pub fn mark(stage: u32) {
     if raw != 0 {
         // SAFETY: `raw` is non-zero only after `set_probe` stored a valid
         // `fn(u32)` here, so reinterpreting it back is sound.
+        #[allow(unsafe_code)]
         let probe: fn(u32) = unsafe { core::mem::transmute(raw) };
         probe(stage);
     }
@@ -64,6 +65,7 @@ pub fn declassify<T>(value: &mut T) {
     if raw != 0 {
         // SAFETY: `raw` is non-zero only after `set_declassifier` stored a
         // valid `fn(*const u8, usize)` here, so reinterpreting it is sound.
+        #[allow(unsafe_code)]
         let declassifier: fn(*const u8, usize) = unsafe { core::mem::transmute(raw) };
         declassifier(core::ptr::from_mut(value).cast::<u8>(), size_of::<T>());
     }

@@ -275,7 +275,7 @@ where
         NonZero::new(*self).expect("value is non-zero")
     }
 
-    fn bits(&self) -> u32 {
+    fn bit_width(&self) -> u32 {
         FixedWidthUnsignedInt::bit_length(&self.0)
     }
 
@@ -315,11 +315,11 @@ pub type ModMathValue<T> = T;
 // wrapping function applied to the sampled `T` before the modulus
 // check.
 //
-// **Critical: mask the sampled candidate down to `modulus.bits()`
+// **Critical: mask the sampled candidate down to `modulus.bit_width()`
 // bits before checking.** When the modulus is `lz` bits narrower
 // than `T`'s container width, an unmasked sampler's acceptance rate
 // is ~2⁻ˡᶻ and `MAX_TRIES = 128` would exhaust almost every time.
-// After masking to `modulus.bits()` bits, we sample from `[0, 2^k)`
+// After masking to `modulus.bit_width()` bits, we sample from `[0, 2^k)`
 // where the modulus's top bit is set, so acceptance is ≥ 50%.
 //
 // See the `TryRandomMod` trait doc for the CT-property discussion.

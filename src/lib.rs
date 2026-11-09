@@ -71,6 +71,26 @@
 //! # }
 //! ```
 //!
+//! ## PSS signatures
+//!
+#![cfg_attr(all(feature = "keygen", feature = "getrandom"), doc = "```")]
+#![cfg_attr(not(all(feature = "keygen", feature = "getrandom")), doc = "```ignore")]
+//! # fn main() -> Result<(), rsa::Error> {
+//! use rsa::{Generate, PrivateKey, sha2::Sha256};
+//!
+//! let private_key = PrivateKey::generate();
+//! let public_key = private_key.to_public_key();
+//!
+//! // Sign
+//! let data = b"hello world";
+//! let signature = private_key.pss_sign::<Sha256>(data)?;
+//!
+//! // Verify
+//! public_key.pss_verify::<Sha256>(data, &signature)?;
+//! # Ok(())
+//! # }
+//! ```
+//!
 //! ## PKCS#1 v1.5 encryption
 //!
 //! <div class="warning">
@@ -132,26 +152,6 @@
 //!
 //! // Verify
 //! public_key.pkcs1v15_verify::<Sha256>(data, &signature)?;
-//! # Ok(())
-//! # }
-//! ```
-//!
-//! ## PSS signatures
-//!
-#![cfg_attr(all(feature = "keygen", feature = "getrandom"), doc = "```")]
-#![cfg_attr(not(all(feature = "keygen", feature = "getrandom")), doc = "```ignore")]
-//! # fn main() -> Result<(), rsa::Error> {
-//! use rsa::{Generate, PrivateKey, sha2::Sha256};
-//!
-//! let private_key = PrivateKey::generate();
-//! let public_key = private_key.to_public_key();
-//!
-//! // Sign
-//! let data = b"hello world";
-//! let signature = private_key.pss_sign::<Sha256>(data)?;
-//!
-//! // Verify
-//! public_key.pss_verify::<Sha256>(data, &signature)?;
 //! # Ok(())
 //! # }
 //! ```
