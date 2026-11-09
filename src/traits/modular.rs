@@ -226,7 +226,7 @@ where
         NonZero::new(*self).expect("value is non-zero")
     }
 
-    fn bits(&self) -> u32 {
+    fn bit_width(&self) -> u32 {
         FixedWidthUnsignedInt::bit_length(self)
     }
 
@@ -265,7 +265,7 @@ pub trait UnsignedModularInt:
     /// `leading_zeros`-style container-relative accessor lives on this
     /// trait, so runtime-length carriers can satisfy it without
     /// committing to any notion of "width".
-    fn bits(&self) -> u32;
+    fn bit_width(&self) -> u32;
     fn bits_precision(&self) -> u32;
     #[cfg(feature = "alloc")]
     fn to_be_bytes_trimmed_vartime(&self) -> Box<[u8]>;
@@ -276,7 +276,7 @@ where
     T: UnsignedModularInt,
 {
     pub fn new(value: T) -> Option<Self> {
-        if value.bits() == 0 {
+        if value.bit_width() == 0 {
             None
         } else {
             Some(Self(value))
@@ -292,8 +292,8 @@ where
         &self.0
     }
 
-    pub fn bits(&self) -> u32 {
-        self.0.bits()
+    pub fn bit_width(&self) -> u32 {
+        self.0.bit_width()
     }
 
     pub fn bits_precision(&self) -> u32 {
@@ -539,6 +539,7 @@ impl ModulusParams for BoxedMontyParams {
         const _: () = assert!(size_of::<CryptoOdd<BoxedUint>>() == size_of::<Odd<BoxedUint>>());
         const _: () = assert!(align_of::<CryptoOdd<BoxedUint>>() == align_of::<Odd<BoxedUint>>());
         // SAFETY: both wrappers hold a single `T` with the layout asserted above.
+        #[allow(unsafe_code)]
         unsafe {
             &*core::ptr::from_ref::<CryptoOdd<Self::Modulus>>(self.modulus())
                 .cast::<Odd<Self::Modulus>>()
@@ -576,8 +577,8 @@ impl UnsignedModularInt for BoxedUint {
     fn as_nz_ref(&self) -> NonZero<Self> {
         NonZero::new(self.clone()).expect("Value is non-zero")
     }
-    fn bits(&self) -> u32 {
-        self.bits()
+    fn bit_width(&self) -> u32 {
+        self.bit_width()
     }
     fn bits_precision(&self) -> u32 {
         self.bits_precision()
