@@ -174,7 +174,7 @@ where
     // actual bit-length, not the container width (`bits_precision()` would
     // over-count a short modulus in a wide integer), and `div_ceil` so a
     // non-multiple-of-8 modulus still round-trips.
-    if k != (n_params.modulus().as_ref().bits() as usize).div_ceil(8) {
+    if k != (n_params.modulus().as_ref().bit_width() as usize).div_ceil(8) {
         return Err(Error::InvalidArguments);
     }
     // Fail fast before the exponentiation instead of after.
@@ -224,7 +224,7 @@ where
         + crate::traits::modular::InvertCt<M>
         + crate::traits::modular::MulCt<M>,
 {
-    if k != (n_params.modulus().as_ref().bits() as usize).div_ceil(8) {
+    if k != (n_params.modulus().as_ref().bit_width() as usize).div_ceil(8) {
         return Err(Error::InvalidArguments);
     }
     if sig_storage.len() < k {

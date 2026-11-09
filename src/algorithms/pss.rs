@@ -237,7 +237,7 @@ where
     // `k` = modulus byte length (matches `PublicKeyParts::size()`). Use the
     // actual bit-length, not the container width, and `div_ceil` so a
     // non-multiple-of-8 modulus still round-trips; `em_bits` needs it too.
-    let key_bits = n_params.modulus().as_ref().bits() as usize;
+    let key_bits = n_params.modulus().as_ref().bit_width() as usize;
     // Guard against degenerate moduli — `em_bits = key_bits - 1` would
     // otherwise underflow and surface as `OutputBufferTooSmall`.
     if key_bits < 2 {
@@ -301,7 +301,7 @@ where
         + crate::traits::modular::MulCt<M>,
     D: Digest + FixedOutputReset,
 {
-    let key_bits = n_params.modulus().as_ref().bits() as usize;
+    let key_bits = n_params.modulus().as_ref().bit_width() as usize;
     if key_bits < 2 {
         return Err(Error::InvalidArguments);
     }
