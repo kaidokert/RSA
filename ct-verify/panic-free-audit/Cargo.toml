@@ -2,7 +2,7 @@
 name = "panic-free-audit"
 version = "0.0.0"
 edition = "2021"
-rust-version = "1.87"
+rust-version = "1.88"
 publish = false
 description = "Linker-DCE audit: confirm the heapless sign path synthesizes no panic symbols."
 

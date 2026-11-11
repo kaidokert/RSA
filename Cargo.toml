@@ -10,7 +10,7 @@ repository = "https://github.com/kaidokert/RSA"
 keywords = ["rsa", "encryption", "security", "crypto", "no_std"]
 categories = ["cryptography", "no-std", "no-std::no-alloc"]
 readme = "README.md"
-rust-version = "1.87"
+rust-version = "1.88"
 exclude = ["checkct/", "marvin-toolkit/", "thirdparty/", "ct-verify/"]
 
 [lib]
@@ -147,6 +147,10 @@ ref_as_ptr = "warn"
 return_self_not_must_use = "warn"
 semicolon_if_nothing_returned = "warn"
 trivially_copy_pass_by_ref = "warn"
+# Both fire once the MSRV allows inline format args and let-chains (Rust
+# 1.88). The flagged sites are upstream lines, kept as they are.
+collapsible_if = "allow"
+uninlined_format_args = "allow"
 std_instead_of_alloc = "warn"
 std_instead_of_core = "warn"
 unnecessary_safety_comment = "warn"
