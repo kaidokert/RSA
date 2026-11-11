@@ -361,10 +361,10 @@ where
         for byte in buf.iter_mut().skip(lo).take(zero_bytes) {
             *byte = 0;
         }
-        if zero_bits_in_next > 0 {
-            if let Some(b) = buf.get_mut(lo + zero_bytes) {
-                *b &= 0xFFu8 >> zero_bits_in_next;
-            }
+        if zero_bits_in_next > 0
+            && let Some(b) = buf.get_mut(lo + zero_bytes)
+        {
+            *b &= 0xFFu8 >> zero_bits_in_next;
         }
         let window = bytes.as_ref().get(lo..).ok_or(Error::Internal)?;
         // `from_be_slice`, not the `Bytes`-holder `try_from_be_bytes_vartime`:

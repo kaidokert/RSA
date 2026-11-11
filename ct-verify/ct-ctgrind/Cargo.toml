@@ -2,7 +2,7 @@
 name = "ct-ctgrind"
 version = "0.0.0"
 edition = "2021"
-rust-version = "1.87"
+rust-version = "1.88"
 publish = false
 description = "Valgrind taint-based CT verifier for the rsa_heapless heapless sign path."
 

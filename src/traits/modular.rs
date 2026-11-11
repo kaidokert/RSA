@@ -613,7 +613,7 @@ mod ct_type_guarantees {
     use zeroize::ZeroizeOnDrop;
 
     // Types are spelled inline rather than through aliases: older
-    // rustc's dead_code lint (e.g. 1.87, the MSRV CI row) doesn't see
+    // rustc's dead_code lint (seen on 1.87) doesn't see
     // uses inside static_assertions' macro-expanded `const _` items,
     // so aliases trip -Dwarnings there.
 
